@@ -1,0 +1,122 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "prowk/moonsqlitefile"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn decode_record(Bytes, Int) -> Array[Value] raise SqliteError
+
+pub fn decode_varint(Bytes, Int) -> (UInt64, Int) raise SqliteError
+
+pub fn open_database(Bytes, limits? : Limits) -> Database raise SqliteError
+
+pub fn parse_header(Bytes) -> Header raise SqliteError
+
+// Errors
+pub suberror SqliteError {
+  Invalid(String)
+  Unsupported(String)
+  LimitExceeded(String)
+} derive(@debug.Debug)
+pub fn SqliteError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct Database {
+  data : Bytes
+  header : Header
+  page_count : Int
+  limits : Limits
+}
+pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
+pub fn Database::header(Self) -> Header
+pub fn Database::page(Self, Int) -> Page raise SqliteError
+pub fn Database::page_count(Self) -> Int
+pub fn Database::read_page(Self, Int) -> Bytes raise SqliteError
+pub fn Database::read_table(Self, Int, limit? : Int) -> Array[Row] raise SqliteError
+pub fn Database::schema(Self) -> Array[SchemaEntry] raise SqliteError
+pub fn Database::table_rows(Self, String, limit? : Int) -> Array[Row] raise SqliteError
+
+pub(all) struct Header {
+  page_size : Int
+  usable_size : Int
+  write_version : Int
+  read_version : Int
+  change_counter : UInt
+  declared_pages : UInt
+  freelist_trunk : UInt
+  freelist_pages : UInt
+  schema_cookie : UInt
+  schema_format : Int
+  text_encoding : Int
+  user_version : UInt
+  application_id : UInt
+  version_valid_for : UInt
+  sqlite_version : UInt
+} derive(Eq, @debug.Debug)
+pub fn Header::equal(Self, Self) -> Bool
+pub fn Header::not_equal(Self, Self) -> Bool
+pub fn Header::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Limits {
+  max_rows : Int
+  max_payload_bytes : Int
+  max_pages : Int
+  max_depth : Int
+} derive(@debug.Debug)
+pub fn Limits::default() -> Self
+pub fn Limits::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Page {
+  number : Int
+  kind : PageType
+  first_freeblock : Int
+  cell_count : Int
+  content_start : Int
+  fragmented_bytes : Int
+  right_child : Int?
+  cell_offsets : Array[Int]
+} derive(@debug.Debug)
+pub fn Page::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageType {
+  TableLeaf
+  TableInterior
+  IndexLeaf
+  IndexInterior
+} derive(Eq, @debug.Debug)
+pub fn PageType::equal(Self, Self) -> Bool
+pub fn PageType::not_equal(Self, Self) -> Bool
+pub fn PageType::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Row {
+  rowid : Int64
+  values : Array[Value]
+  page_number : Int
+} derive(@debug.Debug)
+pub fn Row::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SchemaEntry {
+  object_type : String
+  name : String
+  table_name : String
+  root_page : Int
+  sql : String?
+} derive(@debug.Debug)
+pub fn SchemaEntry::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Value {
+  Null
+  Integer(Int64)
+  Real(Double)
+  Text(String)
+  Blob(Bytes)
+} derive(Eq, @debug.Debug)
+pub fn Value::equal(Self, Self) -> Bool
+pub fn Value::not_equal(Self, Self) -> Bool
+pub fn Value::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
