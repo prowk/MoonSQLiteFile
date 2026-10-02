@@ -45,7 +45,7 @@ node tools/inspect.cjs fixtures/btree.sqlite scan 49 10
 
 ## 库 API
 
-Mooncakes 发布尚未执行。当前从源码构建；发布后模块名为 `prowk/moonsqlitefile`。消费包的 `moon.pkg` 导入：
+v0.1.0 已发布到 Mooncakes；本仓库当前实现 v0.2.0。模块名为 `prowk/moonsqlitefile`。消费包的 `moon.pkg` 导入：
 
 ```moonbit
 import {
@@ -72,6 +72,10 @@ moon run --target js examples/basic
 
 `Row.values` 是磁盘存储值，保持字段顺序：INTEGER PRIMARY KEY 通常为 `Null`，真实值位于 `Row.rowid`；REAL affinity 的值也可能存为 Integer。库不推断列名、主键别名或 SQL 默认值。
 
+v0.2 新增 `table_records`、`index_records` 和 `scan_btree`。WITHOUT ROWID 与索引的 `BTreeRecord.rowid` 为 None，字段保留在磁盘顺序；使用 `scan_btree` 的回调可逐条消费数据，并从 `ScanSummary.completion` 判断是否真正完成。
+
+`open_source(&PageSource)` 支持宿主按需提供字节，初始化只读取文件头。源必须保持静态快照；`open_database(Bytes)` 保留原有用法。同步数据源接口目前使用 Int 偏移，完整的大文件、异步 I/O 和 WAL overlay 尚未实现。
+
 ## 验证
 
 ```sh
@@ -81,6 +85,9 @@ moon test --target all --deny-warn
 moon fmt --check
 python tools/generate_fixtures.py --check
 python tools/verify_oracle.py
+python tools/generate_btree_fixtures.py --check
+python tools/verify_btree_oracle.py
+python tools/verify_consumer.py
 ```
 
 测试覆盖四后端、真实 SQLite 查询、Unicode、overflow、损坏引用与资源预算。原始表读取验证 1063 行；索引及 WITHOUT ROWID 在三种页大小和文本编码中验证 4407 条记录，检查内部页记录的完整性和磁盘位置。CI 还验证实际发布包可由独立项目消费。Python 不参与核心运行时。
@@ -89,6 +96,6 @@ python tools/verify_oracle.py
 
 依据 [SQLite 官方磁盘格式规范](https://sqlite.org/fileformat.html) 独立实现，未移植第三方解析器。已有 SQLite binding 用于执行 SQL，本项目直接检查文件结构，差异及十月规则来源见 [赛事工程记录](docs/competition.md)。
 
-开发由 Codex AI 辅助，参赛者需理解并维护成果；正式一页申报书须人工撰写。目前工程准备不代表已报名或验收通过，后续还需 Mooncakes 发布、人工申报与报名材料提交。
+开发由 Codex AI 辅助，参赛者需理解并维护成果；正式一页申报书须人工撰写。目前工程准备不代表已报名或验收通过，后续还需人工申报与报名材料提交。
 
 Apache-2.0 许可证，见 [LICENSE](LICENSE) 与 [来源说明](docs/provenance.md)。

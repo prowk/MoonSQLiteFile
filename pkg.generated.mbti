@@ -12,10 +12,12 @@ pub fn decode_varint(Bytes, Int) -> (UInt64, Int) raise SqliteError
 
 pub fn open_database(Bytes, limits? : Limits) -> Database raise SqliteError
 
+pub fn open_source(&PageSource, limits? : Limits) -> Database raise SqliteError
+
 pub fn parse_header(Bytes) -> Header raise SqliteError
 
 // Errors
-pub suberror SqliteError {
+pub(all) suberror SqliteError {
   Invalid(String)
   Unsupported(String)
   LimitExceeded(String)
@@ -31,8 +33,16 @@ pub(all) struct BTreeRecord {
 } derive(@debug.Debug)
 pub fn BTreeRecord::to_repr(Self) -> @debug.Repr
 
-pub struct Database {
+pub struct BytesSource {
   data : Bytes
+}
+pub fn BytesSource::byte_length(Self) -> Int
+pub fn BytesSource::new(Bytes) -> Self
+pub fn BytesSource::read_range(Self, Int, Int) -> Bytes raise SqliteError
+pub impl PageSource for BytesSource
+
+pub struct Database {
+  source : &PageSource
   header : Header
   page_count : Int
   limits : Limits
@@ -150,3 +160,7 @@ pub fn Value::to_repr(Self) -> @debug.Repr
 // Type aliases
 
 // Traits
+pub(open) trait PageSource {
+  fn byte_length(Self) -> Int
+  fn read_range(Self, Int, Int) -> Bytes raise SqliteError
+}

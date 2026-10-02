@@ -4,6 +4,8 @@
 
 `Bytes → parse_header → Database → page → read_table → cell_payload → decode_record → schema/table_rows`
 
+v0.2 将输入抽象为 `PageSource → Database → 统一 B-tree walker → 原始记录回调/集合接口`。`BytesSource` 包装原有内存字节；`open_source` 只读取 100 字节头，后续按页面边界请求字节。PageSource 是同步接口，使用 Int 偏移和长度，不支持超过当前 Int 地址范围的文件，也不包含锁、异步 I/O 或快照获取协议。自定义源必须保持内容不变，范围读取必须完整返回请求字节，宿主错误统一通过 SqliteError 传播。
+
 库只导入 MoonBit 标准库。所有数值、varint、B-tree、Unicode、overflow 和 freelist 解析均由 MoonBit 完成；Node launcher 仅读取字节、提供进程参数和转发输出。Python sqlite3 只用于测试数据与独立对照验证。
 
 ## API
@@ -14,6 +16,7 @@
 | `decode_varint(Bytes, offset)` | 解码 1–9 字节 SQLite varint，返回 UInt64 与消耗字节数 |
 | `decode_record(Bytes, encoding)` | 原始记录解码，支持所有标准 serial types |
 | `open_database(Bytes, limits?)` | 打开完整、只读的内存快照 |
+| `BytesSource.new(Bytes)/open_source(&PageSource, limits?)` | 打开宿主提供的只读静态数据源 |
 | `Database.header()/page_count()` | 元数据与逻辑页数 |
 | `Database.read_page(number)/page(number)` | 原始页或四种 B-tree 页元数据 |
 | `Database.read_table(root, limit?)` | 按 rowid 遍历普通表 |

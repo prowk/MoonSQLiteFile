@@ -1,5 +1,5 @@
 ///|
-pub suberror SqliteError {
+pub(all) suberror SqliteError {
   Invalid(String)
   Unsupported(String)
   LimitExceeded(String)

@@ -1,0 +1,85 @@
+///|
+/// 源必须在 Database 的使用期间保持同一份静态快照；不提供并发锁或事务语义。
+pub(open) trait PageSource {
+  fn byte_length(Self) -> Int
+  fn read_range(Self, Int, Int) -> Bytes raise SqliteError
+}
+
+///|
+pub struct BytesSource {
+  data : Bytes
+}
+
+///|
+pub fn BytesSource::new(data : Bytes) -> BytesSource {
+  { data, }
+}
+
+///|
+pub extend BytesSource with PageSource::{byte_length, read_range}
+
+///|
+pub impl PageSource for BytesSource with fn byte_length(self) {
+  self.data.length()
+}
+
+///|
+pub impl PageSource for BytesSource with fn read_range(self, offset, count) {
+  require_range(self.data, offset, count)
+  self.data[offset:offset + count].to_owned()
+}
+
+///|
+fn source_read(
+  source : &PageSource,
+  offset : Int,
+  count : Int,
+) -> Bytes raise SqliteError {
+  let size = source.byte_length()
+  if offset < 0 || count < 0 || offset > size || count > size - offset {
+    raise Invalid("数据源读取范围越界")
+  }
+  let bytes = source.read_range(offset, count)
+  if bytes.length() != count {
+    raise Invalid("数据源未返回请求的完整字节范围")
+  }
+  bytes
+}
+
+///|
+pub fn open_source(
+  source : &PageSource,
+  limits? : Limits = Limits::default(),
+) -> Database raise SqliteError {
+  if limits.max_rows < 1 ||
+    limits.max_payload_bytes < 1 ||
+    limits.max_pages < 1 ||
+    limits.max_depth < 1 {
+    raise Invalid("所有资源限制必须为正数")
+  }
+  let size = source.byte_length()
+  let header = parse_header(source_read(source, 0, 100))
+  if size % header.page_size != 0 || size < header.page_size {
+    raise Invalid("数据库文件不包含完整页面")
+  }
+  let physical_pages = size / header.page_size
+  let page_count = if header.declared_pages != 0U &&
+    header.change_counter == header.version_valid_for {
+    let declared = bounded_int(
+      header.declared_pages.to_uint64(),
+      "database pages",
+    )
+    if declared > physical_pages {
+      raise Invalid(
+        "数据库声明页数超过文件长度；请使用 checkpoint 后的副本",
+      )
+    }
+    declared
+  } else {
+    physical_pages
+  }
+  if header.freelist_pages.to_uint64() > page_count.to_uint64() {
+    raise Invalid("freelist 页数超过数据库页数")
+  }
+  { source, header, page_count, limits, }
+}

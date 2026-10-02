@@ -83,14 +83,15 @@ fn Database::walk_frame(
     raise LimitExceeded("扫描总页数超过限制")
   }
   occupied[number] = Btree
-  let page = self.page(number)
+  let bytes = self.read_page(number)
+  let page = self.page_from_bytes(number, bytes)
   let page_is_table = page.kind == TableLeaf || page.kind == TableInterior
   if page_is_table != table {
     raise Invalid("B-tree 中混入不同类型的页面")
   }
   {
     page,
-    bytes: self.read_page(number),
+    bytes,
     depth,
     lower,
     upper,

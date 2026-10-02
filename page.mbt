@@ -29,7 +29,15 @@ pub extend Page with @debug.Debug::{to_repr}
 
 ///|
 pub fn Database::page(self : Database, number : Int) -> Page raise SqliteError {
-  let bytes = self.read_page(number)
+  self.page_from_bytes(number, self.read_page(number))
+}
+
+///|
+fn Database::page_from_bytes(
+  self : Database,
+  number : Int,
+  bytes : Bytes,
+) -> Page raise SqliteError {
   let offset = if number == 1 { 100 } else { 0 }
   let kind = match bytes[offset].to_int() {
     13 => TableLeaf
