@@ -63,3 +63,14 @@ UTF-8、1024 字节 UTF-16LE 和 4096 字节 UTF-16BE 页面。它们覆盖所�
 当前验证共比较 **1,063 行**，并检查 LIMIT 0/2、缺文件、坏文件、未知命令、缺少表参数、
 负数/非数字/小数 limit 等错误行为。使用 `--fixtures-only` 可跳过临时随机数据库。
 Python 与 SQLite 仅是此独立对照验证工具的开发依赖，库和 CLI 无需它们。
+
+## 索引及 WITHOUT ROWID
+
+`btree.sqlite` 使用 512 字节 UTF-8 页面，含三层索引、索引内部记录、复合主键 WITHOUT ROWID、主键与声明列序差异、NOCASE/RTRIM、DESC、NULL 唯一索引及长 key overflow。
+
+```sh
+python tools/generate_btree_fixtures.py --check
+python tools/verify_btree_oracle.py
+```
+
+对照脚本使用 SQLite 的 index_xinfo 和 SQL 投影取得磁盘字段顺序，在 512/UTF-8、1024/UTF-16LE、4096/UTF-16BE 三组数据库中验证共 4407 条记录。除了完整值与顺序，还检查记录属于正确的页/cell、内部页记录未遗漏、limit 前缀及扫描完成状态。只验证既有文件时使用 `--fixtures-only`。

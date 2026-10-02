@@ -33,6 +33,10 @@ jobs:
         run: python tools/generate_fixtures.py --check
       - name: Compare CLI against SQLite oracle
         run: python tools/verify_oracle.py
+      - name: Verify index and WITHOUT ROWID fixtures
+        run: python tools/generate_btree_fixtures.py --check
+      - name: Compare complete B-tree records against SQLite
+        run: python tools/verify_btree_oracle.py
       - name: Run library example
         run: moon run --target js examples/basic
       - name: Verify packaged library in a separate consumer workspace

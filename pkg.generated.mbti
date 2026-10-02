@@ -23,6 +23,14 @@ pub suberror SqliteError {
 pub fn SqliteError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub(all) struct BTreeRecord {
+  rowid : Int64?
+  values : Array[Value]
+  page_number : Int
+  cell_offset : Int
+} derive(@debug.Debug)
+pub fn BTreeRecord::to_repr(Self) -> @debug.Repr
+
 pub struct Database {
   data : Bytes
   header : Header
@@ -31,11 +39,16 @@ pub struct Database {
 }
 pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
 pub fn Database::header(Self) -> Header
+pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
+pub fn Database::read_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> Array[BTreeRecord] raise SqliteError
+pub fn Database::read_index(Self, Int, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::read_page(Self, Int) -> Bytes raise SqliteError
 pub fn Database::read_table(Self, Int, limit? : Int) -> Array[Row] raise SqliteError
+pub fn Database::scan_btree(Self, Int, (BTreeRecord) -> Bool raise SqliteError, limit? : Int, max_total_payload_bytes? : UInt64) -> ScanSummary raise SqliteError
 pub fn Database::schema(Self) -> Array[SchemaEntry] raise SqliteError
+pub fn Database::table_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::table_rows(Self, String, limit? : Int) -> Array[Row] raise SqliteError
 
 pub(all) struct Header {
@@ -96,6 +109,23 @@ pub(all) struct Row {
   page_number : Int
 } derive(@debug.Debug)
 pub fn Row::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ScanCompletion {
+  Complete
+  RecordLimit
+  VisitorStopped
+} derive(Eq, @debug.Debug)
+pub fn ScanCompletion::equal(Self, Self) -> Bool
+pub fn ScanCompletion::not_equal(Self, Self) -> Bool
+pub fn ScanCompletion::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ScanSummary {
+  records_read : Int
+  pages_read : Int
+  payload_bytes : UInt64
+  completion : ScanCompletion
+} derive(@debug.Debug)
+pub fn ScanSummary::to_repr(Self) -> @debug.Repr
 
 pub(all) struct SchemaEntry {
   object_type : String

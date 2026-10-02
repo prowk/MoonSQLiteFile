@@ -22,12 +22,13 @@ fn local_payload_size(
 }
 
 ///|
-fn Database::cell_payload(
+fn Database::cell_payload_tracked(
   self : Database,
   page_bytes : Bytes,
   offset : Int,
   payload_size : Int,
   table_leaf : Bool,
+  occupied : Map[Int, PageUse],
 ) -> Bytes raise SqliteError {
   if payload_size > self.limits.max_payload_bytes {
     raise LimitExceeded("记录 payload 超过资源限制")
@@ -45,15 +46,19 @@ fn Database::cell_payload(
   buffer.write_bytes(page_bytes[offset:offset + local_size])
   let mut remaining = payload_size - local_size
   let mut next = page_number(read_u32(page_bytes, offset + local_size))
-  let visited : Map[Int, Bool] = Map([])
   while remaining > 0 {
-    if next == 0 || visited.contains(next) {
-      raise Invalid("overflow 链被截断或包含环")
+    if next == 0 {
+      raise Invalid("overflow 链被截断")
     }
-    if visited.length() >= self.limits.max_pages {
-      raise LimitExceeded("overflow 页数超过限制")
+    if occupied.get(next) is Some(page_use) {
+      raise Invalid(
+        "overflow 页 \{next} 已用于 \{page_use_name(page_use)}，存在环或重复占用",
+      )
     }
-    visited[next] = true
+    if occupied.length() >= self.limits.max_pages {
+      raise LimitExceeded("扫描总页数超过限制")
+    }
+    occupied[next] = Overflow
     let overflow = self.read_page(next)
     let count = if remaining < usable - 4 { remaining } else { usable - 4 }
     buffer.write_bytes(overflow[4:4 + count])

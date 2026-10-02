@@ -70,3 +70,41 @@ pub fn Database::table_rows(
   }
   raise Invalid("未找到表：\{name}")
 }
+
+///|
+/// 返回普通表或 WITHOUT ROWID 表的原始存储记录，不推断 SQL 列顺序。
+pub fn Database::table_records(
+  self : Database,
+  name : String,
+  limit? : Int = self.limits.max_rows,
+) -> Array[BTreeRecord] raise SqliteError {
+  if name == "sqlite_schema" || name == "sqlite_master" {
+    return self.read_btree(1, limit~)
+  }
+  for entry in self.schema() {
+    if entry.object_type == "table" && entry.name == name {
+      if entry.root_page == 0 {
+        raise Unsupported("虚拟表没有独立数据 B-tree")
+      }
+      return self.read_btree(entry.root_page, limit~)
+    }
+  }
+  raise Invalid("未找到表：\{name}")
+}
+
+///|
+pub fn Database::index_records(
+  self : Database,
+  name : String,
+  limit? : Int = self.limits.max_rows,
+) -> Array[BTreeRecord] raise SqliteError {
+  for entry in self.schema() {
+    if entry.object_type == "index" && entry.name == name {
+      if entry.root_page == 0 {
+        raise Invalid("索引没有有效根页")
+      }
+      return self.read_index(entry.root_page, limit~)
+    }
+  }
+  raise Invalid("未找到索引：\{name}")
+}

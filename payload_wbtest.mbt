@@ -1,4 +1,21 @@
 ///|
+fn Database::cell_payload(
+  self : Database,
+  page_bytes : Bytes,
+  offset : Int,
+  payload_size : Int,
+  table_leaf : Bool,
+) -> Bytes raise SqliteError {
+  self.cell_payload_tracked(
+    page_bytes,
+    offset,
+    payload_size,
+    table_leaf,
+    Map([]),
+  )
+}
+
+///|
 test "SQLite payload distribution thresholds" {
   assert_eq(local_payload_size(477, 512, true), 477)
   assert_eq(local_payload_size(478, 512, true), 39)

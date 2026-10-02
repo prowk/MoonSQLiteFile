@@ -13,10 +13,12 @@
 - 1–9 字节 varint、全部标准 serial types、64 位整数、浮点、NULL、BLOB。
 - UTF-8、UTF-16LE、UTF-16BE 严格解码。
 - 普通 rowid 表的多层 B-tree 遍历、父键范围与循环检查。
+- 索引及 WITHOUT ROWID 原始记录遍历，包含索引内部页记录，保留磁盘字段顺序。
+- 逐条回调扫描、明确完成状态、累计 payload 与总页数预算。
 - overflow 重组、sqlite_schema、表名解析与 freelist 检查。
 - JSON CLI、真实 SQLite 对照测试与 GitHub Actions CI。
 
-首版只读，不执行 SQL、不写数据库、不合并 WAL。索引与 WITHOUT ROWID 可检查页头，暂不遍历记录。输入应为安全获取的静态数据库副本；完整范围见 [架构说明](docs/architecture.md)。
+项目只读，不执行 SQL、不写数据库、不合并 WAL。索引记录的排序语义验证、SQL 列映射和全局页归属诊断尚未实现。输入应为安全获取的静态数据库副本；完整范围见 [架构说明](docs/architecture.md)。
 
 ## 获取与运行
 
@@ -32,6 +34,9 @@ node tools/inspect.cjs fixtures/core.sqlite page 3
 node tools/inspect.cjs fixtures/core.sqlite rows samples
 node tools/inspect.cjs fixtures/core.sqlite rows branches 5
 node tools/inspect.cjs fixtures/core.sqlite freelist
+node tools/inspect.cjs fixtures/btree.sqlite records keyed 5
+node tools/inspect.cjs fixtures/btree.sqlite index mixed_index 5
+node tools/inspect.cjs fixtures/btree.sqlite scan 49 10
 ```
 
 成功时 stdout 输出一行 JSON；失败时 stderr 输出错误，退出码非零。`rows` 默认最多 100000 行，传 `0` 返回空数组。整数和 rowid 用十进制字符串、BLOB 用十六进制，避免 JS 丢失 64 位精度。
@@ -78,7 +83,7 @@ python tools/generate_fixtures.py --check
 python tools/verify_oracle.py
 ```
 
-当前 31 项 MoonBit 测试在四个后端均通过。5 个固定样本与 3 个临时随机数据库共 1063 行，与 Python SQLite 查询结果逐字段比对；同时校验 schema、页数、freelist、Unicode、overflow 和 CLI 错误行为。Python 不参与核心运行时。
+测试覆盖四后端、真实 SQLite 查询、Unicode、overflow、损坏引用与资源预算。原始表读取验证 1063 行；索引及 WITHOUT ROWID 在三种页大小和文本编码中验证 4407 条记录，检查内部页记录的完整性和磁盘位置。CI 还验证实际发布包可由独立项目消费。Python 不参与核心运行时。
 
 ## 赛事与来源
 

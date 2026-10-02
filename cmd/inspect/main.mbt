@@ -126,7 +126,7 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|freelist"
+  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist"
   if args.length() < 2 {
     raise Usage(usage)
   }
@@ -137,7 +137,10 @@ fn run(args : FixedArray[String]) -> Json raise {
         raise Usage(usage)
       }
     "page" => if args.length() != 3 { raise Usage(usage) }
-    "rows" => if args.length() != 3 && args.length() != 4 { raise Usage(usage) }
+    "rows" | "records" | "index" | "scan" =>
+      if args.length() != 3 && args.length() != 4 {
+        raise Usage(usage)
+      }
     _ => raise Usage("未知命令：\{command}\n\{usage}")
   }
   let db = @sqlite.open_database(host_bytes())
@@ -177,6 +180,51 @@ fn run(args : FixedArray[String]) -> Json raise {
           })
         }),
       )
+    }
+    "records" | "index" => {
+      let records = if command == "index" {
+        if args.length() == 4 {
+          db.index_records(args[2], limit=parse_number(args[3], true))
+        } else {
+          db.index_records(args[2])
+        }
+      } else if args.length() == 4 {
+        db.table_records(args[2], limit=parse_number(args[3], true))
+      } else {
+        db.table_records(args[2])
+      }
+      Json::array(
+        records.map(record => {
+          Json::object({
+            "rowid": match record.rowid {
+              Some(rowid) => Json::string(rowid.to_string())
+              None => Json::null()
+            },
+            "page_number": record.page_number.to_json(),
+            "cell_offset": record.cell_offset.to_json(),
+            "values": Json::array(record.values.map(value_json)),
+          })
+        }),
+      )
+    }
+    "scan" => {
+      let root = parse_number(args[2], false)
+      let summary = if args.length() == 4 {
+        db.scan_btree(root, _ => true, limit=parse_number(args[3], true))
+      } else {
+        db.scan_btree(root, _ => true)
+      }
+      let completion = match summary.completion {
+        @sqlite.Complete => "complete"
+        @sqlite.RecordLimit => "record_limit"
+        @sqlite.VisitorStopped => "visitor_stopped"
+      }
+      Json::object({
+        "records_read": summary.records_read.to_json(),
+        "pages_read": summary.pages_read.to_json(),
+        "payload_bytes": Json::string(summary.payload_bytes.to_string()),
+        "completion": Json::string(completion),
+      })
     }
     "freelist" => db.freelist().to_json()
     _ => raise Usage(usage)
