@@ -10,6 +10,8 @@
 
 v0.1.0 已发布到 Mooncakes，真实 registry 消费项目的四后端检查、构建和测试通过。
 
+新增 192 次确定性字节变更的回归扫描，验证损坏输入的错误行为及累计资源预算。
+
 ## 0.1.0
 
 首个核心版本：SQLite 文件头、四种 B-tree 页头、rowid 表读取、record 与 Unicode 解码、overflow、schema、freelist 和 JSON CLI。

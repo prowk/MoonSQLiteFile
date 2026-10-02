@@ -92,6 +92,8 @@ python tools/verify_consumer.py
 
 测试覆盖四后端、真实 SQLite 查询、Unicode、overflow、损坏引用与资源预算。原始表读取验证 1063 行；索引及 WITHOUT ROWID 在三种页大小和文本编码中验证 4407 条记录，检查内部页记录的完整性和磁盘位置。CI 还验证实际发布包可由独立项目消费。Python 不参与核心运行时。
 
+确定性 mutation smoke 对 192 次单比特变更进行限额扫描，检查解析结果或 SqliteError 失败路径，覆盖文件头、页头、cell 和 overflow 等区域；该小型回归集不替代长期 fuzz 或完整损坏语料库。
+
 ## 赛事与来源
 
 依据 [SQLite 官方磁盘格式规范](https://sqlite.org/fileformat.html) 独立实现，未移植第三方解析器。已有 SQLite binding 用于执行 SQL，本项目直接检查文件结构，差异及十月规则来源见 [赛事工程记录](docs/competition.md)。
