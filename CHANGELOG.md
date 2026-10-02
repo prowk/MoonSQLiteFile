@@ -8,7 +8,7 @@
 
 新增同步 PageSource 与 open_source，宿主可提供按需读取的静态快照；BytesSource 与原有 open_database(Bytes) 保持兼容。独立消费测试验证第三方项目可实现 PageSource，并支持对已发布 Mooncakes 版本进行安装验证。
 
-v0.1.0 已发布到 Mooncakes，真实 registry 消费项目的四后端检查、构建和测试通过。
+v0.2.0 已发布到 Mooncakes，真实 registry 消费项目的四后端检查、构建和测试通过，包括第三方 PageSource 实现。GitHub 提供对应 v0.2.0 标签。
 
 新增 192 次确定性字节变更的回归扫描，验证损坏输入的错误行为及累计资源预算。
 

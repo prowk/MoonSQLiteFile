@@ -45,7 +45,13 @@ node tools/inspect.cjs fixtures/btree.sqlite scan 49 10
 
 ## 库 API
 
-v0.1.0 已发布到 Mooncakes；本仓库当前实现 v0.2.0。模块名为 `prowk/moonsqlitefile`。消费包的 `moon.pkg` 导入：
+v0.2.0 已发布到 [Mooncakes](https://mooncakes.io/docs/prowk/moonsqlitefile@0.2.0)，并通过真实 registry 安装的独立消费项目四后端检查、构建和测试。在 MoonBit 项目中安装：
+
+```sh
+moon add prowk/moonsqlitefile@0.2.0
+```
+
+模块名为 `prowk/moonsqlitefile`。消费包的 `moon.pkg` 导入：
 
 ```moonbit
 import {
