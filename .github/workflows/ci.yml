@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - run: moon version --all
+      - run: moon check --target all --deny-warn
+      - run: moon build --target all --deny-warn
+      - run: moon test --target all --deny-warn
+      - run: moon fmt --check
+      - name: Verify committed fixture bytes
+        run: python tools/generate_fixtures.py --check
+      - name: Compare CLI against SQLite oracle
+        run: python tools/verify_oracle.py
+      - name: Run library example
+        run: moon run --target js examples/basic
