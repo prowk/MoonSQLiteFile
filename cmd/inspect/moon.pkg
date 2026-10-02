@@ -1,0 +1,9 @@
+import {
+  "prowk/moonsqlitefile" @sqlite,
+}
+
+pkgtype(kind: "executable")
+
+options(
+  supported_targets: "js",
+)

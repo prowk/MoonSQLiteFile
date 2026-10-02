@@ -33,8 +33,32 @@ python tools/generate_fixtures.py
 python tools/generate_fixtures.py --check
 ```
 
-`--check` 会在临时目录重新生成所有数据库、oracle 及 MoonBit 字节代码，并与提交的文件
-逐字节比较。生成时检查每个数据库的 `PRAGMA integrity_check`、总文件大小、freelist
+`--check` 会在临时目录重新生成所有数据库及 oracle，与提交的文件逐字节比较，并检查
+MoonBit 源码内嵌的数据库字节和输出长度；源码空白允许由 `moon fmt` 调整。
+生成时检查每个数据库的 `PRAGMA integrity_check`、总文件大小、freelist
 以及三层行号树。生成过程没有时间戳或随机输入；初始产物使用 Python 3.13 携带的
 SQLite 3.45.3。不同 SQLite 版本可能采用不同页面布局或文件头版本号，导致 `--check`
 报告差异；已有文件仍可跨平台解析。
+
+## SQLite oracle 对照验证
+
+构建 JavaScript CLI 后运行：
+
+```powershell
+moon build --target js
+$env:PYTHONUTF8='1'
+python tools/verify_oracle.py
+```
+
+验证脚本调用 `node tools/inspect.cjs`，检查所有固定数据库的 header、完整 schema、
+freelist，以及普通行号表的每一行和每个值。整数主键列在磁盘记录中是 NULL 占位，
+验证时使用行号物化；REAL affinity 列的整数在磁盘上可使用整数序列类型，验证时比较
+SQLite 查询得到的数值语义。WITHOUT ROWID 表必须明确返回错误。
+
+完整验证还在临时目录生成三个具有固定随机种子的独立数据库，分别采用 512 字节
+UTF-8、1024 字节 UTF-16LE 和 4096 字节 UTF-16BE 页面。它们覆盖所有整数序列长度
+边界、64 位行号上下界、嵌入 NUL 文本、长文本与 BLOB、长 schema SQL overflow、
+索引和删除后的 freelist。临时文件在退出时清理，不写入仓库。
+当前验证共比较 **1,063 行**，并检查 LIMIT 0/2、缺文件、坏文件、未知命令、缺少表参数、
+负数/非数字/小数 limit 等错误行为。使用 `--fixtures-only` 可跳过临时随机数据库。
+Python 与 SQLite 仅是此独立对照验证工具的开发依赖，库和 CLI 无需它们。
