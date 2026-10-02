@@ -103,10 +103,12 @@ fn fixture_core() -> Bytes {
   let output : FixedArray[Byte] = FixedArray::make(49152, 0)
   let mut offset = 0
   for chunk in chunks {
-    for i = 0; i < chunk.length(); i = i + 1 { output[offset + i] = chunk[i] }
+    for i = 0; i < chunk.length(); i = i + 1 {
+      output[offset + i] = chunk[i]
+    }
     offset = offset + chunk.length()
   }
-  Bytes::from_fixedarray(output)
+  Bytes::from_array(output[:])
 }
 
 ///|
@@ -118,10 +120,12 @@ fn fixture_utf16le() -> Bytes {
   let output : FixedArray[Byte] = FixedArray::make(1024, 0)
   let mut offset = 0
   for chunk in chunks {
-    for i = 0; i < chunk.length(); i = i + 1 { output[offset + i] = chunk[i] }
+    for i = 0; i < chunk.length(); i = i + 1 {
+      output[offset + i] = chunk[i]
+    }
     offset = offset + chunk.length()
   }
-  Bytes::from_fixedarray(output)
+  Bytes::from_array(output[:])
 }
 
 ///|
@@ -133,10 +137,12 @@ fn fixture_utf16be() -> Bytes {
   let output : FixedArray[Byte] = FixedArray::make(1024, 0)
   let mut offset = 0
   for chunk in chunks {
-    for i = 0; i < chunk.length(); i = i + 1 { output[offset + i] = chunk[i] }
+    for i = 0; i < chunk.length(); i = i + 1 {
+      output[offset + i] = chunk[i]
+    }
     offset = offset + chunk.length()
   }
-  Bytes::from_fixedarray(output)
+  Bytes::from_array(output[:])
 }
 
 ///|
@@ -402,10 +408,12 @@ fn fixture_page65536() -> Bytes {
   let output : FixedArray[Byte] = FixedArray::make(131072, 0)
   let mut offset = 0
   for chunk in chunks {
-    for i = 0; i < chunk.length(); i = i + 1 { output[offset + i] = chunk[i] }
+    for i = 0; i < chunk.length(); i = i + 1 {
+      output[offset + i] = chunk[i]
+    }
     offset = offset + chunk.length()
   }
-  Bytes::from_fixedarray(output)
+  Bytes::from_array(output[:])
 }
 
 ///|
@@ -416,8 +424,10 @@ fn fixture_empty() -> Bytes {
   let output : FixedArray[Byte] = FixedArray::make(512, 0)
   let mut offset = 0
   for chunk in chunks {
-    for i = 0; i < chunk.length(); i = i + 1 { output[offset + i] = chunk[i] }
+    for i = 0; i < chunk.length(); i = i + 1 {
+      output[offset + i] = chunk[i]
+    }
     offset = offset + chunk.length()
   }
-  Bytes::from_fixedarray(output)
+  Bytes::from_array(output[:])
 }

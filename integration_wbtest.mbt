@@ -10,7 +10,10 @@ test "real SQLite schema including interior page one" {
   assert_eq(schema[0].root_page, 2)
   assert_eq(schema[3].name, "keyed")
   assert_eq(db.page(schema[3].root_page).kind, IndexLeaf)
-  let failed = try { let _ = db.table_rows("keyed"); false } catch {
+  let failed = try {
+    let _ = db.table_rows("keyed")
+    false
+  } catch {
     Unsupported(_) => true
     _ => false
   }
@@ -23,7 +26,14 @@ test "real SQLite rowid and storage values" {
   assert_eq(rows.length(), 6)
   assert_eq(rows[0].rowid, -7L)
   // INTEGER PRIMARY KEY 的磁盘字段为空，真实主键值保存在 rowid。
-  assert_eq(rows[0].values, [Null, Text("中文 SQLite 🌙"), Integer(-9223372036854775808L), Real(-1.25), Blob(b"\x00\xff\x10\x41\x80"), Null])
+  assert_eq(rows[0].values, [
+    Null,
+    Text("中文 SQLite 🌙"),
+    Integer(-9223372036854775808L),
+    Real(-1.25),
+    Blob(b"\x00\xff\x10\x41\x80"),
+    Null,
+  ])
   assert_eq(rows[5].rowid, 16384L)
   assert_eq(rows[5].values[2], Integer(9223372036854775807L))
 }
@@ -37,7 +47,10 @@ test "three level b-tree preserves all 680 rows" {
   for i = 0; i < rows.length(); i = i + 1 {
     assert_eq(rows[i].rowid, (i + 1).to_int64())
   }
-  assert_eq(rows[0].values[1], Text("row-0001-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"))
+  assert_eq(
+    rows[0].values[1],
+    Text("row-0001-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"),
+  )
   assert_eq(db.table_rows("branches", limit=7).length(), 7)
 }
 
@@ -72,13 +85,24 @@ test "real freelist and traversal resource limits" {
   let bytes = fixture_core()
   let db = open_database(bytes)
   assert_eq(db.freelist().length(), 7)
-  let limited = open_database(bytes, limits={ max_rows: 10, max_payload_bytes: 100, max_pages: 100, max_depth: 2 })
-  let failed = try { let _ = limited.read_table(3); false } catch {
+  let limited = open_database(bytes, limits={
+    max_rows: 10,
+    max_payload_bytes: 100,
+    max_pages: 100,
+    max_depth: 2,
+  })
+  let failed = try {
+    let _ = limited.read_table(3)
+    false
+  } catch {
     LimitExceeded(_) => true
     _ => false
   }
   assert_true(failed)
-  let failed = try { let _ = limited.read_table(74); false } catch {
+  let failed = try {
+    let _ = limited.read_table(74)
+    false
+  } catch {
     LimitExceeded(_) => true
     _ => false
   }

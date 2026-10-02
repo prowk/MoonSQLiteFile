@@ -1,7 +1,16 @@
 ///|
-fn require_range(data : Bytes, offset : Int, count : Int) -> Unit raise SqliteError {
-  if offset < 0 || count < 0 || offset > data.length() || count > data.length() - offset {
-    raise Invalid("读取越界：offset=\{offset}, length=\{count}, size=\{data.length()}")
+fn require_range(
+  data : Bytes,
+  offset : Int,
+  count : Int,
+) -> Unit raise SqliteError {
+  if offset < 0 ||
+    count < 0 ||
+    offset > data.length() ||
+    count > data.length() - offset {
+    raise Invalid(
+      "读取越界：offset=\{offset}, length=\{count}, size=\{data.length()}",
+    )
   }
 }
 
@@ -30,15 +39,22 @@ fn bounded_int(value : UInt64, name : String) -> Int raise SqliteError {
 }
 
 ///|
-pub fn decode_varint(data : Bytes, offset : Int) -> (UInt64, Int) raise SqliteError {
+pub fn decode_varint(
+  data : Bytes,
+  offset : Int,
+) -> (UInt64, Int) raise SqliteError {
   let mut value = 0UL
   for i = 0; i < 9; i = i + 1 {
     require_range(data, offset + i, 1)
     let byte = data[offset + i].to_uint64()
     // 第九字节使用全部八位，其余字节只使用低七位。
-    if i == 8 { return ((value << 8) | byte, 9) }
+    if i == 8 {
+      return ((value << 8) | byte, 9)
+    }
     value = (value << 7) | (byte & 127UL)
-    if (byte & 128UL) == 0UL { return (value, i + 1) }
+    if (byte & 128UL) == 0UL {
+      return (value, i + 1)
+    }
   }
   raise Invalid("无效 varint")
 }

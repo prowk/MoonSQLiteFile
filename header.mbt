@@ -18,6 +18,12 @@ pub(all) struct Header {
 } derive(Debug, Eq)
 
 ///|
+pub extend Header with @debug.Debug::{to_repr}
+
+///|
+pub extend Header with Eq::{equal, not_equal}
+
+///|
 pub fn parse_header(data : Bytes) -> Header raise SqliteError {
   require_range(data, 0, 100)
   if data[0:16].to_owned() != b"SQLite format 3\x00" {
@@ -29,27 +35,51 @@ pub fn parse_header(data : Bytes) -> Header raise SqliteError {
     raise Invalid("无效 page_size：\{page_size}")
   }
   let usable_size = page_size - data[20].to_int()
-  if usable_size < 480 { raise Invalid("页面可用空间不足 480 字节") }
+  if usable_size < 480 {
+    raise Invalid("页面可用空间不足 480 字节")
+  }
   let write_version = data[18].to_int()
   let read_version = data[19].to_int()
-  if read_version != 1 && read_version != 2 { raise Unsupported("未知文件读取版本") }
-  if write_version < 1 { raise Invalid("无效文件写入版本") }
+  if read_version != 1 && read_version != 2 {
+    raise Unsupported("未知文件读取版本")
+  }
+  if write_version < 1 {
+    raise Invalid("无效文件写入版本")
+  }
   if data[21] != 64 || data[22] != 32 || data[23] != 32 {
     raise Invalid("无效 payload fractions")
   }
-  let schema_format = bounded_int(read_u32(data, 44).to_uint64(), "schema_format")
-  if schema_format > 4 { raise Unsupported("未知 schema format") }
+  let schema_format = bounded_int(
+    read_u32(data, 44).to_uint64(),
+    "schema_format",
+  )
+  if schema_format > 4 {
+    raise Unsupported("未知 schema format")
+  }
   let text_encoding = bounded_int(read_u32(data, 56).to_uint64(), "encoding")
-  if text_encoding < 0 || text_encoding > 3 { raise Unsupported("未知文本编码") }
+  if text_encoding < 0 || text_encoding > 3 {
+    raise Unsupported("未知文本编码")
+  }
   for i = 72; i < 92; i = i + 1 {
-    if data[i] != 0 { raise Invalid("数据库头保留字段必须为零") }
+    if data[i] != 0 {
+      raise Invalid("数据库头保留字段必须为零")
+    }
   }
   {
-    page_size, usable_size, write_version, read_version,
-    change_counter: read_u32(data, 24), declared_pages: read_u32(data, 28),
-    freelist_trunk: read_u32(data, 32), freelist_pages: read_u32(data, 36),
-    schema_cookie: read_u32(data, 40), schema_format, text_encoding,
-    user_version: read_u32(data, 60), application_id: read_u32(data, 68),
-    version_valid_for: read_u32(data, 92), sqlite_version: read_u32(data, 96),
+    page_size,
+    usable_size,
+    write_version,
+    read_version,
+    change_counter: read_u32(data, 24),
+    declared_pages: read_u32(data, 28),
+    freelist_trunk: read_u32(data, 32),
+    freelist_pages: read_u32(data, 36),
+    schema_cookie: read_u32(data, 40),
+    schema_format,
+    text_encoding,
+    user_version: read_u32(data, 60),
+    application_id: read_u32(data, 68),
+    version_valid_for: read_u32(data, 92),
+    sqlite_version: read_u32(data, 96),
   }
 }

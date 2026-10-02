@@ -9,6 +9,12 @@ pub(all) enum Value {
 } derive(Debug, Eq)
 
 ///|
+pub extend Value with @debug.Debug::{to_repr}
+
+///|
+pub extend Value with Eq::{equal, not_equal}
+
+///|
 fn record_serial_length(serial : UInt64) -> Int raise SqliteError {
   match serial {
     0UL | 8UL | 9UL => 0
@@ -59,7 +65,10 @@ fn record_text(data : BytesView, encoding : Int) -> String raise SqliteError {
 
 ///|
 /// 解码完整的 SQLite record payload；编码编号与数据库文件头保持一致。
-pub fn decode_record(payload : Bytes, encoding : Int) -> Array[Value] raise SqliteError {
+pub fn decode_record(
+  payload : Bytes,
+  encoding : Int,
+) -> Array[Value] raise SqliteError {
   if encoding < 1 || encoding > 3 {
     raise Invalid("无效文本编码：\{encoding}")
   }
@@ -88,11 +97,15 @@ pub fn decode_record(payload : Bytes, encoding : Int) -> Array[Value] raise Sqli
       0UL => Null
       1UL | 2UL | 3UL | 4UL | 5UL | 6UL =>
         Integer(record_integer(payload, body_cursor, count))
-      7UL => Real(record_integer(payload, body_cursor, 8).reinterpret_as_double())
+      7UL =>
+        Real(record_integer(payload, body_cursor, 8).reinterpret_as_double())
       8UL => Integer(0L)
       9UL => Integer(1L)
       _ => {
-        let data = payload.exact_view(start=body_cursor, end=body_cursor + count)
+        let data = payload.exact_view(
+          start=body_cursor,
+          end=body_cursor + count,
+        )
         if serial % 2UL == 0UL {
           Blob(data.to_owned())
         } else {

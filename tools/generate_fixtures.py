@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 
@@ -160,10 +161,12 @@ def moonbit_source(databases):
             f"  let output : FixedArray[Byte] = FixedArray::make({len(data)}, 0)",
             "  let mut offset = 0",
             "  for chunk in chunks {",
-            "    for i = 0; i < chunk.length(); i = i + 1 { output[offset + i] = chunk[i] }",
+            "    for i = 0; i < chunk.length(); i = i + 1 {",
+            "      output[offset + i] = chunk[i]",
+            "    }",
             "    offset = offset + chunk.length()",
             "  }",
-            "  Bytes::from_fixedarray(output)",
+            "  Bytes::from_array(output[:])",
             "}", "",
         ])
     return "\n".join(lines)
@@ -197,14 +200,28 @@ def generate():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true", help="重新生成并验证所有已保存文件逐字节一致")
+    parser.add_argument("--check", action="store_true", help="检查数据库及 oracle 逐字节一致，并核对已嵌入的测试字节")
     args = parser.parse_args()
     databases, expected = generate()
     artifacts = {FIXTURES / f"{name}.sqlite": data for name, data in databases.items()}
     artifacts[FIXTURES / "expected.json"] = (json.dumps(expected, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     artifacts[ROOT / "fixture_bytes_wbtest.mbt"] = moonbit_source(databases).encode("utf-8")
     if args.check:
-        mismatches = [str(path.relative_to(ROOT)) for path, data in artifacts.items() if not path.exists() or path.read_bytes() != data]
+        source_path = ROOT / "fixture_bytes_wbtest.mbt"
+        mismatches = [str(path.relative_to(ROOT)) for path, data in artifacts.items() if path != source_path and (not path.exists() or path.read_bytes() != data)]
+        # MoonBit 格式化只影响布局，检查嵌入数据本身而非源码空白。
+        source = source_path.read_text(encoding="utf-8") if source_path.exists() else ""
+        functions = re.findall(r"fn fixture_(\w+)\(\) -> Bytes \{(.*?)(?=\n///\||\Z)", source, re.S)
+        embedded = {}
+        for name, body in functions:
+            literals = re.findall(r'b"((?:\\x[0-9a-fA-F]{2})*)"', body)
+            data = bytes.fromhex("".join(literals).replace("\\x", ""))
+            size = re.search(r"FixedArray::make\((\d+),\s*0\)", body)
+            if size is None or int(size[1]) != len(data):
+                mismatches.append(f"fixture_bytes_wbtest.mbt:fixture_{name} 大小")
+            embedded[name] = data
+        if embedded != databases:
+            mismatches.append("fixture_bytes_wbtest.mbt 嵌入字节")
         if mismatches:
             raise SystemExit("生成结果不一致: " + ", ".join(mismatches))
     else:

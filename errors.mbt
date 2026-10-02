@@ -4,3 +4,6 @@ pub suberror SqliteError {
   Unsupported(String)
   LimitExceeded(String)
 } derive(Debug)
+
+///|
+pub extend SqliteError with @debug.Debug::{to_repr}

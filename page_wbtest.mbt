@@ -6,6 +6,11 @@ test "page one header begins after 100 bytes" {
   assert_eq(page.content_start, 512)
   let bytes = test_database().to_array()
   bytes[103] = 255
-  let failed = try { let _ = open_database(Bytes::from_array(bytes)).page(1); false } catch { _ => true }
+  let failed = try {
+    let _ = open_database(Bytes::from_array(bytes)).page(1)
+    false
+  } catch {
+    _ => true
+  }
   assert_true(failed)
 }

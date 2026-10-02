@@ -14,9 +14,24 @@ test "overflow links enforce bounds cycles and resource limits" {
   overflow[3] = 2
   let db = open_database(test_database() + Bytes::from_array(overflow))
   let cell = Bytes::make(39, 1) + b"\x00\x00\x00\x02" + Bytes::make(469, 0)
-  let failed = try { let _ = db.cell_payload(cell, 0, 1000, true); false } catch { _ => true }
+  let failed = try {
+    let _ = db.cell_payload(cell, 0, 1000, true)
+    false
+  } catch {
+    _ => true
+  }
   assert_true(failed)
-  let db = open_database(test_database(), limits={ max_rows: 10, max_payload_bytes: 10, max_pages: 10, max_depth: 10 })
-  let failed = try { let _ = db.cell_payload(b"", 0, 11, true); false } catch { _ => true }
+  let db = open_database(test_database(), limits={
+    max_rows: 10,
+    max_payload_bytes: 10,
+    max_pages: 10,
+    max_depth: 10,
+  })
+  let failed = try {
+    let _ = db.cell_payload(b"", 0, 11, true)
+    false
+  } catch {
+    _ => true
+  }
   assert_true(failed)
 }
