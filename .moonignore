@@ -1,0 +1,11 @@
+/_build/
+/.mooncakes/
+/.git/
+/competition-page.html
+/competition-assets.js
+/tools/github_publish.py
+/tools/*.py
+/AGENTS.md
+/docs/proposal.md
+__pycache__/
+*.pyc
