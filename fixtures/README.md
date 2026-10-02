@@ -37,8 +37,9 @@ python tools/generate_fixtures.py --check
 MoonBit 源码内嵌的数据库字节和输出长度；源码空白允许由 `moon fmt` 调整。
 生成时检查每个数据库的 `PRAGMA integrity_check`、总文件大小、freelist
 以及三层行号树。生成过程没有时间戳或随机输入；初始产物使用 Python 3.13 携带的
-SQLite 3.45.3。不同 SQLite 版本可能采用不同页面布局或文件头版本号，导致 `--check`
-报告差异；已有文件仍可跨平台解析。
+SQLite 3.45.3。不同 SQLite 版本可能采用不同页面布局或文件头版本号，重新生成时二进制
+产物可能改变。`--check` 使用只读 SQLite 连接查询已提交样本，校验 recorded SHA-256、
+完整 oracle、嵌入字节及输出长度；它不要求不同平台重新生成逐字节相同的文件。
 
 ## SQLite oracle 对照验证
 

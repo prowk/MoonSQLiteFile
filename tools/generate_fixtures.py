@@ -202,7 +202,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="检查数据库及 oracle 逐字节一致，并核对已嵌入的测试字节")
     args = parser.parse_args()
-    databases, expected = generate()
+    if args.check:
+        # SQLite 的写入版本字段和页布局可能随平台版本改变，CI 验证已提交样本及其真实查询结果。
+        recorded = json.loads((FIXTURES / "expected.json").read_text(encoding="utf-8"))
+        databases, expected = {}, {}
+        for name in recorded:
+            path = FIXTURES / f"{name}.sqlite"
+            data = path.read_bytes()
+            with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+                expected[name] = collect_oracle(db, data)
+            databases[name] = data
+    else:
+        databases, expected = generate()
     artifacts = {FIXTURES / f"{name}.sqlite": data for name, data in databases.items()}
     artifacts[FIXTURES / "expected.json"] = (json.dumps(expected, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     artifacts[ROOT / "fixture_bytes_wbtest.mbt"] = moonbit_source(databases).encode("utf-8")
