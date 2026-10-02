@@ -1,5 +1,11 @@
 # 更新记录
 
+## 未发布
+
+新增 `Database.inspect_btree` 和 `BTreeInspection`：对单棵 B-tree 返回完整、未完成或失败状态，保留原始 SqliteError 和此前成功解码的记录数。记录上限、资源不足或不支持的格式不会被当作完整检查；该报告不提供全局页归属或整个数据库的完整性结论。
+
+新增 4 项回归测试，覆盖精确完成与记录前缀、读取后续损坏页时的进度保留、payload 预算、无效根页和宿主 Unsupported 错误。
+
 ## 0.2.0
 
 统一普通表、索引与 WITHOUT ROWID 的内部遍历，补齐索引内部页记录。新增 BTreeRecord、逐条 callback、ScanSummary、累计 payload 与跨 B-tree/overflow 页预算；CLI 增加 records、index、scan。保持原有普通 rowid 表 API。

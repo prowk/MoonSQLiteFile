@@ -29,6 +29,18 @@ v0.2 将输入抽象为 `PageSource → Database → 统一 B-tree walker → �
 
 失败通过 `SqliteError` 返回：`Invalid` 表示格式损坏、输入错误或越界，`Unsupported` 表示明确不支持的格式，`LimitExceeded` 表示资源请求超过限制。库不退出进程。
 
+## 单棵树检查报告（开发分支，尚未发布）
+
+`Database.inspect_btree(root, limit?, max_total_payload_bytes?)` 复用有界扫描，不收集记录数组，并把 SqliteError 转换为 `BTreeInspection`。报告包含调用者指定的 `root_page`、`status`、成功解码的 `records_decoded`、可选 `summary` 和可选 `error`。
+
+- `Complete`：遍历结束，`summary` 保留完整 ScanSummary，`error` 为 None。
+- `Incomplete`：达到记录上限时，`summary.completion` 为 RecordLimit；资源限制或 Unsupported 错误时，`error` 保留原始错误，`summary` 为 None。
+- `Failed`：发生 Invalid 错误，`error` 保留原始错误，`summary` 为 None。Invalid 也可能来自无效根页或宿主读取失败，不能据此直接断定数据库损坏。
+
+发生错误时，仍保留此前交给内部回调的已解码记录数，不推测失败路径中的页数、payload 总量或错误位置。报告里的根页号是检查入口，不是错误发生页。初始化失败仍由 `open_database` 或 `open_source` 抛出，不属于这个报告的覆盖范围。
+
+这个接口只报告单棵 B-tree 的现有检查结果；不扫描全局页归属、Ptrmap、表与索引一致性，也不等价于 SQLite integrity_check。
+
 ## 存储值与 SQL 逻辑值
 
 `Row.values` 保留磁盘字段顺序与存储类型。`INTEGER PRIMARY KEY` 的字段通常是 `Null`，其真实值位于 `Row.rowid`；声明为 REAL 的值可能以整数存储。库不解析 CREATE TABLE 来恢复列名、类型亲和性、默认值或主键别名。调用者需要这些 SQL 语义时应使用 SQL 引擎或自行实现 schema 层。

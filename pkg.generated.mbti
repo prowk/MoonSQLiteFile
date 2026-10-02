@@ -25,6 +25,15 @@ pub(all) suberror SqliteError {
 pub fn SqliteError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
+pub(all) struct BTreeInspection {
+  root_page : Int
+  status : InspectionStatus
+  records_decoded : Int
+  summary : ScanSummary?
+  error : SqliteError?
+} derive(@debug.Debug)
+pub fn BTreeInspection::to_repr(Self) -> @debug.Repr
+
 pub(all) struct BTreeRecord {
   rowid : Int64?
   values : Array[Value]
@@ -50,6 +59,7 @@ pub struct Database {
 pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
 pub fn Database::header(Self) -> Header
 pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
+pub fn Database::inspect_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspection
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
 pub fn Database::read_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> Array[BTreeRecord] raise SqliteError
@@ -81,6 +91,15 @@ pub(all) struct Header {
 pub fn Header::equal(Self, Self) -> Bool
 pub fn Header::not_equal(Self, Self) -> Bool
 pub fn Header::to_repr(Self) -> @debug.Repr
+
+pub(all) enum InspectionStatus {
+  Complete
+  Incomplete
+  Failed
+} derive(Eq, @debug.Debug)
+pub fn InspectionStatus::equal(Self, Self) -> Bool
+pub fn InspectionStatus::not_equal(Self, Self) -> Bool
+pub fn InspectionStatus::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Limits {
   max_rows : Int

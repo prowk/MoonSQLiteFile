@@ -157,7 +157,7 @@ moon run --target js examples/basic
 python tools/verify_consumer.py
 ```
 
-测试包含 42 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)。
+当前开发分支包含 46 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)，尚未发布的 API 变动见 [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 
