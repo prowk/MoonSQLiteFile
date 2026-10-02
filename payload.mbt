@@ -29,6 +29,8 @@ fn Database::cell_payload_tracked(
   payload_size : Int,
   table_leaf : Bool,
   occupied : Map[Int, PageUse],
+  owner_page? : Int = 0,
+  observer? : ScanObserver = quiet_observer(),
 ) -> Bytes raise SqliteError {
   if payload_size > self.limits.max_payload_bytes {
     raise LimitExceeded("记录 payload 超过资源限制")
@@ -46,6 +48,8 @@ fn Database::cell_payload_tracked(
   buffer.write_bytes(page_bytes[offset:offset + local_size])
   let mut remaining = payload_size - local_size
   let mut next = page_number(read_u32(page_bytes, offset + local_size))
+  let mut parent = owner_page
+  let mut first = true
   while remaining > 0 {
     if next == 0 {
       raise Invalid("overflow 链被截断")
@@ -58,11 +62,22 @@ fn Database::cell_payload_tracked(
     if occupied.length() >= self.limits.max_pages {
       raise LimitExceeded("扫描总页数超过限制")
     }
-    occupied[next] = Overflow
     let overflow = self.read_page(next)
+    (observer.claim)(
+      next,
+      if first {
+        OverflowFirst
+      } else {
+        OverflowContinuation
+      },
+      Some(parent),
+    )
+    occupied[next] = Overflow
     let count = if remaining < usable - 4 { remaining } else { usable - 4 }
     buffer.write_bytes(overflow[4:4 + count])
     remaining = remaining - count
+    parent = next
+    first = false
     next = page_number(read_u32(overflow, 0))
   }
   if next != 0 {

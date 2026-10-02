@@ -10,6 +10,8 @@ pub(all) struct Header {
   freelist_pages : UInt
   schema_cookie : UInt
   schema_format : Int
+  largest_root_page : UInt
+  incremental_vacuum : Bool
   text_encoding : Int
   user_version : UInt
   application_id : UInt
@@ -76,6 +78,8 @@ pub fn parse_header(data : Bytes) -> Header raise SqliteError {
     freelist_pages: read_u32(data, 36),
     schema_cookie: read_u32(data, 40),
     schema_format,
+    largest_root_page: read_u32(data, 52),
+    incremental_vacuum: read_u32(data, 64) != 0U,
     text_encoding,
     user_version: read_u32(data, 60),
     application_id: read_u32(data, 68),

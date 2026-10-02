@@ -41,6 +41,17 @@ priv enum PageUse {
 }
 
 ///|
+priv struct ScanObserver {
+  claim : (Int, PageKind, Int?) -> Unit raise SqliteError
+  charge_payload : (UInt64) -> Unit
+}
+
+///|
+fn quiet_observer() -> ScanObserver {
+  { claim: (_, _, _) => (), charge_payload: _ => (), }
+}
+
+///|
 fn page_use_name(page_use : PageUse) -> String {
   match page_use {
     Btree => "B-tree"
@@ -70,6 +81,8 @@ fn Database::walk_frame(
   upper : Int64?,
   table : Bool,
   occupied : Map[Int, PageUse],
+  parent : Int?,
+  observer : ScanObserver,
 ) -> WalkFrame raise SqliteError {
   if depth > self.limits.max_depth {
     raise LimitExceeded("B-tree 深度超过限制")
@@ -82,8 +95,17 @@ fn Database::walk_frame(
   if occupied.length() >= self.limits.max_pages {
     raise LimitExceeded("扫描总页数超过限制")
   }
-  occupied[number] = Btree
   let bytes = self.read_page(number)
+  (observer.claim)(
+    number,
+    if parent is None {
+      BtreeRoot
+    } else {
+      BtreeChild
+    },
+    parent,
+  )
+  occupied[number] = Btree
   let page = self.page_from_bytes(number, bytes)
   let page_is_table = page.kind == TableLeaf || page.kind == TableInterior
   if page_is_table != table {
@@ -111,13 +133,33 @@ pub fn Database::scan_btree(
   limit? : Int = self.limits.max_rows,
   max_total_payload_bytes? : UInt64 = 67108864UL,
 ) -> ScanSummary raise SqliteError {
+  self.scan_btree_observed(
+    root,
+    visit,
+    quiet_observer(),
+    limit~,
+    max_total_payload_bytes~,
+  )
+}
+
+///|
+fn Database::scan_btree_observed(
+  self : Database,
+  root : Int,
+  visit : (BTreeRecord) -> Bool raise SqliteError,
+  observer : ScanObserver,
+  limit~ : Int,
+  max_total_payload_bytes~ : UInt64,
+) -> ScanSummary raise SqliteError {
   if limit < 0 || limit > self.limits.max_rows {
     raise LimitExceeded("记录数请求超出资源限制")
   }
   let root_page = self.page(root)
   let table = root_page.kind == TableLeaf || root_page.kind == TableInterior
   let occupied : Map[Int, PageUse] = Map([])
-  let stack = [self.walk_frame(root, 1, None, None, table, occupied)]
+  let stack = [
+    self.walk_frame(root, 1, None, None, table, occupied, None, observer),
+  ]
   let mut records_read = 0
   let mut payload_bytes = 0UL
   let mut last_rowid : Int64? = None
@@ -139,6 +181,8 @@ pub fn Database::scan_btree(
             frame.upper,
             table,
             occupied,
+            Some(page.number),
+            observer,
           ),
         )
       } else {
@@ -173,7 +217,16 @@ pub fn Database::scan_btree(
         frame.emit_pending = true
       }
       stack.push(
-        self.walk_frame(child, frame.depth + 1, lower, upper, table, occupied),
+        self.walk_frame(
+          child,
+          frame.depth + 1,
+          lower,
+          upper,
+          table,
+          occupied,
+          Some(page.number),
+          observer,
+        ),
       )
       continue
     }
@@ -201,6 +254,8 @@ pub fn Database::scan_btree(
     if payload_size.to_uint64() > max_total_payload_bytes - payload_bytes {
       raise LimitExceeded("扫描累计 payload 超过字节预算")
     }
+    // 数据库级预算在分配和解码前计入本次请求，失败也不退还预算。
+    (observer.charge_payload)(payload_size.to_uint64())
     let (rowid, rowid_bytes) = if table {
       let (bits, size) = page_varint(bytes, payload_offset + size_bytes, usable)
       let rowid = bits.reinterpret_as_int64()
@@ -224,6 +279,8 @@ pub fn Database::scan_btree(
       payload_size,
       table,
       occupied,
+      owner_page=page.number,
+      observer~,
     )
     let record = {
       rowid,

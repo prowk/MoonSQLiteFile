@@ -60,6 +60,7 @@ pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
 pub fn Database::header(Self) -> Header
 pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::inspect_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspection
+pub fn Database::inspect_database(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspection
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
 pub fn Database::read_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> Array[BTreeRecord] raise SqliteError
@@ -70,6 +71,28 @@ pub fn Database::scan_btree(Self, Int, (BTreeRecord) -> Bool raise SqliteError, 
 pub fn Database::schema(Self) -> Array[SchemaEntry] raise SqliteError
 pub fn Database::table_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::table_rows(Self, String, limit? : Int) -> Array[Row] raise SqliteError
+
+pub(all) struct DatabaseInspection {
+  status : InspectionStatus
+  ownership_complete : Bool
+  ptrmap_checked : Bool
+  diagnostics_truncated : Bool
+  roots_inspected : Int
+  records_decoded : Int
+  payload_bytes : UInt64
+  pages : Array[PageOwnership]
+  unclaimed_pages : Array[Int]
+  issues : Array[DatabaseIssue]
+} derive(@debug.Debug)
+pub fn DatabaseInspection::to_repr(Self) -> @debug.Repr
+
+pub(all) enum DatabaseIssue {
+  ScanError(Int?, SqliteError)
+  PageConflict(PageOwnership, PageOwnership)
+  UnclaimedPage(Int)
+  UnsupportedFeature(String)
+} derive(@debug.Debug)
+pub fn DatabaseIssue::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Header {
   page_size : Int
@@ -82,6 +105,8 @@ pub(all) struct Header {
   freelist_pages : UInt
   schema_cookie : UInt
   schema_format : Int
+  largest_root_page : UInt
+  incremental_vacuum : Bool
   text_encoding : Int
   user_version : UInt
   application_id : UInt
@@ -121,6 +146,31 @@ pub(all) struct Page {
   cell_offsets : Array[Int]
 } derive(@debug.Debug)
 pub fn Page::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageKind {
+  BtreeRoot
+  BtreeChild
+  OverflowFirst
+  OverflowContinuation
+  FreelistTrunk
+  FreelistLeaf
+  PointerMap
+  LockByte
+} derive(Eq, @debug.Debug)
+pub fn PageKind::equal(Self, Self) -> Bool
+pub fn PageKind::not_equal(Self, Self) -> Bool
+pub fn PageKind::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageOwnership {
+  page_number : Int
+  kind : PageKind
+  root_page : Int?
+  object_name : String?
+  parent_page : Int?
+} derive(Eq, @debug.Debug)
+pub fn PageOwnership::equal(Self, Self) -> Bool
+pub fn PageOwnership::not_equal(Self, Self) -> Bool
+pub fn PageOwnership::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PageType {
   TableLeaf

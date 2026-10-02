@@ -21,6 +21,10 @@ extern "js" fn host_error(text : String) -> Unit =
   #| text => globalThis.moonsqlitefileHost.error(text)
 
 ///|
+extern "js" fn host_exit_code(code : Int) -> Unit =
+  #| code => globalThis.moonsqlitefileHost.exitCode(code)
+
+///|
 fn parse_number(text : String, allow_zero : Bool) -> Int raise CliError {
   if text.is_empty() {
     raise Usage("数字参数不能为空")
@@ -93,6 +97,8 @@ fn header_json(db : @sqlite.Database) -> Json {
     "freelist_pages": h.freelist_pages.to_json(),
     "schema_cookie": h.schema_cookie.to_json(),
     "schema_format": h.schema_format.to_json(),
+    "largest_root_page": h.largest_root_page.to_json(),
+    "incremental_vacuum": h.incremental_vacuum.to_json(),
     "text_encoding": h.text_encoding.to_json(),
     "user_version": h.user_version.to_json(),
     "application_id": h.application_id.to_json(),
@@ -126,13 +132,13 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist"
+  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect"
   if args.length() < 2 {
     raise Usage(usage)
   }
   let command = args[1]
   match command {
-    "header" | "schema" | "freelist" =>
+    "header" | "schema" | "freelist" | "inspect" =>
       if args.length() != 2 {
         raise Usage(usage)
       }
@@ -227,8 +233,107 @@ fn run(args : FixedArray[String]) -> Json raise {
       })
     }
     "freelist" => db.freelist().to_json()
+    "inspect" => {
+      let report = db.inspect_database()
+      // JSON 报告始终保留在 stdout，退出码区分完整、失败和未完成。
+      host_exit_code(
+        match report.status {
+          @sqlite.Complete => 0
+          @sqlite.Failed => 1
+          @sqlite.Incomplete => 2
+        },
+      )
+      inspection_json(report)
+    }
     _ => raise Usage(usage)
   }
+}
+
+///|
+fn ownership_json(page : @sqlite.PageOwnership) -> Json {
+  let kind = match page.kind {
+    @sqlite.BtreeRoot => "btree_root"
+    @sqlite.BtreeChild => "btree_child"
+    @sqlite.OverflowFirst => "overflow_first"
+    @sqlite.OverflowContinuation => "overflow_continuation"
+    @sqlite.FreelistTrunk => "freelist_trunk"
+    @sqlite.FreelistLeaf => "freelist_leaf"
+    @sqlite.PointerMap => "pointer_map"
+    @sqlite.LockByte => "lock_byte"
+  }
+  Json::object({
+    "page_number": page.page_number.to_json(),
+    "kind": Json::string(kind),
+    "root_page": match page.root_page {
+      Some(number) => number.to_json()
+      None => Json::null()
+    },
+    "object_name": match page.object_name {
+      Some(name) => name.to_json()
+      None => Json::null()
+    },
+    "parent_page": match page.parent_page {
+      Some(number) => number.to_json()
+      None => Json::null()
+    },
+  })
+}
+
+///|
+fn inspection_json(report : @sqlite.DatabaseInspection) -> Json {
+  let status = match report.status {
+    @sqlite.Complete => "complete"
+    @sqlite.Incomplete => "incomplete"
+    @sqlite.Failed => "failed"
+  }
+  let issues = report.issues.map(issue => {
+    match issue {
+      @sqlite.ScanError(root, error) => {
+        let (kind, message) = match error {
+          @sqlite.Invalid(message) => ("invalid", message)
+          @sqlite.Unsupported(message) => ("unsupported", message)
+          @sqlite.LimitExceeded(message) => ("limit_exceeded", message)
+        }
+        Json::object({
+          "code": "scan_error",
+          "root_page": match root {
+            Some(number) => number.to_json()
+            None => Json::null()
+          },
+          "error_kind": Json::string(kind),
+          "message": Json::string(message),
+        })
+      }
+      @sqlite.PageConflict(first, second) =>
+        Json::object({
+          "code": "page_conflict",
+          "first": ownership_json(first),
+          "second": ownership_json(second),
+        })
+      @sqlite.UnclaimedPage(number) =>
+        Json::object({
+          "code": "unclaimed_page",
+          "page_number": number.to_json(),
+        })
+      @sqlite.UnsupportedFeature(message) =>
+        Json::object({
+          "code": "unsupported_feature",
+          "message": Json::string(message),
+        })
+    }
+  })
+  Json::object({
+    "status": Json::string(status),
+    "ownership_complete": report.ownership_complete.to_json(),
+    "ptrmap_checked": report.ptrmap_checked.to_json(),
+    "diagnostics_truncated": report.diagnostics_truncated.to_json(),
+    "roots_inspected": report.roots_inspected.to_json(),
+    "records_decoded": report.records_decoded.to_json(),
+    "payload_bytes": Json::string(report.payload_bytes.to_string()),
+    "pages": Json::array(report.pages.map(ownership_json)),
+    "unclaimed_pages": report.unclaimed_pages.to_json(),
+    "issues": Json::array(issues),
+  })
 }
 
 ///|

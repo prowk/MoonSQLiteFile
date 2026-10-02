@@ -1,6 +1,14 @@
 ///|
 /// 返回 freelist 中的 trunk 与 leaf 页号，并校验计数与循环。
 pub fn Database::freelist(self : Database) -> Array[Int] raise SqliteError {
+  self.freelist_observed((_, _, _) => ())
+}
+
+///|
+fn Database::freelist_observed(
+  self : Database,
+  claim : (Int, PageKind, Int?) -> Unit raise SqliteError,
+) -> Array[Int] raise SqliteError {
   let result : Array[Int] = []
   let visited : Map[Int, Bool] = Map([])
   let mut next = page_number(self.header.freelist_trunk)
@@ -14,9 +22,10 @@ pub fn Database::freelist(self : Database) -> Array[Int] raise SqliteError {
     if result.length() >= self.limits.max_pages {
       raise LimitExceeded("freelist 页数超过限制")
     }
+    let bytes = self.read_page(next)
+    claim(next, FreelistTrunk, None)
     visited[next] = true
     result.push(next)
-    let bytes = self.read_page(next)
     let count = page_number(read_u32(bytes, 4))
     if count > (self.header.usable_size - 8) / 4 {
       raise Invalid("freelist trunk 指针数组越界")
@@ -30,6 +39,7 @@ pub fn Database::freelist(self : Database) -> Array[Int] raise SqliteError {
         raise LimitExceeded("freelist 页数超过限制")
       }
       visited[leaf] = true
+      claim(leaf, FreelistLeaf, None)
       result.push(leaf)
     }
     next = page_number(read_u32(bytes, 0))

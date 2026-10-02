@@ -16,39 +16,41 @@ pub fn Database::schema(
 ) -> Array[SchemaEntry] raise SqliteError {
   let entries : Array[SchemaEntry] = []
   for row in self.read_table(1) {
-    match row.values {
-      [Text(object_type), Text(name), Text(table_name), root_value, sql_value] => {
-        let root = match root_value {
-          Integer(value) => value
-          Null => 0L
-          _ => raise Invalid("schema rootpage 字段类型无效")
-        }
-        if root < 0L || root > self.page_count.to_int64() {
-          raise Invalid("schema root page 越界")
-        }
-        if object_type != "table" &&
-          object_type != "index" &&
-          object_type != "view" &&
-          object_type != "trigger" {
-          raise Invalid("schema 包含未知对象类型")
-        }
-        let sql = match sql_value {
-          Text(value) => Some(value)
-          Null => None
-          _ => raise Invalid("schema SQL 字段类型无效")
-        }
-        entries.push({
-          object_type,
-          name,
-          table_name,
-          root_page: root.to_int(),
-          sql,
-        })
-      }
-      _ => raise Invalid("sqlite_schema 记录不包含标准五列")
-    }
+    entries.push(schema_entry(row.values, self.page_count))
   }
   entries
+}
+
+///|
+fn schema_entry(
+  values : Array[Value],
+  page_count : Int,
+) -> SchemaEntry raise SqliteError {
+  match values {
+    [Text(object_type), Text(name), Text(table_name), root_value, sql_value] => {
+      let root = match root_value {
+        Integer(value) => value
+        Null => 0L
+        _ => raise Invalid("schema rootpage 字段类型无效")
+      }
+      if root < 0L || root > page_count.to_int64() {
+        raise Invalid("schema root page 越界")
+      }
+      if object_type != "table" &&
+        object_type != "index" &&
+        object_type != "view" &&
+        object_type != "trigger" {
+        raise Invalid("schema 包含未知对象类型")
+      }
+      let sql = match sql_value {
+        Text(value) => Some(value)
+        Null => None
+        _ => raise Invalid("schema SQL 字段类型无效")
+      }
+      { object_type, name, table_name, root_page: root.to_int(), sql, }
+    }
+    _ => raise Invalid("sqlite_schema 记录不包含标准五列")
+  }
 }
 
 ///|

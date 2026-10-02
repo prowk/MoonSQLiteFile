@@ -116,6 +116,7 @@ node tools/inspect.cjs fixtures/btree.sqlite index mixed_index 5
 | `index <name> [limit]` | 读取索引原始记录 |
 | `scan <root> [limit]` | 扫描指定根页，输出记录和扫描状态 |
 | `freelist` | 检查空闲页链 |
+| `inspect` | 开发分支：输出全局页归属及结构化诊断 |
 
 成功时 stdout 输出一行 JSON；失败时 stderr 输出错误，并返回非零退出码。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
 
@@ -153,11 +154,12 @@ python tools/generate_fixtures.py --check
 python tools/verify_oracle.py
 python tools/generate_btree_fixtures.py --check
 python tools/verify_btree_oracle.py
+python tools/verify_inspection.py
 moon run --target js examples/basic
 python tools/verify_consumer.py
 ```
 
-当前开发分支包含 46 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)，尚未发布的 API 变动见 [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。
+当前开发分支包含 51 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)，尚未发布的 API 变动见 [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

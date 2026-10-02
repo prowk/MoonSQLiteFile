@@ -41,6 +41,18 @@ v0.2 将输入抽象为 `PageSource → Database → 统一 B-tree walker → �
 
 这个接口只报告单棵 B-tree 的现有检查结果；不扫描全局页归属、Ptrmap、表与索引一致性，也不等价于 SQLite integrity_check。
 
+## 全局页归属（开发分支，尚未发布）
+
+`Database.inspect_database(max_total_payload_bytes?, max_issues?)` 扫描 sqlite_schema、其中所有独立表和索引根页，以及 freelist。页报告按逻辑页号排序，包含 PageKind、所属对象、根页和父页；schema 也计入总记录数。已认领页被其他树或 freelist 再次引用时，PageConflict 保存两次归属；每棵树内部的环与重复引用仍由原扫描器拒绝。
+
+全程共享 Limits 的记录和页数上限、累计 payload 预算及默认 100 条诊断上限。payload 在分配和解码前扣减，失败的请求也不退还预算；它不是精确堆内存统计。逻辑页数超出页预算时提前返回，避免枚举无界页列表。报告不扫描声明逻辑页数之外的物理尾部。
+
+ownership_complete 表示 schema 根页发现和归属遍历已完成，不等价于数据库完整性；仅在该标记为 true 时，未认领的逻辑页才产生 UnclaimedPage 错误。未完整扫描时，同样的页列表只是待解释页。失败保留已认领页及已有诊断，diagnostics_truncated 明示诊断截断。
+
+auto-vacuum 下按官方公式保留 Ptrmap 页位置，并保留 lock-byte 页；当前反向指针尚未校验，因此 ptrmap_checked 为 false，状态为 Incomplete。没有 Ptrmap 的数据库该标记为 true，表示该项不适用。虚拟表的零根页定义不占页面，shadow 表仍独立扫描。尚未检查 SQL 排序、列语义及表/索引记录一致性。
+
+CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 为 Incomplete。能够构造报告时诊断位于 stdout；参数或初始化错误仍写 stderr。
+
 ## 存储值与 SQL 逻辑值
 
 `Row.values` 保留磁盘字段顺序与存储类型。`INTEGER PRIMARY KEY` 的字段通常是 `Null`，其真实值位于 `Row.rowid`；声明为 REAL 的值可能以整数存储。库不解析 CREATE TABLE 来恢复列名、类型亲和性、默认值或主键别名。调用者需要这些 SQL 语义时应使用 SQL 引擎或自行实现 schema 层。

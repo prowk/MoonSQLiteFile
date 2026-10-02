@@ -2,6 +2,8 @@
 
 ## 未发布
 
+新增 `Database.inspect_database`、页用途与归属报告以及 `inspect` JSON CLI。统一发现 schema 根页、跟踪跨树 B-tree/overflow 引用、检查 freelist 冲突并枚举未认领页；全局共享记录、页数和累计 payload 预算。若发现根页不完整，未认领页仅作为未知列表，不判定为孤儿；auto-vacuum 的 Ptrmap 位置已识别，反向指针尚未验证时报告 Incomplete。
+
 新增 `Database.inspect_btree` 和 `BTreeInspection`：对单棵 B-tree 返回完整、未完成或失败状态，保留原始 SqliteError 和此前成功解码的记录数。记录上限、资源不足或不支持的格式不会被当作完整检查；该报告不提供全局页归属或整个数据库的完整性结论。
 
 新增 4 项回归测试，覆盖精确完成与记录前缀、读取后续损坏页时的进度保留、payload 预算、无效根页和宿主 Unsupported 错误。

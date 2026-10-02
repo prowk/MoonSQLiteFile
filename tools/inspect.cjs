@@ -11,7 +11,7 @@ const candidates = ['debug', 'release'].map(mode =>
 const compiled = candidates.find(file => fs.existsSync(file));
 
 if (args.length < 2) {
-  process.stderr.write('用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist\n');
+  process.stderr.write('用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect\n');
   process.exitCode = 1;
 } else {
   try {
@@ -22,6 +22,7 @@ if (args.length < 2) {
       args,
       bytes: new Uint8Array(fs.readFileSync(args[0])),
       output: text => process.stdout.write(`${text}\n`),
+      exitCode: code => { process.exitCode = code; },
       error: text => {
         process.stderr.write(`${text}\n`);
         process.exitCode = 1;
