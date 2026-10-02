@@ -1,0 +1,7 @@
+/_build/
+/.mooncakes/
+/competition-page.html
+/competition-assets.js
+/tools/github_publish.py
+__pycache__/
+*.pyc
