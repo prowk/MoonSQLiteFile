@@ -47,6 +47,11 @@ fn Database::cell_payload_tracked(
   let buffer = @buffer.Buffer(size_hint=payload_size)
   buffer.write_bytes(page_bytes[offset:offset + local_size])
   let mut remaining = payload_size - local_size
+  observer.trace.at(
+    OverflowChain,
+    Some(owner_page),
+    byte_offset=Some(offset + local_size),
+  )
   let mut next = page_number(read_u32(page_bytes, offset + local_size))
   let mut parent = owner_page
   let mut first = true
@@ -62,7 +67,9 @@ fn Database::cell_payload_tracked(
     if occupied.length() >= self.limits.max_pages {
       raise LimitExceeded("扫描总页数超过限制")
     }
+    observer.trace.at(ReadPage, Some(next))
     let overflow = self.read_page(next)
+    observer.trace.at(PageOwnershipCheck, Some(next))
     (observer.claim)(
       next,
       if first {
@@ -78,6 +85,7 @@ fn Database::cell_payload_tracked(
     remaining = remaining - count
     parent = next
     first = false
+    observer.trace.at(OverflowChain, Some(next), byte_offset=Some(0))
     next = page_number(read_u32(overflow, 0))
   }
   if next != 0 {

@@ -97,6 +97,17 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
     if missing.status != @sqlite.Incomplete || missing.diagnostic.unwrap().code != @sqlite.PageRead {
       abort("独立消费项目的页面诊断失败")
     }
+    let tree = db.inspect_btree_details(1)
+    if tree.inspection.status != @sqlite.Complete || tree.location is Some(_) {
+      abort("独立消费项目的详细树报告失败")
+    }
+    let detailed = db.inspect_database_details()
+    if detailed.inspection.status != @sqlite.Complete || !detailed.issues.is_empty() {
+      abort("独立消费项目的详细数据库报告失败")
+    }
+    if db.inspect_btree_details(2).location.unwrap().phase != @sqlite.ReadPage {
+      abort("独立消费项目的树读取定位失败")
+    }
     println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:

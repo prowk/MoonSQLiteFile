@@ -65,6 +65,8 @@ pub extend DatabaseInspection with @debug.Debug::{to_repr}
 priv struct OwnershipState {
   owners : Map[Int, PageOwnership]
   issues : Array[DatabaseIssue]
+  located_issues : Array[LocatedDatabaseIssue]
+  trace : InspectionTrace
   max_pages : Int
   max_issues : Int
   mut coverage : Bool
@@ -78,7 +80,28 @@ priv struct OwnershipState {
 ///|
 fn OwnershipState::issue(self : OwnershipState, issue : DatabaseIssue) -> Unit {
   if self.issues.length() < self.max_issues {
+    let location : DiagnosticLocation? = match issue {
+      PageConflict(_, owner) =>
+        Some({
+          phase: PageOwnershipCheck,
+          page_number: Some(owner.page_number),
+          byte_offset: None,
+          cell_index: None,
+          page_diagnostic: None,
+        })
+      UnclaimedPage(number) =>
+        Some({
+          phase: PageOwnershipCheck,
+          page_number: Some(number),
+          byte_offset: None,
+          cell_index: None,
+          page_diagnostic: None,
+        })
+      UnsupportedFeature(_) => None
+      _ => Some(self.trace.snapshot())
+    }
     self.issues.push(issue)
+    self.located_issues.push({ issue, location, })
   } else {
     self.truncated = true
   }
@@ -130,6 +153,7 @@ fn OwnershipState::observer(
       })
     },
     charge_payload: size => self.payload = self.payload + size,
+    trace: self.trace,
   }
 }
 
@@ -183,9 +207,21 @@ pub fn Database::inspect_database(
   max_total_payload_bytes? : UInt64 = 67108864UL,
   max_issues? : Int = 100,
 ) -> DatabaseInspection {
+  self.inspect_database_traced([], max_total_payload_bytes~, max_issues~)
+}
+
+///|
+fn Database::inspect_database_traced(
+  self : Database,
+  located_issues : Array[LocatedDatabaseIssue],
+  max_total_payload_bytes~ : UInt64,
+  max_issues~ : Int,
+) -> DatabaseInspection {
   let state : OwnershipState = {
     owners: Map([]),
     issues: [],
+    located_issues,
+    trace: InspectionTrace::new(),
     max_pages: self.limits.max_pages,
     max_issues: if max_issues > 0 {
       max_issues
@@ -213,6 +249,7 @@ pub fn Database::inspect_database(
   }
   if self.header.largest_root_page.to_uint64() > self.page_count.to_uint64() ||
     (!vacuum && self.header.incremental_vacuum) {
+    state.trace.at(Configuration, Some(1), byte_offset=Some(52))
     state.error(None, Invalid("auto-vacuum 文件头字段不一致"))
     return state.finish(self.page_count, false)
   }
@@ -255,7 +292,8 @@ pub fn Database::inspect_database(
   let entries : Array[SchemaEntry] = []
   state.roots = state.roots + 1
   let schema_ok = try {
-    let kind = self.page(1).kind
+    let kind = self.page_traced(1, state.trace).kind
+    state.trace.at(SchemaDecode, Some(1), byte_offset=Some(100))
     if kind != TableLeaf && kind != TableInterior {
       raise Invalid("sqlite_schema 根页必须是 table B-tree")
     }
@@ -263,6 +301,12 @@ pub fn Database::inspect_database(
       1,
       record => {
         state.records = state.records + 1
+        state.trace.at(
+          SchemaDecode,
+          Some(record.page_number),
+          byte_offset=Some(record.cell_offset),
+          cell_index=state.trace.cell_index,
+        )
         entries.push(schema_entry(record.values, self.page_count))
         true
       },
@@ -271,6 +315,7 @@ pub fn Database::inspect_database(
       max_total_payload_bytes~,
     )
     if summary.completion != Complete {
+      state.trace.at(SchemaDecode, None)
       state.error(
         Some(1),
         LimitExceeded("schema 未完整读取，无法发现全部根页"),
@@ -297,6 +342,7 @@ pub fn Database::inspect_database(
     return state.finish(self.page_count, !vacuum)
   }
   for entry in entries {
+    state.trace.at(SchemaDecode, None)
     if state.issues.length() >= state.max_issues {
       state.coverage = false
       state.truncated = true
@@ -321,7 +367,8 @@ pub fn Database::inspect_database(
     state.roots = state.roots + 1
     try {
       if entry.object_type == "index" {
-        let kind = self.page(entry.root_page).kind
+        let kind = self.page_traced(entry.root_page, state.trace).kind
+        state.trace.at(SchemaDecode, Some(entry.root_page))
         if kind != IndexLeaf && kind != IndexInterior {
           raise Invalid("schema 索引根页不是 index B-tree")
         }
@@ -337,6 +384,7 @@ pub fn Database::inspect_database(
         max_total_payload_bytes=max_total_payload_bytes - state.payload,
       )
       if summary.completion != Complete {
+        state.trace.at(Configuration, Some(entry.root_page))
         state.error(
           Some(entry.root_page),
           LimitExceeded("全局记录数预算已耗尽"),
@@ -352,15 +400,18 @@ pub fn Database::inspect_database(
   }
   if state.issues.length() < state.max_issues {
     ignore(
-      self.freelist_observed((number, kind, parent) => {
-        state.claim({
-          page_number: number,
-          kind,
-          root_page: None,
-          object_name: None,
-          parent_page: parent,
-        })
-      }),
+      self.freelist_observed(
+        (number, kind, parent) => {
+          state.claim({
+            page_number: number,
+            kind,
+            root_page: None,
+            object_name: None,
+            parent_page: parent,
+          })
+        },
+        trace=state.trace,
+      ),
     ) catch {
       Invalid(message) => state.error(None, Invalid(message))
       Unsupported(message) => state.error(None, Unsupported(message))

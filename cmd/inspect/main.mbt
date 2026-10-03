@@ -132,18 +132,18 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect"
+  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]"
   if args.length() < 2 {
     raise Usage(usage)
   }
   let command = args[1]
   match command {
-    "header" | "schema" | "freelist" | "inspect" =>
+    "header" | "schema" | "freelist" | "inspect" | "inspect-details" =>
       if args.length() != 2 {
         raise Usage(usage)
       }
     "page" | "page-inspect" => if args.length() != 3 { raise Usage(usage) }
-    "rows" | "records" | "index" | "scan" =>
+    "rows" | "records" | "index" | "scan" | "tree-inspect" =>
       if args.length() != 3 && args.length() != 4 {
         raise Usage(usage)
       }
@@ -244,6 +244,58 @@ fn run(args : FixedArray[String]) -> Json raise {
       })
     }
     "freelist" => db.freelist().to_json()
+    "inspect-details" => {
+      let details = db.inspect_database_details()
+      report_exit(details.inspection.status)
+      Json::object({
+        "inspection": inspection_json(details.inspection),
+        "locations": Json::array(
+          details.issues.map(issue => location_json(issue.location)),
+        ),
+      })
+    }
+    "tree-inspect" => {
+      let root = parse_number(args[2], false)
+      let details = if args.length() == 4 {
+        db.inspect_btree_details(root, limit=parse_number(args[3], true))
+      } else {
+        db.inspect_btree_details(root)
+      }
+      let report = details.inspection
+      report_exit(report.status)
+      let error = match report.error {
+        None => Json::null()
+        Some(error) => {
+          let (kind, message) = match error {
+            @sqlite.Invalid(message) => ("invalid", message)
+            @sqlite.Unsupported(message) => ("unsupported", message)
+            @sqlite.LimitExceeded(message) => ("limit_exceeded", message)
+          }
+          Json::object({
+            "error_kind": Json::string(kind),
+            "message": Json::string(message),
+          })
+        }
+      }
+      Json::object({
+        "root_page": root.to_json(),
+        "status": Json::string(status_text(report.status)),
+        "records_decoded": report.records_decoded.to_json(),
+        "completion": match report.summary {
+          None => Json::null()
+          Some(summary) =>
+            Json::string(
+              match summary.completion {
+                @sqlite.Complete => "complete"
+                @sqlite.RecordLimit => "record_limit"
+                @sqlite.VisitorStopped => "visitor_stopped"
+              },
+            )
+        },
+        "error": error,
+        "location": location_json(details.location),
+      })
+    }
     "inspect" => {
       let report = db.inspect_database()
       // JSON 报告始终保留在 stdout，退出码区分完整、失败和未完成。
@@ -403,18 +455,7 @@ fn page_inspection_json(report : @sqlite.PageInspection) -> Json {
   let diagnostic = match report.diagnostic {
     None => Json::null()
     Some(diagnostic) => {
-      let code = match diagnostic.code {
-        @sqlite.PageRead => "page_read"
-        @sqlite.PageTypeTag => "page_type_tag"
-        @sqlite.PageHeader => "page_header"
-        @sqlite.CellPointer => "cell_pointer"
-        @sqlite.CellFormat => "cell_format"
-        @sqlite.Freeblock => "freeblock"
-        @sqlite.SpaceOverlap => "space_overlap"
-        @sqlite.UntrackedSpace => "untracked_space"
-        @sqlite.FragmentCount => "fragment_count"
-        @sqlite.ChildPointer => "child_pointer"
-      }
+      let code = page_code_text(diagnostic.code)
       let (kind, message) = match diagnostic.error {
         @sqlite.Invalid(message) => ("invalid", message)
         @sqlite.Unsupported(message) => ("unsupported", message)
@@ -445,4 +486,81 @@ fn page_inspection_json(report : @sqlite.PageInspection) -> Json {
     "statistics": statistics,
     "diagnostic": diagnostic,
   })
+}
+
+///|
+fn page_code_text(code : @sqlite.PageDiagnosticCode) -> String {
+  match code {
+    @sqlite.PageRead => "page_read"
+    @sqlite.PageTypeTag => "page_type_tag"
+    @sqlite.PageHeader => "page_header"
+    @sqlite.CellPointer => "cell_pointer"
+    @sqlite.CellFormat => "cell_format"
+    @sqlite.Freeblock => "freeblock"
+    @sqlite.SpaceOverlap => "space_overlap"
+    @sqlite.UntrackedSpace => "untracked_space"
+    @sqlite.FragmentCount => "fragment_count"
+    @sqlite.ChildPointer => "child_pointer"
+  }
+}
+
+///|
+fn status_text(status : @sqlite.InspectionStatus) -> String {
+  match status {
+    @sqlite.Complete => "complete"
+    @sqlite.Failed => "failed"
+    @sqlite.Incomplete => "incomplete"
+  }
+}
+
+///|
+fn report_exit(status : @sqlite.InspectionStatus) -> Unit {
+  host_exit_code(
+    match status {
+      @sqlite.Complete => 0
+      @sqlite.Failed => 1
+      @sqlite.Incomplete => 2
+    },
+  )
+}
+
+///|
+fn location_json(location : @sqlite.DiagnosticLocation?) -> Json {
+  match location {
+    None => Json::null()
+    Some(location) => {
+      let phase = match location.phase {
+        @sqlite.Configuration => "configuration"
+        @sqlite.ReadPage => "read_page"
+        @sqlite.PageLayout => "page_layout"
+        @sqlite.TreeTraversal => "tree_traversal"
+        @sqlite.CellPayload => "cell_payload"
+        @sqlite.OverflowChain => "overflow_chain"
+        @sqlite.RecordDecode => "record_decode"
+        @sqlite.SchemaDecode => "schema_decode"
+        @sqlite.FreelistCheck => "freelist_check"
+        @sqlite.PtrmapCheck => "ptrmap_check"
+        @sqlite.PageOwnershipCheck => "page_ownership_check"
+      }
+      Json::object({
+        "phase": Json::string(phase),
+        "page_number": match location.page_number {
+          Some(number) => number.to_json()
+          None => Json::null()
+        },
+        "byte_offset": match location.byte_offset {
+          Some(offset) => offset.to_json()
+          None => Json::null()
+        },
+        "cell_index": match location.cell_index {
+          Some(index) => index.to_json()
+          None => Json::null()
+        },
+        "page_code": match location.page_diagnostic {
+          Some(diagnostic) => Json::string(page_code_text(diagnostic.code))
+          None => Json::null()
+        },
+      })
+    }
+  }
 }

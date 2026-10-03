@@ -2,6 +2,8 @@
 
 ## 未发布
 
+新增 `inspect_btree_details` 与 `inspect_database_details`，在同一次扫描中保存失败阶段、实际页号、页内字段/区间及可用的 cell 下标；覆盖页布局、树遍历、payload/overflow、record/schema 解码、freelist、页归属和 Ptrmap。详细报告包裹现有报告，保持原有状态语义、进度和诊断上限；已有错误枚举和报告结构保持原有形式。CLI 增加 `tree-inspect ROOT [LIMIT]` 和 `inspect-details`，现有命令的 JSON 格式保持不变。位置未知时返回空值，不从错误文本猜测位置；读取阶段失败不能直接推断为文件损坏。能力随 v0.4.0 统一发布。
+
 修复空叶页跳过 B-tree 深度验证的问题；深度不一致的树现在返回 `Invalid`，检查报告为 `Failed`，并保留此前成功解码的记录数。
 
 补齐四种 B-tree 页的 cell 空间覆盖校验，包含 varint、子页指针、页内 payload、overflow 指针及最小四字节填充；拒绝 cell 互相重叠、cell 与 freeblock 内容重叠、间距不足的 freeblock 链、未登记空闲区间和错误碎片计数。页面校验不读取 overflow 链、不分配完整 payload；公开 API 和 JSON 结构不变。行为收紧：`page` 及扫描现在验证所访问页面中全部 cell 的空间，显式 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败。

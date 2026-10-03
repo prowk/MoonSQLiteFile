@@ -34,6 +34,12 @@ pub(all) struct BTreeInspection {
 } derive(@debug.Debug)
 pub fn BTreeInspection::to_repr(Self) -> @debug.Repr
 
+pub(all) struct BTreeInspectionDetails {
+  inspection : BTreeInspection
+  location : DiagnosticLocation?
+} derive(@debug.Debug)
+pub fn BTreeInspectionDetails::to_repr(Self) -> @debug.Repr
+
 pub(all) struct BTreeRecord {
   rowid : Int64?
   values : Array[Value]
@@ -60,7 +66,9 @@ pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
 pub fn Database::header(Self) -> Header
 pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::inspect_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspection
+pub fn Database::inspect_btree_details(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspectionDetails
 pub fn Database::inspect_database(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspection
+pub fn Database::inspect_database_details(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspectionDetails
 pub fn Database::inspect_page(Self, Int) -> PageInspection
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
@@ -88,6 +96,12 @@ pub(all) struct DatabaseInspection {
 } derive(@debug.Debug)
 pub fn DatabaseInspection::to_repr(Self) -> @debug.Repr
 
+pub(all) struct DatabaseInspectionDetails {
+  inspection : DatabaseInspection
+  issues : Array[LocatedDatabaseIssue]
+} derive(@debug.Debug)
+pub fn DatabaseInspectionDetails::to_repr(Self) -> @debug.Repr
+
 pub(all) enum DatabaseIssue {
   ScanError(Int?, SqliteError)
   PageConflict(PageOwnership, PageOwnership)
@@ -96,6 +110,32 @@ pub(all) enum DatabaseIssue {
   PtrmapMismatch(PtrmapEntry, PageOwnership)
 } derive(@debug.Debug)
 pub fn DatabaseIssue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct DiagnosticLocation {
+  phase : DiagnosticPhase
+  page_number : Int?
+  byte_offset : Int?
+  cell_index : Int?
+  page_diagnostic : PageDiagnostic?
+} derive(@debug.Debug)
+pub fn DiagnosticLocation::to_repr(Self) -> @debug.Repr
+
+pub(all) enum DiagnosticPhase {
+  Configuration
+  ReadPage
+  PageLayout
+  TreeTraversal
+  CellPayload
+  OverflowChain
+  RecordDecode
+  SchemaDecode
+  FreelistCheck
+  PtrmapCheck
+  PageOwnershipCheck
+} derive(Eq, @debug.Debug)
+pub fn DiagnosticPhase::equal(Self, Self) -> Bool
+pub fn DiagnosticPhase::not_equal(Self, Self) -> Bool
+pub fn DiagnosticPhase::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Header {
   page_size : Int
@@ -137,6 +177,12 @@ pub(all) struct Limits {
 } derive(@debug.Debug)
 pub fn Limits::default() -> Self
 pub fn Limits::to_repr(Self) -> @debug.Repr
+
+pub(all) struct LocatedDatabaseIssue {
+  issue : DatabaseIssue
+  location : DiagnosticLocation?
+} derive(@debug.Debug)
+pub fn LocatedDatabaseIssue::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Page {
   number : Int

@@ -12,8 +12,8 @@ from generate_btree_fixtures import make_btree
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def inspect(path, exit_code=0):
-    result = subprocess.run(["node", str(ROOT / "tools/inspect.cjs"), str(path), "inspect"],
+def inspect(path, exit_code=0, command="inspect"):
+    result = subprocess.run(["node", str(ROOT / "tools/inspect.cjs"), str(path), command],
                             cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
     assert result.returncode == exit_code, (path.name, result.returncode, result.stderr, result.stdout[:500])
     assert result.stderr == "", result.stderr
@@ -49,6 +49,8 @@ process.stdout.write(JSON.stringify(reports));
 
 def verify(path):
     report = inspect(path)
+    detailed = inspect(path, command='inspect-details')
+    assert detailed['inspection'] == report and detailed['locations'] == []
     assert report["status"] == "complete" and report["ownership_complete"]
     assert report["ptrmap_checked"] and not report["diagnostics_truncated"]
     assert report["issues"] == [] and report["unclaimed_pages"] == []
@@ -213,6 +215,19 @@ def corrupt_page_space(directory):
         assert diagnostic['page_number'] == target['page_number'] and diagnostic['error_kind'] == 'invalid'
         assert diagnostic['byte_offset'] == (7 if name == 'fragment-count' else start - 4)
         assert diagnostic['cell_index'] is None
+        detailed = inspect(path, exit_code=1, command='inspect-details')
+        assert detailed['inspection'] == failed
+        assert len(detailed['locations']) == len(failed['issues'])
+        location = next(location for issue, location in zip(failed['issues'], detailed['locations'])
+                        if issue['code'] == 'scan_error')
+        assert location['phase'] == 'page_layout' and location['page_number'] == target['page_number']
+        assert location['byte_offset'] == diagnostic['byte_offset'] and location['page_code'] == diagnostic['code']
+        result = subprocess.run(['node', str(ROOT / 'tools/inspect.cjs'), str(path), 'tree-inspect', str(target['root_page'])],
+                                cwd=ROOT, capture_output=True, text=True, encoding='utf-8')
+        assert result.returncode == 1 and result.stderr == ''
+        tree = json.loads(result.stdout)
+        assert tree['root_page'] == target['root_page'] and tree['status'] == 'failed'
+        assert tree['location'] == location
         with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             assert db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]
     print("Verified controlled fragment-count and untracked-gap corruption against SQLite")
@@ -241,6 +256,12 @@ def corrupt_ptrmap(directory, source):
         path.write_bytes(data)
         report = inspect(path, exit_code=1)
         assert report["status"] == "failed" and report["ownership_complete"]
+        detailed = inspect(path, exit_code=1, command='inspect-details')
+        assert detailed['inspection'] == report and len(detailed['locations']) == len(report['issues'])
+        location = detailed['locations'][0]
+        assert location['phase'] == 'ptrmap_check' and location['page_number'] == map_page
+        assert location['byte_offset'] == (offset % size + (1 if name == 'invalid-parent' else 0))
+        assert location['cell_index'] is None and location['page_code'] is None
         if name in {"root-as-free", "wrong-parent"}:
             assert report["ptrmap_checked"]
             issue = next(issue for issue in report["issues"] if issue["code"] == "ptrmap_mismatch")

@@ -132,6 +132,8 @@ node tools/inspect.cjs fixtures/btree.sqlite inspect
 | `scan <root> [limit]` | 扫描指定根页，输出记录和扫描状态 |
 | `freelist` | 检查空闲页链 |
 | `inspect` | 输出全局页归属、Ptrmap 校验及结构化诊断 |
+| `tree-inspect <root> [limit]` | 输出单树检查进度和失败位置（源码开发版） |
+| `inspect-details` | 输出全局报告及各条诊断的位置（源码开发版） |
 
 成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。`inspect` 能构造报告时始终向 stdout 输出 JSON：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断包含在报告内。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
 

@@ -37,9 +37,24 @@ fn Database::page_from_bytes(
   self : Database,
   number : Int,
   bytes : Bytes,
+  trace? : InspectionTrace? = None,
 ) -> Page raise SqliteError {
+  if trace is Some(context) {
+    context.at(PageLayout, Some(number))
+  }
   self.parse_btree_page(number, bytes).0 catch {
-    PageInvalid(diagnostic) => raise diagnostic.error
+    PageInvalid(diagnostic) => {
+      if trace is Some(context) {
+        context.at(
+          PageLayout,
+          Some(number),
+          byte_offset=diagnostic.byte_offset,
+          cell_index=diagnostic.cell_index,
+        )
+        context.page_diagnostic = Some(diagnostic)
+      }
+      raise diagnostic.error
+    }
   }
 }
 

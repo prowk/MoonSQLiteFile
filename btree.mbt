@@ -44,11 +44,16 @@ priv enum PageUse {
 priv struct ScanObserver {
   claim : (Int, PageKind, Int?) -> Unit raise SqliteError
   charge_payload : (UInt64) -> Unit
+  trace : InspectionTrace
 }
 
 ///|
 fn quiet_observer() -> ScanObserver {
-  { claim: (_, _, _) => (), charge_payload: _ => (), }
+  {
+    claim: (_, _, _) => (),
+    charge_payload: _ => (),
+    trace: InspectionTrace::new(),
+  }
 }
 
 ///|
@@ -84,6 +89,7 @@ fn Database::walk_frame(
   parent : Int?,
   observer : ScanObserver,
 ) -> WalkFrame raise SqliteError {
+  observer.trace.at(TreeTraversal, Some(number))
   if depth > self.limits.max_depth {
     raise LimitExceeded("B-tree 深度超过限制")
   }
@@ -95,7 +101,9 @@ fn Database::walk_frame(
   if occupied.length() >= self.limits.max_pages {
     raise LimitExceeded("扫描总页数超过限制")
   }
+  observer.trace.at(ReadPage, Some(number))
   let bytes = self.read_page(number)
+  observer.trace.at(PageOwnershipCheck, Some(number))
   (observer.claim)(
     number,
     if parent is None {
@@ -106,7 +114,8 @@ fn Database::walk_frame(
     parent,
   )
   occupied[number] = Btree
-  let page = self.page_from_bytes(number, bytes)
+  let page = self.page_from_bytes(number, bytes, trace=Some(observer.trace))
+  observer.trace.at(TreeTraversal, Some(number))
   let page_is_table = page.kind == TableLeaf || page.kind == TableInterior
   if page_is_table != table {
     raise Invalid("B-tree 中混入不同类型的页面")
@@ -151,10 +160,11 @@ fn Database::scan_btree_observed(
   limit~ : Int,
   max_total_payload_bytes~ : UInt64,
 ) -> ScanSummary raise SqliteError {
+  observer.trace.at(Configuration, None)
   if limit < 0 || limit > self.limits.max_rows {
     raise LimitExceeded("记录数请求超出资源限制")
   }
-  let root_page = self.page(root)
+  let root_page = self.page_traced(root, observer.trace)
   let table = root_page.kind == TableLeaf || root_page.kind == TableInterior
   let occupied : Map[Int, PageUse] = Map([])
   let stack = [
@@ -170,6 +180,7 @@ fn Database::scan_btree_observed(
     let bytes = frame.bytes
     let usable = self.header.usable_size
     let interior = page.kind == TableInterior || page.kind == IndexInterior
+    observer.trace.at(TreeTraversal, Some(page.number))
     // 空叶页也参与平衡检查，不能因没有记录而在出栈时绕过深度验证。
     if !interior {
       if leaf_depth is Some(expected) && expected != frame.depth {
@@ -198,6 +209,12 @@ fn Database::scan_btree_observed(
       continue
     }
     let offset = page.cell_offsets[frame.cursor]
+    observer.trace.at(
+      TreeTraversal,
+      Some(page.number),
+      byte_offset=Some(offset),
+      cell_index=Some(frame.cursor),
+    )
     if interior && !frame.emit_pending {
       if offset > usable - 4 {
         raise Invalid("interior cell 子页指针越界")
@@ -250,6 +267,12 @@ fn Database::scan_btree_observed(
     } else {
       offset
     }
+    observer.trace.at(
+      CellPayload,
+      Some(page.number),
+      byte_offset=Some(offset),
+      cell_index=Some(frame.cursor),
+    )
     let (size_bits, size_bytes) = page_varint(bytes, payload_offset, usable)
     let payload_size = bounded_int(size_bits, "payload size")
     if payload_size.to_uint64() > max_total_payload_bytes - payload_bytes {
@@ -258,6 +281,12 @@ fn Database::scan_btree_observed(
     // 数据库级预算在分配和解码前计入本次请求，失败也不退还预算。
     (observer.charge_payload)(payload_size.to_uint64())
     let (rowid, rowid_bytes) = if table {
+      observer.trace.at(
+        TreeTraversal,
+        Some(page.number),
+        byte_offset=Some(offset),
+        cell_index=Some(frame.cursor),
+      )
       let (bits, size) = page_varint(bytes, payload_offset + size_bytes, usable)
       let rowid = bits.reinterpret_as_int64()
       if frame.lower is Some(bound) && rowid <= bound {
@@ -274,6 +303,12 @@ fn Database::scan_btree_observed(
     } else {
       (None, 0)
     }
+    observer.trace.at(
+      CellPayload,
+      Some(page.number),
+      byte_offset=Some(offset),
+      cell_index=Some(frame.cursor),
+    )
     let payload = self.cell_payload_tracked(
       bytes,
       payload_offset + size_bytes + rowid_bytes,
@@ -282,6 +317,12 @@ fn Database::scan_btree_observed(
       occupied,
       owner_page=page.number,
       observer~,
+    )
+    observer.trace.at(
+      RecordDecode,
+      Some(page.number),
+      byte_offset=Some(offset),
+      cell_index=Some(frame.cursor),
     )
     let record = {
       rowid,

@@ -76,6 +76,16 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 `Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查尚未包含在已发布的 v0.3.0 中；公开 API 与 JSON 结构未增加字段。
 
+## 树与全局诊断位置（开发中的 v0.4.0）
+
+`inspect_btree_details` 返回 `BTreeInspectionDetails`，包裹原有 `BTreeInspection` 并增加可选 `location`；`inspect_database_details` 返回 `DatabaseInspectionDetails`，包裹原有 `DatabaseInspection` 并提供同序同长度的 `LocatedDatabaseIssue` 列表。所有上下文来自执行检查的同一次扫描，不在失败后重读页面，也不解析错误字符串。原有公开类型与命令的输出结构保持原有形式。
+
+`DiagnosticLocation.phase` 标识检查阶段，`page_number` 是该阶段实际读取或检查的页面；`byte_offset` 从页起点计数，`cell_index` 从零计数。页布局失败额外保留 `PageDiagnostic`；record/schema 解码错误指向所属 cell 起点，不承诺解码 payload 内部或跨页字段的精确地址。overflow 链错误指向保存链接的源页字段，目标页读取失败则指向尝试读取的页且无页内偏移。Ptrmap 格式与对照失败指向 map 页的条目或父页字段。不能确定位置时保留 None，资源与 schema 元数据错误不沿用上一页的位置。
+
+位置快照与诊断一起保存；达到 max_issues 后两者一起截断，状态与进度均保留原有检查契约。未出现错误的 RecordLimit 前缀返回 Incomplete 和空 location。详细树及全局报告使用现有检查状态：宿主抛出 Invalid 仍可能表现为 Failed，但 ReadPage 阶段明确表示该页未能取得，调用者不能据此宣称数据库格式损坏。这与单页 inspect_page 对读取失败返回 Incomplete 的新契约不同。
+
+CLI `tree-inspect ROOT [LIMIT]` 返回状态、成功解码记录数、完成原因、错误和位置；`inspect-details` 返回原有 `inspection` JSON 及与其 issues 逐项对应的 `locations` 数组。位置中的 `page_code` 是可选页布局分类，原始错误保留在相应报告中。两个命令均向 stdout 输出报告，退出码 0/1/2 分别表示 Complete/Failed/Incomplete；参数与初始化错误仍写 stderr。
+
 ## 页面检查与空间统计（开发中的 v0.4.0）
 
 `Database.inspect_page(number)` 新增独立的 `PageInspection`，复用 `Database.page` 与扫描器的页布局解析器。它只读取指定的一页，不遍历子页或 overflow，不解码 record，也不验证页归属。`Complete` 仅表示该页 B-tree 布局符合已实现的检查；它不证明整棵树、数据库或该页的外部链接有效。对 freelist 等非 B-tree 页调用此 API 会报告页类型失败，不表示该页在原有用途下损坏。
