@@ -125,6 +125,7 @@ node tools/inspect.cjs fixtures/btree.sqlite inspect
 | `header` | 读取数据库文件头 |
 | `schema` | 列出 schema 条目及根页号 |
 | `page <number>` | 检查指定 B-tree 页 |
+| `page-inspect <number>` | 返回 B-tree 页空间统计与错误位置（源码开发版） |
 | `rows <table> [limit]` | 读取普通 rowid 表 |
 | `records <table> [limit]` | 读取普通表或 WITHOUT ROWID 表的原始记录 |
 | `index <name> [limit]` | 读取索引原始记录 |
@@ -136,7 +137,7 @@ node tools/inspect.cjs fixtures/btree.sqlite inspect
 
 ## 支持范围与限制
 
-开发中的 v0.4.0 已补齐所访问 B-tree 页的 cell/freeblock 空间覆盖与碎片计数校验，详见 [CHANGELOG](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。这些改动尚未发布到 Mooncakes；下述版本边界仍以已发布的 v0.3.0 为准。
+开发中的 v0.4.0 已补齐所访问 B-tree 页的 cell/freeblock 空间覆盖与碎片计数校验，并新增 `db.inspect_page(number)` 与 `page-inspect N` CLI，返回页面空间统计和带页内位置的诊断，详见 [页面报告契约](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md#页面检查与空间统计开发中的-v040) 与 [CHANGELOG](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。这些改动尚未发布到 Mooncakes；下述版本边界仍以已发布的 v0.3.0 为准。
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 

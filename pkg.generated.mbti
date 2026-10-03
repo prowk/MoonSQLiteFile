@@ -61,6 +61,7 @@ pub fn Database::header(Self) -> Header
 pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::inspect_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspection
 pub fn Database::inspect_database(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspection
+pub fn Database::inspect_page(Self, Int) -> PageInspection
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
 pub fn Database::ptrmap_entries(Self) -> Array[PtrmapEntry] raise SqliteError
@@ -149,6 +150,39 @@ pub(all) struct Page {
 } derive(@debug.Debug)
 pub fn Page::to_repr(Self) -> @debug.Repr
 
+pub(all) struct PageDiagnostic {
+  code : PageDiagnosticCode
+  page_number : Int
+  byte_offset : Int?
+  cell_index : Int?
+  error : SqliteError
+} derive(@debug.Debug)
+pub fn PageDiagnostic::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageDiagnosticCode {
+  PageRead
+  PageTypeTag
+  PageHeader
+  CellPointer
+  CellFormat
+  Freeblock
+  SpaceOverlap
+  UntrackedSpace
+  FragmentCount
+  ChildPointer
+} derive(Eq, @debug.Debug)
+pub fn PageDiagnosticCode::equal(Self, Self) -> Bool
+pub fn PageDiagnosticCode::not_equal(Self, Self) -> Bool
+pub fn PageDiagnosticCode::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageInspection {
+  status : InspectionStatus
+  page : Page?
+  statistics : PageStatistics?
+  diagnostic : PageDiagnostic?
+} derive(@debug.Debug)
+pub fn PageInspection::to_repr(Self) -> @debug.Repr
+
 pub(all) enum PageKind {
   BtreeRoot
   BtreeChild
@@ -173,6 +207,22 @@ pub(all) struct PageOwnership {
 pub fn PageOwnership::equal(Self, Self) -> Bool
 pub fn PageOwnership::not_equal(Self, Self) -> Bool
 pub fn PageOwnership::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageStatistics {
+  database_header_bytes : Int
+  btree_header_bytes : Int
+  pointer_bytes : Int
+  unallocated_bytes : Int
+  cell_bytes : Int
+  freeblock_bytes : Int
+  fragmented_bytes : Int
+  reserved_bytes : Int
+  payload_bytes : UInt64
+  local_payload_bytes : UInt64
+  max_payload_bytes : Int
+  overflow_cells : Int
+} derive(@debug.Debug)
+pub fn PageStatistics::to_repr(Self) -> @debug.Repr
 
 pub(all) enum PageType {
   TableLeaf

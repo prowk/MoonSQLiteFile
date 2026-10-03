@@ -132,7 +132,7 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect"
+  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect"
   if args.length() < 2 {
     raise Usage(usage)
   }
@@ -142,7 +142,7 @@ fn run(args : FixedArray[String]) -> Json raise {
       if args.length() != 2 {
         raise Usage(usage)
       }
-    "page" => if args.length() != 3 { raise Usage(usage) }
+    "page" | "page-inspect" => if args.length() != 3 { raise Usage(usage) }
     "rows" | "records" | "index" | "scan" =>
       if args.length() != 3 && args.length() != 4 {
         raise Usage(usage)
@@ -170,6 +170,17 @@ fn run(args : FixedArray[String]) -> Json raise {
       )
     }
     "page" => page_json(db.page(parse_number(args[2], false)))
+    "page-inspect" => {
+      let report = db.inspect_page(parse_number(args[2], false))
+      host_exit_code(
+        match report.status {
+          @sqlite.Complete => 0
+          @sqlite.Failed => 1
+          @sqlite.Incomplete => 2
+        },
+      )
+      page_inspection_json(report)
+    }
     "rows" => {
       let rows = if args.length() == 4 {
         db.table_rows(args[2], limit=parse_number(args[3], true))
@@ -360,4 +371,78 @@ fn main {
     Usage(message) => host_error(message)
     error => host_error("\{error}")
   }
+}
+
+///|
+fn page_inspection_json(report : @sqlite.PageInspection) -> Json {
+  let status = match report.status {
+    @sqlite.Complete => "complete"
+    @sqlite.Failed => "failed"
+    @sqlite.Incomplete => "incomplete"
+  }
+  let statistics = match report.statistics {
+    None => Json::null()
+    Some(stats) =>
+      Json::object({
+        "database_header_bytes": stats.database_header_bytes.to_json(),
+        "btree_header_bytes": stats.btree_header_bytes.to_json(),
+        "pointer_bytes": stats.pointer_bytes.to_json(),
+        "unallocated_bytes": stats.unallocated_bytes.to_json(),
+        "cell_bytes": stats.cell_bytes.to_json(),
+        "freeblock_bytes": stats.freeblock_bytes.to_json(),
+        "fragmented_bytes": stats.fragmented_bytes.to_json(),
+        "reserved_bytes": stats.reserved_bytes.to_json(),
+        "payload_bytes": Json::string(stats.payload_bytes.to_string()),
+        "local_payload_bytes": Json::string(
+          stats.local_payload_bytes.to_string(),
+        ),
+        "max_payload_bytes": stats.max_payload_bytes.to_json(),
+        "overflow_cells": stats.overflow_cells.to_json(),
+      })
+  }
+  let diagnostic = match report.diagnostic {
+    None => Json::null()
+    Some(diagnostic) => {
+      let code = match diagnostic.code {
+        @sqlite.PageRead => "page_read"
+        @sqlite.PageTypeTag => "page_type_tag"
+        @sqlite.PageHeader => "page_header"
+        @sqlite.CellPointer => "cell_pointer"
+        @sqlite.CellFormat => "cell_format"
+        @sqlite.Freeblock => "freeblock"
+        @sqlite.SpaceOverlap => "space_overlap"
+        @sqlite.UntrackedSpace => "untracked_space"
+        @sqlite.FragmentCount => "fragment_count"
+        @sqlite.ChildPointer => "child_pointer"
+      }
+      let (kind, message) = match diagnostic.error {
+        @sqlite.Invalid(message) => ("invalid", message)
+        @sqlite.Unsupported(message) => ("unsupported", message)
+        @sqlite.LimitExceeded(message) => ("limit_exceeded", message)
+      }
+      Json::object({
+        "code": Json::string(code),
+        "page_number": diagnostic.page_number.to_json(),
+        "byte_offset": match diagnostic.byte_offset {
+          Some(offset) => offset.to_json()
+          None => Json::null()
+        },
+        "cell_index": match diagnostic.cell_index {
+          Some(index) => index.to_json()
+          None => Json::null()
+        },
+        "error_kind": Json::string(kind),
+        "message": Json::string(message),
+      })
+    }
+  }
+  Json::object({
+    "status": Json::string(status),
+    "page": match report.page {
+      Some(page) => page_json(page)
+      None => Json::null()
+    },
+    "statistics": statistics,
+    "diagnostic": diagnostic,
+  })
 }

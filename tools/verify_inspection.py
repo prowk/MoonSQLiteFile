@@ -20,6 +20,33 @@ def inspect(path, exit_code=0):
     return json.loads(result.stdout)
 
 
+def page_reports(path, numbers):
+    # 同一进程重复加载 CLI，保留真实命令入口，避免逐页启动数千个 Node 进程。
+    script = r'''
+const fs = require('node:fs');
+const compiled = process.argv[1], bytes = new Uint8Array(fs.readFileSync(process.argv[2]));
+const reports = [];
+for (const number of JSON.parse(process.argv[3])) {
+  let code = 0;
+  globalThis.moonsqlitefileHost = {
+    args: [process.argv[2], 'page-inspect', String(number)], bytes,
+    output: text => reports.push(JSON.parse(text)),
+    error: text => { throw new Error(text); },
+    exitCode: value => { code = value; },
+  };
+  delete require.cache[require.resolve(compiled)];
+  require(compiled);
+  if (code !== 0) throw new Error(JSON.stringify(reports.at(-1)));
+}
+process.stdout.write(JSON.stringify(reports));
+'''
+    compiled = ROOT / '_build/js/debug/build/cmd/inspect/inspect.js'
+    result = subprocess.run(['node', '-e', script, str(compiled), str(path), json.dumps(numbers)],
+                            cwd=ROOT, capture_output=True, text=True, encoding='utf-8')
+    assert result.returncode == 0, result.stderr
+    return {item['page']['number']: item for item in json.loads(result.stdout)}
+
+
 def verify(path):
     report = inspect(path)
     assert report["status"] == "complete" and report["ownership_complete"]
@@ -32,6 +59,23 @@ def verify(path):
         roots = {name: root for name, root in db.execute("SELECT name,rootpage FROM sqlite_schema WHERE rootpage>0")}
         roots["sqlite_schema"] = 1
         pages = {page["page_number"]: page for page in report["pages"]}
+        layouts = page_reports(path, [number for number, page in pages.items()
+                                     if page['kind'] in {'btree_root', 'btree_child'}])
+        size = db.execute('PRAGMA page_size').fetchone()[0]
+        data = path.read_bytes()
+        assert sum(int(item['statistics']['payload_bytes']) for item in layouts.values()) == int(report['payload_bytes'])
+        for number, item in layouts.items():
+            stats = item['statistics']
+            assert item['status'] == 'complete' and item['diagnostic'] is None
+            assert sum(stats[key] for key in ('database_header_bytes', 'btree_header_bytes', 'pointer_bytes',
+                       'unallocated_bytes', 'cell_bytes', 'freeblock_bytes', 'fragmented_bytes', 'reserved_bytes')) == size
+            offset = (number - 1) * size + (100 if number == 1 else 0)
+            assert item['page']['cell_count'] == int.from_bytes(data[offset + 3:offset + 5], 'big')
+            assert stats['fragmented_bytes'] == data[offset + 7]
+            assert stats['database_header_bytes'] == (100 if number == 1 else 0)
+            assert stats['reserved_bytes'] == data[20]
+            assert int(stats['local_payload_bytes']) <= int(stats['payload_bytes'])
+            assert stats['overflow_cells'] <= item['page']['cell_count']
         assert sorted(pages) == list(range(1, count + 1)) and len(report["pages"]) == count
         assert report["roots_inspected"] == len(roots)
         assert sum(page["kind"].startswith("freelist_") for page in pages.values()) == free_count
@@ -49,19 +93,26 @@ def verify(path):
                 assert page["root_page"] is None and page["object_name"] is None
         # 部分 Windows SQLite 构建没有 dbstat；Linux CI 可追加独立物理页对照。
         try:
-            statistics = db.execute("SELECT name,pageno,pagetype,path FROM dbstat").fetchall()
+            statistics = db.execute("SELECT name,pageno,pagetype,path,ncell,payload,unused,mx_payload FROM dbstat").fetchall()
         except sqlite3.OperationalError as error:
             if "no such table: dbstat" not in str(error):
                 raise
             statistics = None
         if statistics is not None:
-            active = {number for _, number, _, _ in statistics}
+            active = {row[1] for row in statistics}
             assert active == {number for number, page in pages.items() if page["kind"] in {"btree_root", "btree_child", "overflow_first", "overflow_continuation"}}
-            for name, number, kind, tree_path in statistics:
+            for name, number, kind, tree_path, cells, payload, unused, maximum in statistics:
                 owner = pages[number]
                 assert owner["object_name"] == name
                 expected = ("overflow_first" if tree_path.endswith("+000000") else "overflow_continuation") if kind == "overflow" else ("btree_root" if number == roots[name] else "btree_child")
                 assert owner["kind"] == expected
+                if kind != 'overflow':
+                    layout = layouts[number]
+                    stats = layout['statistics']
+                    assert layout['page']['cell_count'] == cells
+                    assert int(stats['local_payload_bytes']) == payload
+                    assert stats['max_payload_bytes'] == maximum
+                    assert stats['unallocated_bytes'] + stats['freeblock_bytes'] + stats['fragmented_bytes'] == unused
         print(f"Verified ownership {path.name}: {count} pages, {len(roots)} roots, dbstat={'yes' if statistics is not None else 'unavailable'}")
         return count
 
@@ -152,6 +203,16 @@ def corrupt_page_space(directory):
         failed = inspect(path, exit_code=1)
         assert failed["status"] == "failed" and not failed["ownership_complete"]
         assert any(issue["code"] == "scan_error" and issue["error_kind"] == "invalid" for issue in failed["issues"])
+        result = subprocess.run(['node', str(ROOT / 'tools/inspect.cjs'), str(path), 'page-inspect', str(target['page_number'])],
+                                cwd=ROOT, capture_output=True, text=True, encoding='utf-8')
+        assert result.returncode == 1 and result.stderr == '', (result.returncode, result.stderr)
+        located = json.loads(result.stdout)
+        assert located['status'] == 'failed' and located['statistics'] is None and located['page'] is None
+        diagnostic = located['diagnostic']
+        assert diagnostic['code'] == {'fragment-count': 'fragment_count', 'untracked-gap': 'untracked_space'}[name]
+        assert diagnostic['page_number'] == target['page_number'] and diagnostic['error_kind'] == 'invalid'
+        assert diagnostic['byte_offset'] == (7 if name == 'fragment-count' else start - 4)
+        assert diagnostic['cell_index'] is None
         with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             assert db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]
     print("Verified controlled fragment-count and untracked-gap corruption against SQLite")
@@ -216,6 +277,12 @@ def corrupt_ptrmap(directory, source):
 
 def main():
     total = sum(verify(ROOT / "fixtures" / (name + ".sqlite")) for name in ("core", "btree", "utf16le", "utf16be", "page65536", "empty"))
+    result = subprocess.run(['node', str(ROOT / 'tools/inspect.cjs'), str(ROOT / 'fixtures/empty.sqlite'), 'page-inspect', '2'],
+                            cwd=ROOT, capture_output=True, text=True, encoding='utf-8')
+    assert result.returncode == 2 and result.stderr == ''
+    unavailable = json.loads(result.stdout)
+    assert unavailable['status'] == 'incomplete' and unavailable['statistics'] is None
+    assert unavailable['diagnostic']['code'] == 'page_read' and unavailable['diagnostic']['byte_offset'] is None
     with tempfile.TemporaryDirectory(prefix="moonsqlite-inspection-") as temporary:
         directory = Path(temporary)
         total += verify_fragmented_pages(directory)

@@ -38,7 +38,7 @@ def main():
                 names = package.namelist()
                 for relative in names:
                     normalized = relative.replace("\\", "/")
-                    assert normalized not in {"AGENTS.md", "docs/proposal.md", "tools/github_publish.py"}, f"发布包包含本地文件：{relative}"
+                    assert normalized not in {"AGENTS.md", "docs/roadmap.md", "docs/proposal.md", "tools/github_publish.py"}, f"发布包包含本地文件：{relative}"
                     # 解包路径必须留在为本次检查创建的临时目录中。
                     assert (library / normalized).resolve().is_relative_to(library.resolve())
                 package.extractall(library)
@@ -81,6 +81,21 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
     }
     if db.inspect_btree(1).status != @sqlite.Complete {
       abort("独立消费项目的单树检查失败")
+    }
+    println(''')
+        if not args.registry:
+            # 未发布接口只验证当前包，不要求历史 registry 版本提供新 API。
+            main_source = main_source.replace('    println(', '''    let page = db.inspect_page(1)
+    if page.status != @sqlite.Complete || page.page is None || page.diagnostic is Some(_) {
+      abort("独立消费项目的页面检查失败")
+    }
+    let stats = page.statistics.unwrap()
+    if stats.database_header_bytes != 100 || stats.unallocated_bytes != 404 || stats.payload_bytes != 0UL {
+      abort("独立消费项目的页面统计失败")
+    }
+    let missing = db.inspect_page(2)
+    if missing.status != @sqlite.Incomplete || missing.diagnostic.unwrap().code != @sqlite.PageRead {
+      abort("独立消费项目的页面诊断失败")
     }
     println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")

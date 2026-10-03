@@ -76,6 +76,20 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 `Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查尚未包含在已发布的 v0.3.0 中；公开 API 与 JSON 结构未增加字段。
 
+## 页面检查与空间统计（开发中的 v0.4.0）
+
+`Database.inspect_page(number)` 新增独立的 `PageInspection`，复用 `Database.page` 与扫描器的页布局解析器。它只读取指定的一页，不遍历子页或 overflow，不解码 record，也不验证页归属。`Complete` 仅表示该页 B-tree 布局符合已实现的检查；它不证明整棵树、数据库或该页的外部链接有效。对 freelist 等非 B-tree 页调用此 API 会报告页类型失败，不表示该页在原有用途下损坏。
+
+报告成功时提供 `page` 和 `statistics`，`diagnostic` 为 None；格式失败或超出表示范围时只提供诊断，不返回部分统计。`PageDiagnostic.code` 区分页类型、页头、cell 指针、cell 格式、freeblock、空间重叠、未登记空闲区间、碎片计数和右子页字段。`page_number` 是实际被检查的页，`byte_offset` 从页面起点计数，`cell_index` 从零计数；位置指向检查失败的字段或区间，cell 格式失败指向 cell 起点，不承诺每个 varint 内部字节的精确位置。保留原始 `SqliteError`，分类不依赖解析错误文本。
+
+读取失败（包括页号越界、宿主抛出 Invalid 或短读）使用 `PageRead`、无偏移及 `Incomplete`，因为没有取得可检查的完整页；不能据此判定数据库损坏。已取得完整页后的 Invalid 为 Failed，Unsupported/LimitExceeded 为 Incomplete。该区分只适用于新接口，已有树/数据库检查报告的错误语义保持原有形式。
+
+`PageStatistics` 的八个空间分项互不重叠，合计等于 page_size：文件头（仅第一页 100 字节）、B-tree 页头、cell pointer 数组、未分配区、完整 cell（含元数据/overflow 指针/最小填充）、freeblock、碎片和末尾保留区。`payload_bytes` 累计本页 cell 声明的完整 payload；`local_payload_bytes` 只累计页内 payload；`max_payload_bytes` 是最大单 cell 声明值，`overflow_cells` 是需要 overflow 的 cell 数。table interior 的 rowid 分隔键不计为 payload。声明值不意味着链已读取或内容已验证，且页报告无需分配完整 payload，因此不应用记录解码的 payload 内存限额；超出 Int 表示范围仍返回 LimitExceeded。
+
+SQLite 的 [dbstat](https://sqlite.org/dbstat.html) 在 B-tree 页上的 ncell、payload、mx_payload 分别对应 cell_count、local_payload_bytes、max_payload_bytes；unused 对应未分配区、freeblock 和碎片的和。测试在 dbstat 可用时进行独立对照；未启用 dbstat 的环境仍检查字节分项及声明 payload 与完整扫描的总和。
+
+CLI `page-inspect N` 返回上述报告；退出码为 0（Complete）、1（Failed）或 2（Incomplete）。报告写 stdout，参数或数据库初始化错误仍写 stderr。两个 UInt64 payload 累计字段序列化为十进制字符串，其他计数为 JSON 数字。原有 `page N` 输出保持原有结构。此次 API 演进仅新增类型、方法和命令，不给 SqliteError、DatabaseIssue 或现有公开结构添加分支/字段，保留已有消费代码的构造和穷举匹配。
+
 ## 当前范围
 
 - 支持 SQLite 3 普通 rowid 表、多层 table B-tree、schema、overflow、freelist、UTF-8/UTF-16LE/UTF-16BE、512–65536 字节页。
