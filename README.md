@@ -3,12 +3,12 @@
 # MoonSQLiteFile
 
 [![CI](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml)
-[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.2.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.2.0)
+[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.3.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.3.0)
 [![License](https://img.shields.io/badge/License-Apache--2.0-2563eb)](https://github.com/prowk/MoonSQLiteFile/blob/main/LICENSE)
 
 **纯 MoonBit 的 SQLite 文件解析与检查库**
 
-[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.2.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
+[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.3.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
 
 </div>
 
@@ -22,7 +22,7 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 - **记录解码**：1–9 字节 varint、标准 serial types、64 位整数、浮点、NULL、BLOB，以及 UTF-8、UTF-16LE、UTF-16BE 文本。
 - **表与索引读取**：多层 rowid 表、索引内部页记录、WITHOUT ROWID 表、overflow 链及 `sqlite_schema`。
 - **有界扫描**：逐条回调、提前停止、完成状态，以及记录数、树深度、页数和 payload 预算。
-- **结构检查**：freelist、rowid 父键范围、循环引用和单次扫描中的重复页使用。
+- **结构检查**：单树检查和全局页归属报告，检测跨对象重复占页、freelist 冲突、未认领页及 auto-vacuum Ptrmap 不一致。
 - **宿主集成**：`Bytes` 输入、可由外部实现的 `PageSource` 接口，以及 JSON CLI。
 
 ## 安装
@@ -30,7 +30,7 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 使用 MoonBit release 工具链，在现有项目中运行：
 
 ```sh
-moon add prowk/moonsqlitefile@0.2.0
+moon add prowk/moonsqlitefile@0.3.0
 ```
 
 在消费包的 `moon.pkg` 中添加导入：
@@ -91,6 +91,19 @@ fn scan_records(
 
 `open_source(&PageSource)` 接收宿主实现的数据源，初始化时仅读取文件头，后续按范围读取字节。接口同步返回 `Bytes`，数据源必须在整个读取期间保持同一份静态快照。接口定义和资源限额见 [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md)。
 
+### 检查数据库结构
+
+```moonbit
+fn inspect_file(data : Bytes) -> @sqlite.DatabaseInspection raise @sqlite.SqliteError {
+  let db = @sqlite.open_database(data)
+  db.inspect_database(max_total_payload_bytes=67108864UL, max_issues=100)
+}
+```
+
+报告提供每页的用途、对象、根页和父页，以及冲突双方、未认领页和 Ptrmap 不一致等诊断。`status` 区分 `Complete`、`Incomplete` 和 `Failed`；`ownership_complete` 表示归属遍历完成，`ptrmap_checked` 表示反向指针检查完成或不适用，`diagnostics_truncated` 表示诊断已截断。达到资源限额时会保留已完成的结果；未完成根页发现时，不把未知页判定为孤儿。
+
+只检查一棵树时使用 `db.inspect_btree(root_page)`；读取原始反向指针时使用 `db.ptrmap_entries()`。结构检查范围与各标记的含义详见 [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md)。
+
 ## 命令行工具
 
 CLI 需要 MoonBit release 工具链和 Node.js 22 或更新版本，无 npm 依赖：
@@ -102,6 +115,7 @@ moon build --target js cmd/inspect
 node tools/inspect.cjs fixtures/core.sqlite schema
 node tools/inspect.cjs fixtures/core.sqlite rows samples 10
 node tools/inspect.cjs fixtures/btree.sqlite index mixed_index 5
+node tools/inspect.cjs fixtures/btree.sqlite inspect
 ```
 
 将样本路径替换为自己的静态数据库副本即可检查实际文件。所有命令的格式为 `node tools/inspect.cjs <file> <command> [arguments]`：
@@ -116,17 +130,17 @@ node tools/inspect.cjs fixtures/btree.sqlite index mixed_index 5
 | `index <name> [limit]` | 读取索引原始记录 |
 | `scan <root> [limit]` | 扫描指定根页，输出记录和扫描状态 |
 | `freelist` | 检查空闲页链 |
-| `inspect` | 开发分支：输出全局页归属及结构化诊断 |
+| `inspect` | 输出全局页归属、Ptrmap 校验及结构化诊断 |
 
-成功时 stdout 输出一行 JSON；失败时 stderr 输出错误，并返回非零退出码。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
+成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。`inspect` 能构造报告时始终向 stdout 输出 JSON：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断包含在报告内。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
 
 ## 支持范围与限制
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
-当前版本只读静态数据库文件，不执行 SQL、不写数据库、不合并 WAL。索引排序与 collation 语义验证、SQL 列映射、全局页归属和 Ptrmap 诊断尚未实现；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
+当前版本只读静态数据库文件，不执行 SQL、不写数据库、不合并 WAL。尚未验证索引排序与 collation、表与索引记录的一致性或完整 cell 空间覆盖，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
 
-扫描结果为 `Complete` 只表示该次记录遍历完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`。
+扫描或检查结果为 `Complete` 只表示其覆盖范围内的工作完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`；检查 API 将错误保留在报告中。
 
 ## 开发与测试
 
@@ -159,7 +173,7 @@ moon run --target js examples/basic
 python tools/verify_consumer.py
 ```
 
-当前开发分支包含 51 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)，尚未发布的 API 变动见 [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。
+v0.3.0 包含 55 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。页归属验证覆盖 13 个数据库、1765 页，包含 FULL / INCREMENTAL auto-vacuum、不同页尺寸与文本编码，以及受控的别名、孤儿页和 Ptrmap 损坏。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)，API 变动见 [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

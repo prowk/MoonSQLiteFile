@@ -74,6 +74,15 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
   self.data[offset:offset + count].to_owned()
 }
 \n''' + main_source.replace('@sqlite.open_database(data)', '@sqlite.open_source(ConsumerSource::{data,})')
+        if tuple(map(int, version.split(".")[:2])) >= (0, 3):
+            main_source = main_source.replace('    println(', '''    let report = db.inspect_database()
+    if report.status != @sqlite.Complete || !report.ownership_complete || !report.ptrmap_checked || report.pages.length() != 1 || !db.ptrmap_entries().is_empty() {
+      abort("独立消费项目的全局检查失败")
+    }
+    if db.inspect_btree(1).status != @sqlite.Complete {
+      abort("独立消费项目的单树检查失败")
+    }
+    println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:
             run(["moon", "update"], consumer)

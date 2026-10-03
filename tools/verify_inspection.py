@@ -66,6 +66,79 @@ def verify(path):
         return count
 
 
+def make_auto(path, mode, size, encoding):
+    with closing(sqlite3.connect(path)) as db:
+        db.execute(f"PRAGMA page_size={size}")
+        db.execute(f"PRAGMA encoding='{encoding}'")
+        db.execute(f"PRAGMA auto_vacuum={mode}")
+        db.execute("VACUUM")
+        db.execute("CREATE TABLE items(id INTEGER PRIMARY KEY, body TEXT)")
+        db.execute("CREATE INDEX by_body ON items(body)")
+        db.execute("CREATE TABLE keyed(k TEXT PRIMARY KEY, n INTEGER) WITHOUT ROWID")
+        db.executemany("INSERT INTO items VALUES(?,?)", ((i, "月" * 700 + str(i)) for i in range(60)))
+        db.executemany("INSERT INTO keyed VALUES(?,?)", ((f"key-{i:03}", i) for i in range(30)))
+        db.commit()
+        db.execute("DELETE FROM items WHERE id%3=0")
+        db.commit()
+
+
+def corrupt_ptrmap(directory, source):
+    original = bytearray(source.read_bytes())
+    size = int.from_bytes(original[16:18], "big")
+    usable = size - original[20]
+    pages = inspect(source)["pages"]
+    root = next(page for page in pages if page["kind"] == "btree_root" and page["page_number"] != 1)
+    child = next(page for page in pages if page["kind"] == "btree_child")
+    for name, owner, tag, parent in (
+        ("root-as-free", root, 2, 0),
+        ("wrong-parent", child, 5, child["page_number"] + 1 if root["page_number"] == child["parent_page"] else root["page_number"]),
+        ("invalid-tag", root, 0, 0),
+        ("invalid-parent", root, 1, 1),
+    ):
+        number = owner["page_number"]
+        map_page = (number - 2) // (usable // 5 + 1) * (usable // 5 + 1) + 2
+        offset = (map_page - 1) * size + (number - map_page - 1) * 5
+        data = original.copy()
+        data[offset] = tag
+        data[offset + 1:offset + 5] = parent.to_bytes(4, "big")
+        path = directory / (name + ".sqlite")
+        path.write_bytes(data)
+        report = inspect(path, exit_code=1)
+        assert report["status"] == "failed" and report["ownership_complete"]
+        if name in {"root-as-free", "wrong-parent"}:
+            assert report["ptrmap_checked"]
+            issue = next(issue for issue in report["issues"] if issue["code"] == "ptrmap_mismatch")
+            assert issue["page_number"] == number and issue["ptrmap_type"] == tag
+            assert issue["parent_page"] == parent and issue["expected_owner"] == owner
+        else:
+            assert not report["ptrmap_checked"]
+            assert any(issue["code"] == "scan_error" and issue["error_kind"] == "invalid" for issue in report["issues"])
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            try:
+                assert db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]
+            except sqlite3.DatabaseError:
+                pass
+    # 超过报告上限后必须明示截断，并保留已经发现的错误。
+    data = original.copy()
+    changed = 0
+    for owner in pages:
+        if owner["kind"] not in {"btree_child", "overflow_first", "overflow_continuation"}:
+            continue
+        number = owner["page_number"]
+        map_page = (number - 2) // (usable // 5 + 1) * (usable // 5 + 1) + 2
+        offset = (map_page - 1) * size + (number - map_page - 1) * 5
+        data[offset:offset + 5] = b"\x02\x00\x00\x00\x00"
+        changed += 1
+        if changed == 101:
+            break
+    assert changed == 101
+    path = directory / "many-mismatches.sqlite"
+    path.write_bytes(data)
+    report = inspect(path, exit_code=1)
+    assert report["diagnostics_truncated"] and not report["ptrmap_checked"]
+    assert len(report["issues"]) == 100 and report["ownership_complete"]
+
+
 def main():
     total = sum(verify(ROOT / "fixtures" / (name + ".sqlite")) for name in ("core", "btree", "utf16le", "utf16be", "page65536", "empty"))
     with tempfile.TemporaryDirectory(prefix="moonsqlite-inspection-") as temporary:
@@ -74,6 +147,16 @@ def main():
             path = directory / f"ownership-{size}.sqlite"
             make_btree(path, size, encoding).close()
             total += verify(path)
+        for mode, size, encoding in ((1, 512, "UTF-8"), (2, 512, "UTF-8"), (2, 1024, "UTF-16le"), (1, 65536, "UTF-16be")):
+            path = directory / f"auto-{mode}-{size}.sqlite"
+            make_auto(path, mode, size, encoding)
+            total += verify(path)
+            report = inspect(path)
+            assert any(page["kind"] == "pointer_map" for page in report["pages"])
+            if mode == 2 and size == 512:
+                assert any(page["kind"] == "freelist_leaf" for page in report["pages"])
+                assert any(page["kind"] == "overflow_continuation" for page in report["pages"])
+                corrupt_ptrmap(directory, path)
         alias = directory / "alias.sqlite"
         shutil.copyfile(ROOT / "fixtures/btree.sqlite", alias)
         with closing(sqlite3.connect(alias)) as db:
@@ -97,7 +180,7 @@ def main():
         assert report["status"] == "failed" and report["ownership_complete"] and report["unclaimed_pages"] == [pages + 1]
         bad_args = subprocess.run(["node", str(ROOT / "tools/inspect.cjs"), str(orphan), "inspect", "extra"], cwd=ROOT, capture_output=True)
         assert bad_args.returncode == 1 and not bad_args.stdout and bad_args.stderr
-    print(f"All ownership checks passed: {total} pages and controlled alias/orphan failures")
+    print(f"All ownership checks passed: {total} pages, auto-vacuum and controlled alias/orphan/Ptrmap failures")
 
 
 if __name__ == "__main__":

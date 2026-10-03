@@ -37,6 +37,7 @@ pub(all) enum DatabaseIssue {
   PageConflict(PageOwnership, PageOwnership)
   UnclaimedPage(Int)
   UnsupportedFeature(String)
+  PtrmapMismatch(PtrmapEntry, PageOwnership)
 } derive(Debug)
 
 ///|
@@ -250,7 +251,6 @@ pub fn Database::inspect_database(
       }
       number = number + step
     }
-    state.issue(UnsupportedFeature("Ptrmap 的反向指针尚未验证"))
   }
   let entries : Array[SchemaEntry] = []
   state.roots = state.roots + 1
@@ -370,5 +370,6 @@ pub fn Database::inspect_database(
     state.coverage = false
     state.truncated = true
   }
-  state.finish(self.page_count, !vacuum)
+  let ptrmap_checked = state.check_ptrmap(self)
+  state.finish(self.page_count, ptrmap_checked)
 }

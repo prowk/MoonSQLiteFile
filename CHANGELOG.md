@@ -1,12 +1,14 @@
 # 更新记录
 
-## 未发布
+## 0.3.0
 
-新增 `Database.inspect_database`、页用途与归属报告以及 `inspect` JSON CLI。统一发现 schema 根页、跟踪跨树 B-tree/overflow 引用、检查 freelist 冲突并枚举未认领页；全局共享记录、页数和累计 payload 预算。若发现根页不完整，未认领页仅作为未知列表，不判定为孤儿；auto-vacuum 的 Ptrmap 位置已识别，反向指针尚未验证时报告 Incomplete。
+新增 `Database.inspect_database`、页用途与归属报告以及 `inspect` JSON CLI。统一发现 schema 根页、跟踪跨树 B-tree/overflow 引用、检查 freelist 冲突并枚举未认领页；全局共享记录、页数和累计 payload 预算。若发现根页不完整，未认领页仅作为未知列表，不判定为孤儿。CLI 退出码区分完整、失败和未完成，诊断保留在 JSON 报告中。
+
+新增 `Database.ptrmap_entries`：支持 FULL / INCREMENTAL auto-vacuum 的五类反向指针，验证类型、父页、largest root 和根页排列，与真实 B-tree、overflow、freelist 归属交叉检查；处理保留空间与 lock-byte 页位移。`PtrmapMismatch` 保留实际条目与预期归属。报告分别标识归属遍历、Ptrmap 检查和诊断截断，避免将部分扫描误判为完整。
 
 新增 `Database.inspect_btree` 和 `BTreeInspection`：对单棵 B-tree 返回完整、未完成或失败状态，保留原始 SqliteError 和此前成功解码的记录数。记录上限、资源不足或不支持的格式不会被当作完整检查；该报告不提供全局页归属或整个数据库的完整性结论。
 
-新增 4 项回归测试，覆盖精确完成与记录前缀、读取后续损坏页时的进度保留、payload 预算、无效根页和宿主 Unsupported 错误。
+四后端各 55 项测试通过。SQLite 页归属对照覆盖 13 个数据库、1765 页；受控损坏验证别名根页、孤儿页、Ptrmap 类型与父页错误以及诊断截断。独立消费验证覆盖新检查 API 和第三方 PageSource。结构检查仍不等价于 SQLite integrity_check：SQL 排序、表/索引记录一致性和完整 cell 空间覆盖不在本版本范围内。
 
 ## 0.2.0
 

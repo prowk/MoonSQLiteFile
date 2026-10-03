@@ -63,6 +63,7 @@ pub fn Database::inspect_btree(Self, Int, limit? : Int, max_total_payload_bytes?
 pub fn Database::inspect_database(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspection
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
+pub fn Database::ptrmap_entries(Self) -> Array[PtrmapEntry] raise SqliteError
 pub fn Database::read_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::read_index(Self, Int, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::read_page(Self, Int) -> Bytes raise SqliteError
@@ -91,6 +92,7 @@ pub(all) enum DatabaseIssue {
   PageConflict(PageOwnership, PageOwnership)
   UnclaimedPage(Int)
   UnsupportedFeature(String)
+  PtrmapMismatch(PtrmapEntry, PageOwnership)
 } derive(@debug.Debug)
 pub fn DatabaseIssue::to_repr(Self) -> @debug.Repr
 
@@ -181,6 +183,27 @@ pub(all) enum PageType {
 pub fn PageType::equal(Self, Self) -> Bool
 pub fn PageType::not_equal(Self, Self) -> Bool
 pub fn PageType::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PtrmapEntry {
+  page_number : Int
+  map_page : Int
+  kind : PtrmapType
+  parent_page : Int
+} derive(Eq, @debug.Debug)
+pub fn PtrmapEntry::equal(Self, Self) -> Bool
+pub fn PtrmapEntry::not_equal(Self, Self) -> Bool
+pub fn PtrmapEntry::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PtrmapType {
+  RootPage
+  FreePage
+  FirstOverflow
+  NextOverflow
+  NonRootBtree
+} derive(Eq, @debug.Debug)
+pub fn PtrmapType::equal(Self, Self) -> Bool
+pub fn PtrmapType::not_equal(Self, Self) -> Bool
+pub fn PtrmapType::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Row {
   rowid : Int64

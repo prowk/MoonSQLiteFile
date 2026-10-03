@@ -320,6 +320,21 @@ fn inspection_json(report : @sqlite.DatabaseInspection) -> Json {
           "code": "unsupported_feature",
           "message": Json::string(message),
         })
+      @sqlite.PtrmapMismatch(entry, owner) =>
+        Json::object({
+          "code": "ptrmap_mismatch",
+          "page_number": entry.page_number.to_json(),
+          "map_page": entry.map_page.to_json(),
+          "ptrmap_type": (match entry.kind {
+            @sqlite.RootPage => 1
+            @sqlite.FreePage => 2
+            @sqlite.FirstOverflow => 3
+            @sqlite.NextOverflow => 4
+            @sqlite.NonRootBtree => 5
+          }).to_json(),
+          "parent_page": entry.parent_page.to_json(),
+          "expected_owner": ownership_json(owner),
+        })
     }
   })
   Json::object({
