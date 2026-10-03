@@ -1,22 +1,24 @@
 # 更新记录
 
-## 未发布
+## 0.4.0
 
 新增可重放的持续模糊测试：CI 固定种子运行 512 次字节变更，每日任务运行 5000 次并更换种子；独立 Worker 限制堆与单输入时间，覆盖初始化、全局/树/页报告及资源约束，异常保存原始输入和重放元数据。此项为 JavaScript 后端的有界变更测试，不采用覆盖率引导；核心回归继续覆盖四后端。
 
 新增页面导航与最小离线检查器：以单个 HTML 复用 MoonBit 报告，提供对象根页、父子页和 overflow 跳转、空间分布、cell 定位、原始字节和失败位置。CLI 增加 `viewer-data`，在同一次扫描中输出界面需要的详细报告与纯汇总。演示完整读取最多 64 MiB 的静态副本，Worker 超时为 30 秒，切换时取消旧任务；不包含网络资源，不支持 WAL。CI 验证实际打包 HTML 中的解析器、导航关系与受控损坏诊断。
 
-新增 `DatabaseInspection.summarize`：对已经认领的页汇总八类用途，并按对象/根页统计 B-tree 与 overflow 页数，不重读数据库、不重复计入冲突引用。CLI 新增中文 `summary` 和精简 `summary-json`，显示覆盖状态、对象占页字节、已请求 payload 与诊断；未完成或截断检查明确保留部分结果。对象占页字节含页内空闲区，不作为有效 payload；freelist/Ptrmap/lock-byte 和未知页单独统计。相关能力随 v0.4.0 统一发布。
+新增 `DatabaseInspection.summarize`：对已经认领的页汇总八类用途，并按对象/根页统计 B-tree 与 overflow 页数，不重读数据库、不重复计入冲突引用。CLI 新增中文 `summary` 和精简 `summary-json`，显示覆盖状态、对象占页字节、已请求 payload 与诊断；未完成或截断检查明确保留部分结果。对象占页字节含页内空闲区，不作为有效 payload；freelist/Ptrmap/lock-byte 和未知页单独统计。
 
-新增 `inspect_btree_details` 与 `inspect_database_details`，在同一次扫描中保存失败阶段、实际页号、页内字段/区间及可用的 cell 下标；覆盖页布局、树遍历、payload/overflow、record/schema 解码、freelist、页归属和 Ptrmap。详细报告包裹现有报告，保持原有状态语义、进度和诊断上限；已有错误枚举和报告结构保持原有形式。CLI 增加 `tree-inspect ROOT [LIMIT]` 和 `inspect-details`，现有命令的 JSON 格式保持不变。位置未知时返回空值，不从错误文本猜测位置；读取阶段失败不能直接推断为文件损坏。能力随 v0.4.0 统一发布。
+新增 `inspect_btree_details` 与 `inspect_database_details`，在同一次扫描中保存失败阶段、实际页号、页内字段/区间及可用的 cell 下标；覆盖页布局、树遍历、payload/overflow、record/schema 解码、freelist、页归属和 Ptrmap。详细报告包裹现有报告，保持原有状态语义、进度和诊断上限；已有错误枚举和报告结构保持原有形式。CLI 增加 `tree-inspect ROOT [LIMIT]` 和 `inspect-details`，现有命令的 JSON 格式保持不变。位置未知时返回空值，不从错误文本猜测位置；读取阶段失败不能直接推断为文件损坏。
 
 修复空叶页跳过 B-tree 深度验证的问题；深度不一致的树现在返回 `Invalid`，检查报告为 `Failed`，并保留此前成功解码的记录数。
 
 补齐四种 B-tree 页的 cell 空间覆盖校验，包含 varint、子页指针、页内 payload、overflow 指针及最小四字节填充；拒绝 cell 互相重叠、cell 与 freeblock 内容重叠、间距不足的 freeblock 链、未登记空闲区间和错误碎片计数。页面校验不读取 overflow 链、不分配完整 payload；公开 API 和 JSON 结构不变。行为收紧：`page` 及扫描现在验证所访问页面中全部 cell 的空间，显式 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败。
 
-新增真实 SQLite 删除与变长更新后的空间对照，覆盖四种 B-tree、512–65536 字节页与三种文本编码，并对碎片计数和未登记空闲区间进行受控损坏验证。上述变化用于开发中的 v0.4.0，尚未发布新包。
+新增真实 SQLite 删除与变长更新后的空间对照，覆盖四种 B-tree、512–65536 字节页与三种文本编码，并对碎片计数和未登记空闲区间进行受控损坏验证。
 
 新增 `Database.inspect_page`、`PageInspection`、`PageStatistics` 与 `PageDiagnostic`：对指定 B-tree 页返回空间分项、声明的总/页内 payload、最大单 cell payload 和 overflow cell 数；格式失败保留分类、实际页号、页内偏移及可用时的 cell 下标。读取失败标记为 `Incomplete`，不从宿主 `Invalid` 推断数据库损坏。CLI 新增 `page-inspect N`，用 JSON 和退出码返回同一报告；已有错误枚举、报告类型和命令输出结构保持原有形式。空间与记录扫描复用同一解析过程，仅读取目标页，不验证 overflow 链、record 内容或整棵树。新增四后端回归、SQLite dbstat 页统计对照及独立消费验证。
+
+公开 API 审查确认 v0.3.0 的 85 项声明保持源码兼容，新增报告采用独立类型。行为收紧及报告语义见[升级说明](docs/migration-0.4.md)。四后端各 86 项回归通过，SQLite 对照覆盖 1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 18 个数据库 2412 页；另通过实际 HTML 和独立打包消费验证。
 
 ## 0.3.0
 

@@ -72,11 +72,11 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 范围检查覆盖记录、cell pointer、保留空间、overflow 链和 freelist；B-tree 校验 rowid 顺序及父键上下界，拒绝子页重复/环，空叶页也参与深度验证。全局检查追踪逻辑数据库的页归属与 Ptrmap；检查器不是 SQLite `integrity_check` 的替代品，尚不检查索引排序或索引与表的内容一致性。
 
-开发中的 v0.4.0 补齐页内空间覆盖：四类 cell 的 varint、子页指针、页内 payload、overflow 指针和最小四字节填充均计入完整区间；与 freeblock 区间一起按物理偏移排序，拒绝重叠、未登记的四字节及以上空闲区间和碎片计数不一致。freeblock 链必须递增且相隔至少四字节。校验只检查当前页，不读取 overflow 链或分配完整 payload；每页额外空间与区间数量成正比，排序后线性核对覆盖。
+v0.4.0 补齐页内空间覆盖：四类 cell 的 varint、子页指针、页内 payload、overflow 指针和最小四字节填充均计入完整区间；与 freeblock 区间一起按物理偏移排序，拒绝重叠、未登记的四字节及以上空闲区间和碎片计数不一致。freeblock 链必须递增且相隔至少四字节。校验只检查当前页，不读取 overflow 链或分配完整 payload；每页额外空间与区间数量成正比，排序后线性核对覆盖。
 
-`Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查尚未包含在已发布的 v0.3.0 中；公开 API 与 JSON 结构未增加字段。
+`Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查从 v0.4.0 起生效；原有公开 API 与旧命令 JSON 结构未增加字段，行为变化见[升级说明](migration-0.4.md)。
 
-## 页分类、对象占页和可读摘要（开发中的 v0.4.0）
+## 页分类、对象占页和可读摘要（v0.4.0）
 
 `DatabaseInspection.summarize()` 是对已有报告的纯汇总，返回 `InspectionSummary`，不会读取源或修改原报告。`claimed_pages`/`unclaimed_pages` 对应原报告的两个页列表；`page_kinds` 按固定顺序保留八种用途（包括零计数），`objects` 按根页和名称排序，统计每个已观察对象的 B-tree 与 overflow 页。对象列表包含 sqlite_schema，不包含 freelist、Ptrmap、lock-byte 或尚未认领的页；发生冲突时同一页只计入首次认领对象。
 
@@ -86,7 +86,7 @@ CLI `summary-json` 提供精简 JSON：逻辑页数、页大小、覆盖标记�
 
 CLI `summary` 提供中文文本摘要，显示上述范围、占页与带位置的诊断；名称中的换行等以 JSON 转义显示。summary 是文本输出，其他命令仍为 JSON。两个摘要命令沿用检查报告的 0/1/2 退出码；完整仅表示当前结构检查范围完成。参数与数据库初始化失败写 stderr。SQLite dbstat 可用时测试额外独立核对每对象 B-tree 与 overflow 占页。
 
-## 树与全局诊断位置（开发中的 v0.4.0）
+## 树与全局诊断位置（v0.4.0）
 
 `inspect_btree_details` 返回 `BTreeInspectionDetails`，包裹原有 `BTreeInspection` 并增加可选 `location`；`inspect_database_details` 返回 `DatabaseInspectionDetails`，包裹原有 `DatabaseInspection` 并提供同序同长度的 `LocatedDatabaseIssue` 列表。所有上下文来自执行检查的同一次扫描，不在失败后重读页面，也不解析错误字符串。原有公开类型与命令的输出结构保持原有形式。
 
@@ -96,7 +96,7 @@ CLI `summary` 提供中文文本摘要，显示上述范围、占页与带位置
 
 CLI `tree-inspect ROOT [LIMIT]` 返回状态、成功解码记录数、完成原因、错误和位置；`inspect-details` 返回原有 `inspection` JSON 及与其 issues 逐项对应的 `locations` 数组。位置中的 `page_code` 是可选页布局分类，原始错误保留在相应报告中。两个命令均向 stdout 输出报告，退出码 0/1/2 分别表示 Complete/Failed/Incomplete；参数与初始化错误仍写 stderr。
 
-## 页面检查与空间统计（开发中的 v0.4.0）
+## 页面检查与空间统计（v0.4.0）
 
 `Database.inspect_page(number)` 新增独立的 `PageInspection`，复用 `Database.page` 与扫描器的页布局解析器。它只读取指定的一页，不遍历子页或 overflow，不解码 record，也不验证页归属。`Complete` 仅表示该页 B-tree 布局符合已实现的检查；它不证明整棵树、数据库或该页的外部链接有效。对 freelist 等非 B-tree 页调用此 API 会报告页类型失败，不表示该页在原有用途下损坏。
 
@@ -120,4 +120,4 @@ CLI `page-inspect N` 返回上述报告；退出码为 0（Complete）、1（Fai
 
 ## 后续方向
 
-接下来完善结构化诊断、页面统计与检查结果展示，再扩展 WAL 帧检查与一致快照读取、宿主分页器和有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。
+v0.4.0 已完成结构化诊断、页面统计与最小离线导航；后续依次扩展 WAL 帧检查与已提交快照覆盖、64 位与异步宿主读取、稳定版契约及有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。

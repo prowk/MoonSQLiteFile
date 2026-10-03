@@ -83,8 +83,8 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
       abort("独立消费项目的单树检查失败")
     }
     println(''')
-        if not args.registry:
-            # 未发布接口只验证当前包，不要求历史 registry 版本提供新 API。
+        if not args.registry or tuple(map(int, version.split(".")[:2])) >= (0, 4):
+            # 当前包及真实 v0.4+ registry 消费均验证新增 API，历史版本保持各自范围。
             main_source = main_source.replace('    println(', '''    let page = db.inspect_page(1)
     if page.status != @sqlite.Complete || page.page is None || page.diagnostic is Some(_) {
       abort("独立消费项目的页面检查失败")
@@ -108,7 +108,24 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
     if db.inspect_btree_details(2).location.unwrap().phase != @sqlite.ReadPage {
       abort("独立消费项目的树读取定位失败")
     }
-    let summary = detailed.inspection.summarize()
+    // 保留旧版公开结构的直接构造能力，并在外部项目编译消费。
+    let legacy_tree : @sqlite.BTreeInspection = {
+      root_page: 1, status: @sqlite.Complete, records_decoded: 0,
+      summary: None, error: None,
+    }
+    let current = detailed.inspection
+    let legacy_report : @sqlite.DatabaseInspection = {
+      status: current.status, ownership_complete: current.ownership_complete,
+      ptrmap_checked: current.ptrmap_checked,
+      diagnostics_truncated: current.diagnostics_truncated,
+      roots_inspected: current.roots_inspected, records_decoded: current.records_decoded,
+      payload_bytes: current.payload_bytes, pages: current.pages,
+      unclaimed_pages: current.unclaimed_pages, issues: current.issues,
+    }
+    if legacy_tree.root_page != 1 || legacy_report.status != @sqlite.Complete {
+      abort("旧版报告构造失败")
+    }
+    let summary = legacy_report.summarize()
     if summary.claimed_pages != 1 || summary.unclaimed_pages != 0 || summary.page_kinds.length() != 8 || summary.objects.length() != 1 {
       abort("独立消费项目的页分类汇总失败")
     }

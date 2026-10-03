@@ -3,12 +3,12 @@
 # MoonSQLiteFile
 
 [![CI](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml)
-[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.3.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.3.0)
+[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.4.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.4.0)
 [![License](https://img.shields.io/badge/License-Apache--2.0-2563eb)](https://github.com/prowk/MoonSQLiteFile/blob/main/LICENSE)
 
 **纯 MoonBit 的 SQLite 文件解析与检查库**
 
-[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.3.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
+[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.4.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
 
 </div>
 
@@ -18,19 +18,19 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 
 ## 功能
 
-- **文件与页面解析**：100 字节文件头、512–65536 字节页面、四类 B-tree 页、cell pointer 和 freeblock 链。
+- **文件与页面解析**：100 字节文件头、512–65536 字节页面、四类 B-tree 页、完整 cell/freeblock 空间覆盖与碎片计数校验。
 - **记录解码**：1–9 字节 varint、标准 serial types、64 位整数、浮点、NULL、BLOB，以及 UTF-8、UTF-16LE、UTF-16BE 文本。
 - **表与索引读取**：多层 rowid 表、索引内部页记录、WITHOUT ROWID 表、overflow 链及 `sqlite_schema`。
 - **有界扫描**：逐条回调、提前停止、完成状态，以及记录数、树深度、页数和 payload 预算。
 - **结构检查**：单树检查和全局页归属报告，检测跨对象重复占页、freelist 冲突、未认领页及 auto-vacuum Ptrmap 不一致。
-- **宿主集成**：`Bytes` 输入、可由外部实现的 `PageSource` 接口，以及 JSON CLI。
+- **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource`、空间与位置报告、中文/JSON CLI，以及单文件离线页面导航。
 
 ## 安装
 
 使用 MoonBit release 工具链，在现有项目中运行：
 
 ```sh
-moon add prowk/moonsqlitefile@0.3.0
+moon add prowk/moonsqlitefile@0.4.0
 ```
 
 在消费包的 `moon.pkg` 中添加导入：
@@ -126,27 +126,32 @@ node tools/inspect.cjs fixtures/btree.sqlite summary
 | `header` | 读取数据库文件头 |
 | `schema` | 列出 schema 条目及根页号 |
 | `page <number>` | 检查指定 B-tree 页 |
-| `page-inspect <number>` | 返回 B-tree 页空间统计与错误位置（源码开发版） |
+| `page-inspect <number>` | 返回 B-tree 页空间统计与错误位置 |
 | `rows <table> [limit]` | 读取普通 rowid 表 |
 | `records <table> [limit]` | 读取普通表或 WITHOUT ROWID 表的原始记录 |
 | `index <name> [limit]` | 读取索引原始记录 |
 | `scan <root> [limit]` | 扫描指定根页，输出记录和扫描状态 |
 | `freelist` | 检查空闲页链 |
 | `inspect` | 输出全局页归属、Ptrmap 校验及结构化诊断 |
-| `tree-inspect <root> [limit]` | 输出单树检查进度和失败位置（源码开发版） |
-| `inspect-details` | 输出全局报告及各条诊断的位置（源码开发版） |
-| `summary` | 中文检查摘要、页面分类、对象占页及诊断（源码开发版） |
-| `summary-json` | 精简 JSON 汇总，适合展示层消费（源码开发版） |
+| `tree-inspect <root> [limit]` | 输出单树检查进度和失败位置 |
+| `inspect-details` | 输出全局报告及各条诊断的位置 |
+| `summary` | 中文检查摘要、页面分类、对象占页及诊断 |
+| `summary-json` | 精简 JSON 汇总，适合展示层消费 |
+| `viewer-data` | 同一次扫描的文件头、汇总、详细诊断与导航数据 |
 
-除源码开发版 `summary` 输出中文文本外，成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。能够构造报告的检查与摘要命令始终将报告写入 stdout：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断与覆盖范围保留在报告中。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
+除 `summary` 输出中文文本外，成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。能够构造报告的检查与摘要命令始终将报告写入 stdout：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断与覆盖范围保留在报告中。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
+
+## 离线页面导航
+
+从 [v0.4.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.4.0) 下载 `moonsqlitefile-viewer.html`，或执行 `python tools/build_viewer.py` 构建单个 HTML。在支持 Blob Worker 的现代浏览器中打开，选择静态数据库副本或载入示例，即可从对象跳到根页、父子页和 overflow，查看空间分布、cell 位置与原始字节。演示限制 64 MiB 和单次 30 秒，不加载外部资源。完整使用方法见[离线示例](examples/offline-viewer/README.md)。
 
 ## 支持范围与限制
 
-开发中的 v0.4.0 已补齐所访问 B-tree 页的空间覆盖与碎片计数校验，新增单页统计、详细树/全局诊断位置、对象占页汇总，以及中文和 JSON 摘要。使用 `inspect_page`、`inspect_btree_details`、`inspect_database_details` 或 `DatabaseInspection.summarize()`，详见 [报告与统计契约](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) 与 [CHANGELOG](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。这些改动尚未发布到 Mooncakes；下述版本边界仍以已发布的 v0.3.0 为准。
+v0.4.0 补齐所访问 B-tree 页的空间覆盖与碎片计数校验，提供单页统计、详细树/全局诊断位置、对象占页汇总与离线导航。使用 `inspect_page`、`inspect_btree_details`、`inspect_database_details` 或 `DatabaseInspection.summarize()`。页面验证比 v0.3.0 更严格，升级前请阅读[升级说明](docs/migration-0.4.md)。
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
-当前版本只读静态数据库文件，不执行 SQL、不写数据库、不合并 WAL。尚未验证索引排序与 collation、表与索引记录的一致性或完整 cell 空间覆盖，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
+当前版本只读静态数据库文件，不执行 SQL、不写数据库、不合并 WAL。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
 
 扫描或检查结果为 `Complete` 只表示其覆盖范围内的工作完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`；检查 API 将错误保留在报告中。
 
@@ -172,6 +177,7 @@ moon check --target all --deny-warn
 moon build --target all --deny-warn
 moon test --target all --deny-warn
 moon fmt --check
+python tools/verify_api.py
 python tools/generate_fixtures.py --check
 python tools/verify_oracle.py
 python tools/generate_btree_fixtures.py --check
@@ -179,9 +185,12 @@ python tools/verify_btree_oracle.py
 python tools/verify_inspection.py
 moon run --target js examples/basic
 python tools/verify_consumer.py
+python tools/build_viewer.py
+node tools/verify_viewer.cjs
+node tools/fuzz.cjs --seed 20261003 --iterations 512
 ```
 
-v0.3.0 包含 55 项四后端用例、1063 行普通表数据与 4407 条索引及 WITHOUT ROWID 记录的 SQLite 对照，以及 192 次确定性字节变更回归扫描。页归属验证覆盖 13 个数据库、1765 页，包含 FULL / INCREMENTAL auto-vacuum、不同页尺寸与文本编码，以及受控的别名、孤儿页和 Ptrmap 损坏。CI 同时验证发布包可由独立项目消费。样本与生成方式见 [fixtures 文档](https://github.com/prowk/MoonSQLiteFile/blob/main/fixtures/README.md)，API 变动见 [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。
+v0.4.0 在四后端各执行 86 项用例；SQLite 对照覆盖 1063 行普通表数据、4407 条索引及 WITHOUT ROWID 记录，以及 18 个数据库的 2412 页。Linux CI 使用 SQLite dbstat 核实逐页空间和每对象占页；本地没有 dbstat 时仍验证字节分项、元数据和受控损坏。CI 另验证 85 项旧版 API 声明、实际打包 HTML、独立包消费和 512 次固定种子的有界变更；每日模糊任务运行 5000 次并保存失败输入。详见[模糊测试与重放](docs/fuzzing.md)和[样本说明](fixtures/README.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

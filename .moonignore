@@ -14,3 +14,5 @@ __pycache__/
 /cmd/fuzz/
 /tools/fuzz.cjs
 /tools/verify_viewer.cjs
+
+/tools/api-v0.3.0.mbti
