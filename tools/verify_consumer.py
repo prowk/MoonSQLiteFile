@@ -108,6 +108,13 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
     if db.inspect_btree_details(2).location.unwrap().phase != @sqlite.ReadPage {
       abort("独立消费项目的树读取定位失败")
     }
+    let summary = detailed.inspection.summarize()
+    if summary.claimed_pages != 1 || summary.unclaimed_pages != 0 || summary.page_kinds.length() != 8 || summary.objects.length() != 1 {
+      abort("独立消费项目的页分类汇总失败")
+    }
+    if summary.objects[0].object_name != Some("sqlite_schema") || summary.objects[0].btree_pages != 1 {
+      abort("独立消费项目的对象占页汇总失败")
+    }
     println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:

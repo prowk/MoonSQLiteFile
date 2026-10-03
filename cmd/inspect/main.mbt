@@ -132,16 +132,18 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]"
+  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json"
   if args.length() < 2 {
     raise Usage(usage)
   }
   let command = args[1]
   match command {
-    "header" | "schema" | "freelist" | "inspect" | "inspect-details" =>
-      if args.length() != 2 {
-        raise Usage(usage)
-      }
+    "header"
+    | "schema"
+    | "freelist"
+    | "inspect"
+    | "inspect-details"
+    | "summary-json" => if args.length() != 2 { raise Usage(usage) }
     "page" | "page-inspect" => if args.length() != 3 { raise Usage(usage) }
     "rows" | "records" | "index" | "scan" | "tree-inspect" =>
       if args.length() != 3 && args.length() != 4 {
@@ -244,6 +246,11 @@ fn run(args : FixedArray[String]) -> Json raise {
       })
     }
     "freelist" => db.freelist().to_json()
+    "summary-json" => {
+      let report = db.inspect_database()
+      report_exit(report.status)
+      summary_json(db, report)
+    }
     "inspect-details" => {
       let details = db.inspect_database_details()
       report_exit(details.inspection.status)
@@ -314,16 +321,7 @@ fn run(args : FixedArray[String]) -> Json raise {
 
 ///|
 fn ownership_json(page : @sqlite.PageOwnership) -> Json {
-  let kind = match page.kind {
-    @sqlite.BtreeRoot => "btree_root"
-    @sqlite.BtreeChild => "btree_child"
-    @sqlite.OverflowFirst => "overflow_first"
-    @sqlite.OverflowContinuation => "overflow_continuation"
-    @sqlite.FreelistTrunk => "freelist_trunk"
-    @sqlite.FreelistLeaf => "freelist_leaf"
-    @sqlite.PointerMap => "pointer_map"
-    @sqlite.LockByte => "lock_byte"
-  }
+  let kind = kind_text(page.kind)
   Json::object({
     "page_number": page.page_number.to_json(),
     "kind": Json::string(kind),
@@ -417,8 +415,19 @@ fn inspection_json(report : @sqlite.DatabaseInspection) -> Json {
 ///|
 fn main {
   try {
-    let result = run(host_args())
-    host_output(result.stringify())
+    let args = host_args()
+    if args.length() >= 2 && args[1] == "summary" {
+      if args.length() != 2 {
+        raise Usage("用法：node tools/inspect.cjs FILE summary")
+      }
+      let db = @sqlite.open_database(host_bytes())
+      let details = db.inspect_database_details()
+      report_exit(details.inspection.status)
+      host_output(summary_text(db, details))
+    } else {
+      let result = run(args)
+      host_output(result.stringify())
+    }
   } catch {
     Usage(message) => host_error(message)
     error => host_error("\{error}")

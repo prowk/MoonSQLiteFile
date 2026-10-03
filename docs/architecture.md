@@ -76,6 +76,16 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 `Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查尚未包含在已发布的 v0.3.0 中；公开 API 与 JSON 结构未增加字段。
 
+## 页分类、对象占页和可读摘要（开发中的 v0.4.0）
+
+`DatabaseInspection.summarize()` 是对已有报告的纯汇总，返回 `InspectionSummary`，不会读取源或修改原报告。`claimed_pages`/`unclaimed_pages` 对应原报告的两个页列表；`page_kinds` 按固定顺序保留八种用途（包括零计数），`objects` 按根页和名称排序，统计每个已观察对象的 B-tree 与 overflow 页。对象列表包含 sqlite_schema，不包含 freelist、Ptrmap、lock-byte 或尚未认领的页；发生冲突时同一页只计入首次认领对象。
+
+汇总不重新判断状态。调用者必须同时保留原报告的 status、ownership_complete、ptrmap_checked 与 diagnostics_truncated；失败或未完成时计数仅表示已观察到的归属，无法完整发现的对象可能不在列表中。全局页预算预检失败时两个页列表可能都为空，此时零计数不表示数据库没有页面。已认领页也可能在后续校验中失败，汇总不宣称它们全部有效。
+
+CLI `summary-json` 提供精简 JSON：逻辑页数、页大小、覆盖标记、记录进度、原报告累计 payload 请求量、诊断数量、页分类及对象页数。对象的 `storage_bytes` 是 `(btree_pages + overflow_pages) × page_size`，用 UInt64 计算并输出十进制字符串；它包含 cell 元数据、页头和页内空闲空间，不是有效 payload。单页 payload 与空间利用率仍使用 inspect_page。未完成检查中已请求 payload 可能包括失败的解码请求，不推断每对象的有效数据大小。
+
+CLI `summary` 提供中文文本摘要，显示上述范围、占页与带位置的诊断；名称中的换行等以 JSON 转义显示。summary 是文本输出，其他命令仍为 JSON。两个摘要命令沿用检查报告的 0/1/2 退出码；完整仅表示当前结构检查范围完成。参数与数据库初始化失败写 stderr。SQLite dbstat 可用时测试额外独立核对每对象 B-tree 与 overflow 占页。
+
 ## 树与全局诊断位置（开发中的 v0.4.0）
 
 `inspect_btree_details` 返回 `BTreeInspectionDetails`，包裹原有 `BTreeInspection` 并增加可选 `location`；`inspect_database_details` 返回 `DatabaseInspectionDetails`，包裹原有 `DatabaseInspection` 并提供同序同长度的 `LocatedDatabaseIssue` 列表。所有上下文来自执行检查的同一次扫描，不在失败后重读页面，也不解析错误字符串。原有公开类型与命令的输出结构保持原有形式。

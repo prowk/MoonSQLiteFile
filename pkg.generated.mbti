@@ -94,6 +94,7 @@ pub(all) struct DatabaseInspection {
   unclaimed_pages : Array[Int]
   issues : Array[DatabaseIssue]
 } derive(@debug.Debug)
+pub fn DatabaseInspection::summarize(Self) -> InspectionSummary
 pub fn DatabaseInspection::to_repr(Self) -> @debug.Repr
 
 pub(all) struct DatabaseInspectionDetails {
@@ -169,6 +170,16 @@ pub fn InspectionStatus::equal(Self, Self) -> Bool
 pub fn InspectionStatus::not_equal(Self, Self) -> Bool
 pub fn InspectionStatus::to_repr(Self) -> @debug.Repr
 
+pub(all) struct InspectionSummary {
+  claimed_pages : Int
+  unclaimed_pages : Int
+  page_kinds : Array[PageKindCount]
+  objects : Array[ObjectPageCount]
+} derive(Eq, @debug.Debug)
+pub fn InspectionSummary::equal(Self, Self) -> Bool
+pub fn InspectionSummary::not_equal(Self, Self) -> Bool
+pub fn InspectionSummary::to_repr(Self) -> @debug.Repr
+
 pub(all) struct Limits {
   max_rows : Int
   max_payload_bytes : Int
@@ -183,6 +194,16 @@ pub(all) struct LocatedDatabaseIssue {
   location : DiagnosticLocation?
 } derive(@debug.Debug)
 pub fn LocatedDatabaseIssue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ObjectPageCount {
+  root_page : Int
+  object_name : String?
+  btree_pages : Int
+  overflow_pages : Int
+} derive(Eq, @debug.Debug)
+pub fn ObjectPageCount::equal(Self, Self) -> Bool
+pub fn ObjectPageCount::not_equal(Self, Self) -> Bool
+pub fn ObjectPageCount::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Page {
   number : Int
@@ -242,6 +263,14 @@ pub(all) enum PageKind {
 pub fn PageKind::equal(Self, Self) -> Bool
 pub fn PageKind::not_equal(Self, Self) -> Bool
 pub fn PageKind::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageKindCount {
+  kind : PageKind
+  pages : Int
+} derive(Eq, @debug.Debug)
+pub fn PageKindCount::equal(Self, Self) -> Bool
+pub fn PageKindCount::not_equal(Self, Self) -> Bool
+pub fn PageKindCount::to_repr(Self) -> @debug.Repr
 
 pub(all) struct PageOwnership {
   page_number : Int

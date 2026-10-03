@@ -116,6 +116,7 @@ node tools/inspect.cjs fixtures/core.sqlite schema
 node tools/inspect.cjs fixtures/core.sqlite rows samples 10
 node tools/inspect.cjs fixtures/btree.sqlite index mixed_index 5
 node tools/inspect.cjs fixtures/btree.sqlite inspect
+node tools/inspect.cjs fixtures/btree.sqlite summary
 ```
 
 将样本路径替换为自己的静态数据库副本即可检查实际文件。所有命令的格式为 `node tools/inspect.cjs <file> <command> [arguments]`：
@@ -134,12 +135,14 @@ node tools/inspect.cjs fixtures/btree.sqlite inspect
 | `inspect` | 输出全局页归属、Ptrmap 校验及结构化诊断 |
 | `tree-inspect <root> [limit]` | 输出单树检查进度和失败位置（源码开发版） |
 | `inspect-details` | 输出全局报告及各条诊断的位置（源码开发版） |
+| `summary` | 中文检查摘要、页面分类、对象占页及诊断（源码开发版） |
+| `summary-json` | 精简 JSON 汇总，适合展示层消费（源码开发版） |
 
-成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。`inspect` 能构造报告时始终向 stdout 输出 JSON：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断包含在报告内。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
+除源码开发版 `summary` 输出中文文本外，成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。能够构造报告的检查与摘要命令始终将报告写入 stdout：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断与覆盖范围保留在报告中。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
 
 ## 支持范围与限制
 
-开发中的 v0.4.0 已补齐所访问 B-tree 页的 cell/freeblock 空间覆盖与碎片计数校验，并新增 `db.inspect_page(number)` 与 `page-inspect N` CLI，返回页面空间统计和带页内位置的诊断，详见 [页面报告契约](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md#页面检查与空间统计开发中的-v040) 与 [CHANGELOG](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。这些改动尚未发布到 Mooncakes；下述版本边界仍以已发布的 v0.3.0 为准。
+开发中的 v0.4.0 已补齐所访问 B-tree 页的空间覆盖与碎片计数校验，新增单页统计、详细树/全局诊断位置、对象占页汇总，以及中文和 JSON 摘要。使用 `inspect_page`、`inspect_btree_details`、`inspect_database_details` 或 `DatabaseInspection.summarize()`，详见 [报告与统计契约](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) 与 [CHANGELOG](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。这些改动尚未发布到 Mooncakes；下述版本边界仍以已发布的 v0.3.0 为准。
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 

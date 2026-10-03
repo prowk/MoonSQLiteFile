@@ -2,6 +2,8 @@
 
 ## 未发布
 
+新增 `DatabaseInspection.summarize`：对已经认领的页汇总八类用途，并按对象/根页统计 B-tree 与 overflow 页数，不重读数据库、不重复计入冲突引用。CLI 新增中文 `summary` 和精简 `summary-json`，显示覆盖状态、对象占页字节、已请求 payload 与诊断；未完成或截断检查明确保留部分结果。对象占页字节含页内空闲区，不作为有效 payload；freelist/Ptrmap/lock-byte 和未知页单独统计。相关能力随 v0.4.0 统一发布。
+
 新增 `inspect_btree_details` 与 `inspect_database_details`，在同一次扫描中保存失败阶段、实际页号、页内字段/区间及可用的 cell 下标；覆盖页布局、树遍历、payload/overflow、record/schema 解码、freelist、页归属和 Ptrmap。详细报告包裹现有报告，保持原有状态语义、进度和诊断上限；已有错误枚举和报告结构保持原有形式。CLI 增加 `tree-inspect ROOT [LIMIT]` 和 `inspect-details`，现有命令的 JSON 格式保持不变。位置未知时返回空值，不从错误文本猜测位置；读取阶段失败不能直接推断为文件损坏。能力随 v0.4.0 统一发布。
 
 修复空叶页跳过 B-tree 深度验证的问题；深度不一致的树现在返回 `Invalid`，检查报告为 `Failed`，并保留此前成功解码的记录数。
