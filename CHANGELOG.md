@@ -2,6 +2,8 @@
 
 ## 未发布
 
+新增页面导航与最小离线检查器：以单个 HTML 复用 MoonBit 报告，提供对象根页、父子页和 overflow 跳转、空间分布、cell 定位、原始字节和失败位置。CLI 增加 `viewer-data`，在同一次扫描中输出界面需要的详细报告与纯汇总。演示完整读取最多 64 MiB 的静态副本，Worker 超时为 30 秒，切换时取消旧任务；不包含网络资源，不支持 WAL。CI 验证实际打包 HTML 中的解析器、导航关系与受控损坏诊断。
+
 新增 `DatabaseInspection.summarize`：对已经认领的页汇总八类用途，并按对象/根页统计 B-tree 与 overflow 页数，不重读数据库、不重复计入冲突引用。CLI 新增中文 `summary` 和精简 `summary-json`，显示覆盖状态、对象占页字节、已请求 payload 与诊断；未完成或截断检查明确保留部分结果。对象占页字节含页内空闲区，不作为有效 payload；freelist/Ptrmap/lock-byte 和未知页单独统计。相关能力随 v0.4.0 统一发布。
 
 新增 `inspect_btree_details` 与 `inspect_database_details`，在同一次扫描中保存失败阶段、实际页号、页内字段/区间及可用的 cell 下标；覆盖页布局、树遍历、payload/overflow、record/schema 解码、freelist、页归属和 Ptrmap。详细报告包裹现有报告，保持原有状态语义、进度和诊断上限；已有错误枚举和报告结构保持原有形式。CLI 增加 `tree-inspect ROOT [LIMIT]` 和 `inspect-details`，现有命令的 JSON 格式保持不变。位置未知时返回空值，不从错误文本猜测位置；读取阶段失败不能直接推断为文件损坏。能力随 v0.4.0 统一发布。

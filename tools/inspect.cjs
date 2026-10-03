@@ -11,7 +11,7 @@ const candidates = ['debug', 'release'].map(mode =>
 const compiled = candidates.find(file => fs.existsSync(file));
 
 if (args.length < 2) {
-  process.stderr.write('用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json\n');
+  process.stderr.write('用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json|viewer-data\n');
   process.exitCode = 1;
 } else {
   try {

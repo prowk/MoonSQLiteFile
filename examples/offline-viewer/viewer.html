@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; worker-src blob:; img-src data:; connect-src 'none'">
+<title>MoonSQLiteFile · 离线检查器</title>
+<style>__VIEWER_CSS__</style>
+</head>
+<body>
+<header><div class="brand"><span class="mark">M</span><div><strong>MoonSQLiteFile</strong><span>离线数据库检查器 · v__VERSION__</span></div></div><span class="local">本地读取 · 无网络请求</span></header>
+<main>
+<section class="intro"><div><p class="eyebrow">SQLITE FILE EXPLORER</p><h1>看见数据库的页面结构</h1><p>选择完整的静态数据库副本，查看对象占页、空间分布和检查诊断。</p></div><div class="actions"><label class="primary" for="file">选择数据库<input id="file" type="file" accept=".db,.sqlite,.sqlite3,application/octet-stream"></label><button id="demo">载入示例库</button><small>演示最多读取 64 MiB；WAL 文件不在本版本范围内。</small></div></section>
+<p id="status" role="status" aria-live="polite">等待选择数据库。</p>
+<section id="overview" hidden><div class="metrics" id="metrics"></div><p class="scope" id="scope"></p></section>
+<div class="workspace" id="workspace" hidden>
+<aside class="panel"><h2>对象与诊断</h2><label for="objects">跳到对象根页</label><select id="objects" aria-label="跳到对象根页"></select><div id="kinds" class="kind-list"></div><h3>检查诊断</h3><div id="issues"></div></aside>
+<section class="panel page-panel"><div class="page-heading"><h2 id="page-title">页面</h2><div class="pager"><button id="previous" aria-label="上一页">←</button><label for="page-number">页号</label><input id="page-number" type="number" min="1" value="1"><button id="go">跳转</button><button id="next" aria-label="下一页">→</button></div></div><p id="owner"></p><nav id="links" aria-label="页面关系"></nav><p id="page-status" role="status"></p><div id="space" class="space"></div><div id="statistics"></div><div class="raw-heading"><h3>原始字节</h3><div><label for="cells">定位 cell</label><select id="cells"></select><button id="raw-previous">上一段</button><button id="raw-next">下一段</button></div></div><pre id="raw" aria-label="页面原始字节"></pre></section>
+</div>
+<footer>完成状态仅表示当前结构检查范围完成，不等同于 SQLite integrity_check。文件内容不会离开本页面。</footer>
+</main>
+<script id="parser-source" type="application/json">__PARSER_SOURCE__</script>
+<script id="demo-bytes" type="application/json">__DEMO_BYTES__</script>
+<script>__VIEWER_JS__</script>
+</body>
+</html>

@@ -43,3 +43,7 @@ jobs:
         run: moon run --target js examples/basic
       - name: Verify packaged library in a separate consumer workspace
         run: python tools/verify_consumer.py
+      - name: Build and verify standalone offline viewer
+        run: |
+          python tools/build_viewer.py
+          node tools/verify_viewer.cjs

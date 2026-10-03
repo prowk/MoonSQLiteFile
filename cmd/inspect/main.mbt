@@ -132,7 +132,7 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json"
+  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json|viewer-data"
   if args.length() < 2 {
     raise Usage(usage)
   }
@@ -143,7 +143,8 @@ fn run(args : FixedArray[String]) -> Json raise {
     | "freelist"
     | "inspect"
     | "inspect-details"
-    | "summary-json" => if args.length() != 2 { raise Usage(usage) }
+    | "summary-json"
+    | "viewer-data" => if args.length() != 2 { raise Usage(usage) }
     "page" | "page-inspect" => if args.length() != 3 { raise Usage(usage) }
     "rows" | "records" | "index" | "scan" | "tree-inspect" =>
       if args.length() != 3 && args.length() != 4 {
@@ -246,6 +247,18 @@ fn run(args : FixedArray[String]) -> Json raise {
       })
     }
     "freelist" => db.freelist().to_json()
+    "viewer-data" => {
+      let details = db.inspect_database_details()
+      report_exit(details.inspection.status)
+      Json::object({
+        "header": header_json(db),
+        "summary": summary_json(db, details.inspection),
+        "inspection": inspection_json(details.inspection),
+        "locations": Json::array(
+          details.issues.map(issue => location_json(issue.location)),
+        ),
+      })
+    }
     "summary-json" => {
       let report = db.inspect_database()
       report_exit(report.status)
