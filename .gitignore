@@ -3,5 +3,7 @@
 /competition-page.html
 /competition-assets.js
 /tools/github_publish.py
+/AGENTS.md
+/docs/roadmap.md
 __pycache__/
 *.pyc

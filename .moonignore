@@ -6,6 +6,7 @@
 /tools/github_publish.py
 /tools/*.py
 /AGENTS.md
+/docs/roadmap.md
 /docs/proposal.md
 __pycache__/
 *.pyc
