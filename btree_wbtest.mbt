@@ -175,3 +175,49 @@ test "visitor errors propagate and each scan starts with fresh ownership" {
   assert_eq(db.scan_btree(root, _ => false).completion, VisitorStopped)
   assert_eq(db.scan_btree(root, _ => true).completion, Complete)
 }
+
+///|
+fn uneven_leaf_depth_fixture(first_leaf_nonempty : Bool) -> Bytes {
+  let root = test_database().to_array()
+  let root_header = b"\x05\x00\x00\x00\x01\x01\xfb\x00\x00\x00\x00\x03\x01\xfb"
+  for i = 0; i < root_header.length(); i = i + 1 {
+    root[100 + i] = root_header[i]
+  }
+  let separator = b"\x00\x00\x00\x02\x01"
+  for i = 0; i < separator.length(); i = i + 1 {
+    root[507 + i] = separator[i]
+  }
+  let leaf = b"\x0d\x00\x00\x00\x00\x02\x00\x00" + Bytes::make(504, 0)
+  let left = leaf.to_array()
+  if first_leaf_nonempty {
+    // 左叶页可为空或包含一条记录；右叶页经由额外内部页，始终比左侧深一层。
+    left[4] = 1
+    left[5] = 1
+    left[6] = 252
+    left[8] = 1
+    left[9] = 252
+    let cell = b"\x02\x01\x02\x08"
+    for i = 0; i < cell.length(); i = i + 1 {
+      left[508 + i] = cell[i]
+    }
+  }
+  let branch = b"\x05\x00\x00\x00\x00\x02\x00\x00\x00\x00\x00\x04" +
+    Bytes::make(500, 0)
+  Bytes::from_array(root) + Bytes::from_array(left) + branch + leaf
+}
+
+///|
+test "empty leaf pages cannot hide unequal btree depth" {
+  for first_leaf_nonempty in [false, true] {
+    let db = open_database(uneven_leaf_depth_fixture(first_leaf_nonempty))
+    let report = db.inspect_btree(1)
+    assert_eq(report.status, InspectionStatus::Failed)
+    assert_eq(report.records_decoded, if first_leaf_nonempty { 1 } else { 0 })
+    assert_true(
+      match report.error {
+        Some(Invalid(message)) => message == "B-tree 叶页深度不一致"
+        _ => false
+      },
+    )
+  }
+}

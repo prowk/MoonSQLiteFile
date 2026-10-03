@@ -1,5 +1,9 @@
 # 更新记录
 
+## 未发布
+
+修复空叶页跳过 B-tree 深度验证的问题；深度不一致的树现在返回 `Invalid`，检查报告为 `Failed`，并保留此前成功解码的记录数。
+
 ## 0.3.0
 
 新增 `Database.inspect_database`、页用途与归属报告以及 `inspect` JSON CLI。统一发现 schema 根页、跟踪跨树 B-tree/overflow 引用、检查 freelist 冲突并枚举未认领页；全局共享记录、页数和累计 payload 预算。若发现根页不完整，未认领页仅作为未知列表，不判定为孤儿。CLI 退出码区分完整、失败和未完成，诊断保留在 JSON 报告中。

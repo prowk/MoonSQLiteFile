@@ -170,6 +170,13 @@ fn Database::scan_btree_observed(
     let bytes = frame.bytes
     let usable = self.header.usable_size
     let interior = page.kind == TableInterior || page.kind == IndexInterior
+    // 空叶页也参与平衡检查，不能因没有记录而在出栈时绕过深度验证。
+    if !interior {
+      if leaf_depth is Some(expected) && expected != frame.depth {
+        raise Invalid("B-tree 叶页深度不一致")
+      }
+      leaf_depth = Some(frame.depth)
+    }
     if frame.cursor == page.cell_count {
       if interior && !frame.right_visited {
         frame.right_visited = true
@@ -229,12 +236,6 @@ fn Database::scan_btree_observed(
         ),
       )
       continue
-    }
-    if !interior {
-      if leaf_depth is Some(expected) && expected != frame.depth {
-        raise Invalid("B-tree 叶页深度不一致")
-      }
-      leaf_depth = Some(frame.depth)
     }
     if records_read == limit {
       return {
