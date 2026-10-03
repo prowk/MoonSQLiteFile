@@ -82,6 +82,81 @@ def make_auto(path, mode, size, encoding):
         db.commit()
 
 
+def verify_fragmented_pages(directory):
+    """让 SQLite 自己产生碎片和空闲块，避免以同一套解析逻辑生成 oracle。"""
+    total, fragmented, freeblocks = 0, 0, 0
+    kinds = set()
+    for size, encoding in ((512, "UTF-8"), (1024, "UTF-16le"), (4096, "UTF-16be"), (65536, "UTF-8")):
+        path = directory / f"fragmented-{size}.sqlite"
+        with closing(sqlite3.connect(path)) as db:
+            db.execute(f"PRAGMA page_size={size}")
+            db.execute(f"PRAGMA encoding='{encoding}'")
+            db.execute("CREATE TABLE items(id INTEGER PRIMARY KEY, body BLOB, label TEXT)")
+            db.execute("CREATE INDEX by_label ON items(label)")
+            db.execute("CREATE TABLE keyed(k TEXT PRIMARY KEY, body BLOB) WITHOUT ROWID")
+            db.execute("CREATE TABLE tiny(value)")
+            db.execute("CREATE INDEX tiny_value ON tiny(value)")
+            lengths = (0, 1, 2, 3, 15, 50, 90, 110, 480, 900)
+            db.executemany("INSERT INTO items VALUES(?,?,?)", (
+                (i - 200, bytes([i % 256]) * lengths[i % len(lengths)], f"{i:04}-" + "月" * (i % 31))
+                for i in range(400)
+            ))
+            db.executemany("INSERT INTO keyed VALUES(?,?)", (
+                (f"{i:04}-" + "🌙" * (i % 70), bytes([i % 256]) * (i % 23)) for i in range(160)
+            ))
+            db.executemany("INSERT INTO tiny VALUES(?)", ((None,) for _ in range(150)))
+            db.commit()
+            # 删除与变长更新制造真实空间复用，不能在检查前 VACUUM 消除碎片。
+            db.execute("DELETE FROM items WHERE id%4=0")
+            db.execute("DELETE FROM keyed WHERE substr(k,1,4)%3=0")
+            db.commit()
+            db.execute("UPDATE items SET body=substr(body,1,length(body)/2) WHERE id%3=0")
+            db.execute("UPDATE keyed SET body=zeroblob(31) WHERE substr(k,1,4)%5=0")
+            db.commit()
+        total += verify(path)
+        report = inspect(path)
+        data = path.read_bytes()
+        for owner in report["pages"]:
+            if owner["kind"] not in {"btree_root", "btree_child"}:
+                continue
+            offset = (owner["page_number"] - 1) * size + (100 if owner["page_number"] == 1 else 0)
+            kinds.add(data[offset])
+            fragmented += data[offset + 7] > 0
+            freeblocks += int.from_bytes(data[offset + 1:offset + 3], "big") > 0
+    assert kinds == {2, 5, 10, 13}, kinds
+    assert fragmented > 0 and freeblocks > 0, (fragmented, freeblocks)
+    print(f"Verified SQLite-generated page space: {fragmented} fragmented pages, {freeblocks} pages with freeblocks, four B-tree kinds")
+    return total
+
+
+def corrupt_page_space(directory):
+    original = bytearray((ROOT / "fixtures/btree.sqlite").read_bytes())
+    report = inspect(ROOT / "fixtures/btree.sqlite")
+    size = 512
+    target = next(owner for owner in report["pages"]
+                  if owner["kind"] in {"btree_root", "btree_child"}
+                  and owner["object_name"] == "indexed_rows"
+                  and original[(owner["page_number"] - 1) * size] == 13)
+    offset = (target["page_number"] - 1) * size
+    start = int.from_bytes(original[offset + 5:offset + 7], "big")
+    pointers_end = 8 + 2 * int.from_bytes(original[offset + 3:offset + 5], "big")
+    assert start >= pointers_end + 4 and original[offset + 7] < 60
+    for name in ("fragment-count", "untracked-gap"):
+        data = original.copy()
+        if name == "fragment-count":
+            data[offset + 7] += 1
+        else:
+            data[offset + 5:offset + 7] = (start - 4).to_bytes(2, "big")
+        path = directory / (name + ".sqlite")
+        path.write_bytes(data)
+        failed = inspect(path, exit_code=1)
+        assert failed["status"] == "failed" and not failed["ownership_complete"]
+        assert any(issue["code"] == "scan_error" and issue["error_kind"] == "invalid" for issue in failed["issues"])
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
+            assert db.execute("PRAGMA integrity_check").fetchall() != [("ok",)]
+    print("Verified controlled fragment-count and untracked-gap corruption against SQLite")
+
+
 def corrupt_ptrmap(directory, source):
     original = bytearray(source.read_bytes())
     size = int.from_bytes(original[16:18], "big")
@@ -143,6 +218,8 @@ def main():
     total = sum(verify(ROOT / "fixtures" / (name + ".sqlite")) for name in ("core", "btree", "utf16le", "utf16be", "page65536", "empty"))
     with tempfile.TemporaryDirectory(prefix="moonsqlite-inspection-") as temporary:
         directory = Path(temporary)
+        total += verify_fragmented_pages(directory)
+        corrupt_page_space(directory)
         for size, encoding in ((512, "UTF-8"), (1024, "UTF-16le"), (4096, "UTF-16be")):
             path = directory / f"ownership-{size}.sqlite"
             make_btree(path, size, encoding).close()

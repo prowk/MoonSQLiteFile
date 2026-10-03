@@ -136,6 +136,8 @@ node tools/inspect.cjs fixtures/btree.sqlite inspect
 
 ## 支持范围与限制
 
+开发中的 v0.4.0 已补齐所访问 B-tree 页的 cell/freeblock 空间覆盖与碎片计数校验，详见 [CHANGELOG](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)。这些改动尚未发布到 Mooncakes；下述版本边界仍以已发布的 v0.3.0 为准。
+
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
 当前版本只读静态数据库文件，不执行 SQL、不写数据库、不合并 WAL。尚未验证索引排序与 collation、表与索引记录的一致性或完整 cell 空间覆盖，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。

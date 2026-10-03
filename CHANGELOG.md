@@ -4,6 +4,10 @@
 
 修复空叶页跳过 B-tree 深度验证的问题；深度不一致的树现在返回 `Invalid`，检查报告为 `Failed`，并保留此前成功解码的记录数。
 
+补齐四种 B-tree 页的 cell 空间覆盖校验，包含 varint、子页指针、页内 payload、overflow 指针及最小四字节填充；拒绝 cell 互相重叠、cell 与 freeblock 内容重叠、间距不足的 freeblock 链、未登记空闲区间和错误碎片计数。页面校验不读取 overflow 链、不分配完整 payload；公开 API 和 JSON 结构不变。行为收紧：`page` 及扫描现在验证所访问页面中全部 cell 的空间，显式 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败。
+
+新增真实 SQLite 删除与变长更新后的空间对照，覆盖四种 B-tree、512–65536 字节页与三种文本编码，并对碎片计数和未登记空闲区间进行受控损坏验证。上述变化用于开发中的 v0.4.0，尚未发布新包。
+
 ## 0.3.0
 
 新增 `Database.inspect_database`、页用途与归属报告以及 `inspect` JSON CLI。统一发现 schema 根页、跟踪跨树 B-tree/overflow 引用、检查 freelist 冲突并枚举未认领页；全局共享记录、页数和累计 payload 预算。若发现根页不完整，未认领页仅作为未知列表，不判定为孤儿。CLI 退出码区分完整、失败和未完成，诊断保留在 JSON 报告中。

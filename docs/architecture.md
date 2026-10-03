@@ -70,7 +70,11 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 集合读取的显式小 limit 返回前缀，默认资源上限导致未完成则抛出异常。读取完成只说明遍历结束，不代表执行了 SQLite integrity_check 或索引排序语义验证。
 
-范围检查覆盖记录、cell pointer、保留空间、overflow 链和 freelist；B-tree 校验 rowid 顺序及父键上下界，拒绝子页重复/环。页面检查验证空闲块有序且不重叠。全局检查追踪逻辑数据库的页归属与 Ptrmap；检查器不是 SQLite `integrity_check` 的替代品，尚不检查索引与表的一致性或每个 cell 的完整空间覆盖。
+范围检查覆盖记录、cell pointer、保留空间、overflow 链和 freelist；B-tree 校验 rowid 顺序及父键上下界，拒绝子页重复/环，空叶页也参与深度验证。全局检查追踪逻辑数据库的页归属与 Ptrmap；检查器不是 SQLite `integrity_check` 的替代品，尚不检查索引排序或索引与表的内容一致性。
+
+开发中的 v0.4.0 补齐页内空间覆盖：四类 cell 的 varint、子页指针、页内 payload、overflow 指针和最小四字节填充均计入完整区间；与 freeblock 区间一起按物理偏移排序，拒绝重叠、未登记的四字节及以上空闲区间和碎片计数不一致。freeblock 链必须递增且相隔至少四字节。校验只检查当前页，不读取 overflow 链或分配完整 payload；每页额外空间与区间数量成正比，排序后线性核对覆盖。
+
+`Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查尚未包含在已发布的 v0.3.0 中；公开 API 与 JSON 结构未增加字段。
 
 ## 当前范围
 
@@ -82,4 +86,4 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 ## 后续方向
 
-后续优先增加页面统计与检查结果展示，再评估 WAL 帧检查与一致快照合并、异步分页器、损坏数据库取证，以及更完整的记录与空间一致性校验。
+接下来完善结构化诊断、页面统计与检查结果展示，再扩展 WAL 帧检查与一致快照读取、宿主分页器和有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。

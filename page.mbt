@@ -78,7 +78,12 @@ fn Database::page_from_bytes(
     seen[pointer] = true
     cell_offsets.push(pointer)
   }
-  // 空闲块必须按偏移递增且互不重叠；同时排除 cell 指针落入空闲块。
+  // 按完整字节区间记录 cell 与 freeblock，避免仅检查起点而遗漏内容重叠。
+  let spans : Array[(Int, Int)] = []
+  for pointer in cell_offsets {
+    spans.push((pointer, page_cell_end(bytes, pointer, kind, usable)))
+  }
+  // 空闲块链仍须按偏移递增；空间覆盖统一在排序后检查。
   let mut freeblock = first_freeblock
   while freeblock != 0 {
     if freeblock < content_start || freeblock > usable - 4 {
@@ -90,15 +95,46 @@ fn Database::page_from_bytes(
       raise Invalid("freeblock 长度无效")
     }
     let block_end = freeblock + size
-    for pointer in cell_offsets {
-      if pointer >= freeblock && pointer < block_end {
-        raise Invalid("cell 指针位于 freeblock 内")
-      }
-    }
-    if next != 0 && next < block_end {
-      raise Invalid("freeblock 链重叠或形成环")
+    spans.push((freeblock, block_end))
+    if next != 0 && next < block_end + 4 {
+      raise Invalid("freeblock 链重叠、间距不足或形成环")
     }
     freeblock = next
+  }
+  if !interior &&
+    cell_count == 0 &&
+    (content_start != usable || first_freeblock != 0 || fragmented_bytes != 0) {
+    raise Invalid("页 \{number} 的空叶页不能包含 cell content 空间")
+  }
+  spans.sort_by((left, right) => left.0.compare(right.0))
+  let mut cursor = content_start
+  let mut fragments = 0
+  for (start, end) in spans {
+    if start < cursor {
+      raise Invalid(
+        "页 \{number} 的 cell/freeblock 区间重叠：offset=\{start}",
+      )
+    }
+    let gap = start - cursor
+    if gap >= 4 {
+      raise Invalid(
+        "页 \{number} 的空闲区间未登记为 freeblock：offset=\{cursor}",
+      )
+    }
+    fragments = fragments + gap
+    cursor = end
+  }
+  let tail = usable - cursor
+  if tail >= 4 {
+    raise Invalid(
+      "页 \{number} 的尾部空闲区间未登记为 freeblock：offset=\{cursor}",
+    )
+  }
+  fragments = fragments + tail
+  if fragments != fragmented_bytes {
+    raise Invalid(
+      "页 \{number} 的碎片计数不一致：declared=\{fragmented_bytes}, actual=\{fragments}",
+    )
   }
   let right_child = if interior {
     let child = page_number(read_u32(bytes, offset + 8))
@@ -119,4 +155,41 @@ fn Database::page_from_bytes(
     right_child,
     cell_offsets,
   }
+}
+
+///|
+fn page_cell_end(
+  bytes : Bytes,
+  offset : Int,
+  kind : PageType,
+  usable : Int,
+) -> Int raise SqliteError {
+  let interior = kind == TableInterior || kind == IndexInterior
+  if interior && offset > usable - 4 {
+    raise Invalid("interior cell 子页指针越过页面可用空间")
+  }
+  let mut cursor = offset + (if interior { 4 } else { 0 })
+  let (value, width) = page_varint(bytes, cursor, usable)
+  cursor = cursor + width
+  if kind != TableInterior {
+    let payload_size = bounded_int(value, "payload size")
+    if kind == TableLeaf {
+      let (_, rowid_width) = page_varint(bytes, cursor, usable)
+      cursor = cursor + rowid_width
+    }
+    let local_size = local_payload_size(payload_size, usable, kind == TableLeaf)
+    let extra = if local_size < payload_size { 4 } else { 0 }
+    if local_size + extra > usable - cursor {
+      raise Invalid("cell payload 越过页面可用空间：offset=\{offset}")
+    }
+    cursor = cursor + local_size + extra
+  }
+  // SQLite 的小 cell 至少占四字节；填充字节同样不能被其他 cell 或空闲块占用。
+  let size = if cursor - offset < 4 { 4 } else { cursor - offset }
+  if size > usable - offset {
+    raise Invalid(
+      "cell 最小空间越过页面可用边界：offset=\{offset}",
+    )
+  }
+  offset + size
 }
