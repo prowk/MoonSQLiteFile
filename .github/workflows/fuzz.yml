@@ -1,0 +1,51 @@
+name: Scheduled fuzzing
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: '可重放的整数种子（留空时使用当前 run_id）'
+        required: false
+        default: ''
+      iterations:
+        description: '随机变更次数，1 到 1000000'
+        required: true
+        default: '5000'
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+      - run: moon version --all
+      - run: moon build --target js --deny-warn
+      - name: Run isolated deterministic mutations
+        env:
+          FUZZ_SEED: ${{ inputs.seed }}
+          FUZZ_ITERATIONS: ${{ inputs.iterations || '5000' }}
+        run: |
+          if [ -z "$FUZZ_SEED" ]; then
+            FUZZ_SEED=$(node -e 'process.stdout.write(String(Number(process.env.GITHUB_RUN_ID) % 4294967295 || 1))')
+          fi
+          node tools/fuzz.cjs --seed "$FUZZ_SEED" --iterations "$FUZZ_ITERATIONS"
+      - name: Preserve failing inputs and replay metadata
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: fuzz-failures-${{ github.run_id }}
+          path: _build/fuzz-failures/
+          if-no-files-found: ignore
+          retention-days: 30

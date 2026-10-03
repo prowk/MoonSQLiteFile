@@ -47,3 +47,13 @@ jobs:
         run: |
           python tools/build_viewer.py
           node tools/verify_viewer.cjs
+      - name: Run bounded reproducible fuzzing
+        run: node tools/fuzz.cjs --seed 20261003 --iterations 512
+      - name: Preserve failing fuzz inputs
+        if: failure()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: fuzz-failures-${{ github.run_id }}
+          path: _build/fuzz-failures/
+          if-no-files-found: ignore
+          retention-days: 30

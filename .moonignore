@@ -10,3 +10,7 @@
 /docs/proposal.md
 __pycache__/
 *.pyc
+
+/cmd/fuzz/
+/tools/fuzz.cjs
+/tools/verify_viewer.cjs
