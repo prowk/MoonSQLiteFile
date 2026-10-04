@@ -474,6 +474,9 @@ fn main {
     }
   } catch {
     Usage(message) => host_error(message)
+    @sqlite.Invalid(message) => host_error("invalid: \{message}")
+    @sqlite.Unsupported(message) => host_error("unsupported: \{message}")
+    @sqlite.LimitExceeded(message) => host_error("limit_exceeded: \{message}")
     error => host_error("\{error}")
   }
 }

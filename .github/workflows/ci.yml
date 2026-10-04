@@ -43,6 +43,8 @@ jobs:
         run: python tools/verify_inspection.py
       - name: Compare WAL committed snapshots against SQLite
         run: python tools/verify_wal_oracle.py
+      - name: Verify reviewed SQLite regressions
+        run: python tools/verify_review.py
       - name: Run library example
         run: moon run --target js examples/basic
       - name: Verify packaged library in a separate consumer workspace
