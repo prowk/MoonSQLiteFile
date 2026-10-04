@@ -159,87 +159,26 @@ pub fn inspect_wal(
   data : Bytes,
   max_frames? : Int = 100000,
 ) -> WalInspection raise SqliteError {
-  if max_frames < 1 {
-    raise Invalid("WAL 帧上限必须为正数")
-  }
-  if data.is_empty() {
-    return {
-      header: None,
-      frames: [],
-      commits: [],
-      committed_frames: 0,
-      database_pages: None,
-      stop_reason: WalEndOfFile,
-      stop_offset: 0,
-      trailing_bytes: 0,
-    }
-  }
-  let header = parse_wal_header(data)
-  let frames : Array[WalFrame] = []
-  let commits : Array[WalCommit] = []
-  let mut offset = 32
-  let mut checksum = (header.checksum1, header.checksum2)
-  let mut committed_frames = 0
-  let mut database_pages = None
-  let mut stop_reason = WalEndOfFile
-  let frame_size = 24 + header.page_size
-  while offset < data.length() {
-    if frames.length() == max_frames {
-      stop_reason = WalFrameLimit
-      break
-    }
-    if data.length() - offset < frame_size {
-      stop_reason = WalTruncatedFrame
-      break
-    }
-    if read_u32(data, offset + 8) != header.salt1 ||
-      read_u32(data, offset + 12) != header.salt2 {
-      stop_reason = WalSaltMismatch
-      break
-    }
-    let page_number = read_u32(data, offset)
-    let pages = read_u32(data, offset + 4)
-    if page_number == 0U || page_number == 0xffffffffU || pages == 0xffffffffU {
-      stop_reason = WalInvalidFrame
-      break
-    }
-    let next = wal_checksum(data, offset, 8, header.checksum_order, checksum)
-    let next = wal_checksum(
-      data,
-      offset + 24,
-      header.page_size,
-      header.checksum_order,
-      next,
-    )
-    if next != (read_u32(data, offset + 16), read_u32(data, offset + 20)) {
-      stop_reason = WalChecksumMismatch
-      break
-    }
-    let index = frames.length() + 1
-    frames.push({
-      index,
-      byte_offset: offset,
-      page_number,
-      database_pages: pages,
-      checksum1: next.0,
-      checksum2: next.1,
-    })
-    if pages != 0U {
-      commits.push({ frame_index: index, database_pages: pages, })
-      committed_frames = index
-      database_pages = Some(pages)
-    }
-    checksum = next
-    offset = offset + frame_size
-  }
+  // 字节入口复用范围校验，旧报告的 Int 字段保留原有契约。
+  let report = inspect_wal_source(BytesSource::new(data), max_frames~)
   {
-    header: Some(header),
-    frames,
-    commits,
-    committed_frames,
-    database_pages,
-    stop_reason,
-    stop_offset: offset,
-    trailing_bytes: data.length() - offset,
+    header: report.header,
+    frames: report.frames.map(frame => {
+      index: frame.index,
+      byte_offset: frame.byte_offset.to_int(),
+      page_number: frame.page_number,
+      database_pages: frame.database_pages,
+      checksum1: frame.checksum1,
+      checksum2: frame.checksum2,
+    }),
+    commits: report.commits.map(commit => {
+      frame_index: commit.frame_index,
+      database_pages: commit.database_pages,
+    }),
+    committed_frames: report.committed_frames,
+    database_pages: report.database_pages,
+    stop_reason: report.stop_reason,
+    stop_offset: report.stop_offset.to_int(),
+    trailing_bytes: report.trailing_bytes.to_int(),
   }
 }

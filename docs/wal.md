@@ -46,3 +46,7 @@ node tools/inspect.cjs snapshot.db --wal snapshot.wal summary
 ## 对照验证
 
 `python tools/verify_wal_oracle.py` 由 SQLite 生成多事务日志，将独立副本交给 SQLite 自行恢复，以 SQL 查询、schema、逻辑页数及 integrity_check 作为 oracle。另一份原始副本交给 MoonBit，逐条核对普通表、索引及 WITHOUT ROWID 记录，并核对页归属与诊断。字节序转换后的 WAL 也由 SQLite 引擎读取，不仅与 Python 的字段计算比较。覆盖 512/4096/65536 页、三种文本编码、未提交尾帧、异常中间帧、reset 旧 salt、缩小/增长和空日志；验证源文件未被改写。
+
+## v0.6.0 同步范围源
+
+新增 `inspect_wal_source`、`RangeWalInspection` 与 `RangeWalSource`，以 `RangeSource` 接受主文件和 WAL。逐帧 checksum 与字节入口共享实现，帧报告保存 64 位偏移，覆盖索引无需持有 WAL 全文件。缩小、重新增长、尾部策略及副本责任沿用本文件定义；独立帧和覆盖页预算，以及错误分类见[范围读取契约](range-source.md)。原有 `WalSource` 仍使用内存 WAL，Int 总长度限制保持。

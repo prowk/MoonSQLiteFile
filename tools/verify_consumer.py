@@ -58,6 +58,7 @@ fn main {
     println("pages=\\{db.page_count()}, schema=\\{db.schema().length()}")
   } catch {
     @sqlite.Invalid(message) | @sqlite.Unsupported(message) | @sqlite.LimitExceeded(message) => abort(message)
+    _ => abort("未预期的宿主错误")
   }
 }
 '''
@@ -155,6 +156,59 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
     if @sqlite.open_wal_database(data, wal, tail_policy=@sqlite.UseValidPrefix).header().user_version != 11U || @sqlite.open_wal_database(data,b"").page_count() != 1 {
       abort("内存 WAL 与空日志消费失败")
     }
+    println(''')
+        if not args.registry or tuple(map(int, version.split(".")[:2])) >= (0, 6):
+            # 外部项目自行实现 RangeSource，并构造所有宿主错误分支。
+            main_source = """///|
+priv struct ConsumerRange { data : Bytes }
+///|
+impl @sqlite.RangeSource for ConsumerRange with byte_length64(self) { self.data.length().to_int64() }
+///|
+impl @sqlite.RangeSource for ConsumerRange with read_range64(self, offset, count) {
+  if offset < 0L || offset > self.data.length().to_int64() || count < 0 || count.to_int64() > self.data.length().to_int64() - offset {
+    raise @sqlite.RangeOutOfBounds("消费项目范围越界")
+  }
+  let start = offset.to_int()
+  self.data[start:start + count].to_owned()
+}
+///|
+priv struct ConsumerFailure {}
+///|
+impl @sqlite.RangeSource for ConsumerFailure with byte_length64(_) { 512L }
+///|
+impl @sqlite.RangeSource for ConsumerFailure with read_range64(_, _, count) {
+  if count == 100 {
+    return b"SQLite format 3\\x00\\x02\\x00\\x01\\x01\\x00\\x40\\x20\\x20" + Bytes::make(76, 0)
+  }
+  raise @sqlite.HostFailure("消费项目模拟磁盘失败")
+}
+""" + main_source
+            main_source = main_source.replace('    println(', '''    let {source: legacy_source, header: legacy_header, page_count: legacy_pages, limits: legacy_limits} = db
+    if legacy_source.byte_length() != 512 || legacy_header.page_size != 512 || legacy_pages != 1 || legacy_limits.max_pages != 100000 {
+      abort("历史 Database 字段读取与解构失败")
+    }
+    if db.source64().byte_length64() != 512L { abort("完整范围源访问失败") }
+    let range = ConsumerRange::{data,}
+    let cache = @sqlite.CachedSource::new(range, block_size=512, max_pages=1)
+    let wide = @sqlite.open_range_source(cache, max_report_pages=1)
+    if wide.header() != db.header() || wide.inspect_database().status != @sqlite.Complete || cache.statistics().resident_pages != 1 {
+      abort("独立范围数据源与缓存消费失败")
+    }
+    let adapted = @sqlite.PageSourceAdapter::new(ConsumerSource::{data,})
+    if @sqlite.open_range_source(adapted).page_count() != 1 || adapted.read_range64(0L, 16) != data[0:16].to_owned() {
+      abort("旧 PageSource 适配消费失败")
+    }
+    let journal = ConsumerRange::{data: wal,}
+    let range_wal = @sqlite.RangeWalSource::new(range, journal, max_overlay_pages=1)
+    if range_wal.byte_length64() != 512L || @sqlite.open_range_wal_source(range_wal).header().user_version != 11U || @sqlite.inspect_wal_source(journal).committed_frames != 1 {
+      abort("独立范围 WAL 消费失败")
+    }
+    let failed = @sqlite.open_range_source(ConsumerFailure::{})
+    if failed.inspect_btree(1).status != @sqlite.Incomplete || failed.inspect_database().status != @sqlite.Incomplete {
+      abort("宿主读取失败的部分报告契约错误")
+    }
+    let host_error : @sqlite.SourceError = @sqlite.ShortRead("消费项目短读")
+    match host_error { @sqlite.ShortRead(_) => (); _ => abort("宿主错误构造失败") }
     println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:

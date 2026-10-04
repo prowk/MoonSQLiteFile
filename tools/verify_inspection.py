@@ -7,10 +7,12 @@ from pathlib import Path
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 from generate_btree_fixtures import make_btree
 
 ROOT = Path(__file__).resolve().parents[1]
+DBSTAT_PAGES = 0
 
 
 def inspect(path, exit_code=0, command="inspect"):
@@ -49,6 +51,7 @@ process.stdout.write(JSON.stringify(reports));
 
 
 def verify(path):
+    global DBSTAT_PAGES
     report = inspect(path)
     detailed = inspect(path, command='inspect-details')
     assert detailed['inspection'] == report and detailed['locations'] == []
@@ -115,8 +118,11 @@ def verify(path):
         except sqlite3.OperationalError as error:
             if "no such table: dbstat" not in str(error):
                 raise
+            if sys.platform.startswith('linux'):
+                raise RuntimeError('Linux 正式验收必须启用 SQLite dbstat，不能跳过物理页对照') from error
             statistics = None
         if statistics is not None:
+            DBSTAT_PAGES += len(statistics)
             for obj in summary['objects']:
                 object_rows = [row for row in statistics if row[0] == obj['object_name']]
                 assert obj['btree_pages'] == sum(row[2] != 'overflow' for row in object_rows)
@@ -402,6 +408,11 @@ def main():
         bad_args = subprocess.run(["node", str(ROOT / "tools/inspect.cjs"), str(orphan), "inspect", "extra"], cwd=ROOT, capture_output=True)
         assert bad_args.returncode == 1 and not bad_args.stdout and bad_args.stderr
     print(f"All ownership checks passed: {total} pages, auto-vacuum and controlled alias/orphan/Ptrmap failures")
+    evidence = dict(ownership_pages=total, dbstat_pages=DBSTAT_PAGES,
+                    dbstat_required=sys.platform.startswith('linux'), sqlite=sqlite3.sqlite_version)
+    (ROOT / '_build/inspection-evidence.json').write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    print(json.dumps(evidence, ensure_ascii=False))
 
 
 if __name__ == "__main__":

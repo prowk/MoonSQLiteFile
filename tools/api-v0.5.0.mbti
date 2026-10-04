@@ -12,13 +12,7 @@ pub fn decode_varint(Bytes, Int) -> (UInt64, Int) raise SqliteError
 
 pub fn inspect_wal(Bytes, max_frames? : Int) -> WalInspection raise SqliteError
 
-pub fn inspect_wal_source(&RangeSource, max_frames? : Int) -> RangeWalInspection raise SqliteError
-
 pub fn open_database(Bytes, limits? : Limits) -> Database raise SqliteError
-
-pub fn open_range_source(&RangeSource, limits? : Limits, max_report_pages? : Int) -> Database raise SqliteError
-
-pub fn open_range_wal_source(RangeWalSource, limits? : Limits, max_report_pages? : Int) -> Database raise SqliteError
 
 pub fn open_source(&PageSource, limits? : Limits) -> Database raise SqliteError
 
@@ -31,12 +25,6 @@ pub fn parse_header(Bytes) -> Header raise SqliteError
 pub fn parse_wal_header(Bytes) -> WalHeader raise SqliteError
 
 // Errors
-pub(all) suberror SourceError {
-  HostFailure(String)
-  ShortRead(String)
-  RangeOutOfBounds(String)
-}
-
 pub(all) suberror SqliteError {
   Invalid(String)
   Unsupported(String)
@@ -72,36 +60,15 @@ pub struct BytesSource {
   data : Bytes
 }
 pub fn BytesSource::byte_length(Self) -> Int
-pub fn BytesSource::byte_length64(Self) -> Int64
 pub fn BytesSource::new(Bytes) -> Self
 pub fn BytesSource::read_range(Self, Int, Int) -> Bytes raise SqliteError
-pub fn BytesSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
 pub impl PageSource for BytesSource
-pub impl RangeSource for BytesSource
-
-pub(all) struct CacheStatistics {
-  hits : Int64
-  misses : Int64
-  bytes_read : Int64
-  resident_pages : Int
-} derive(@debug.Debug)
-pub fn CacheStatistics::to_repr(Self) -> @debug.Repr
-
-pub struct CachedSource {
-  // private fields
-}
-pub fn CachedSource::byte_length64(Self) -> Int64
-pub fn CachedSource::new(&RangeSource, block_size? : Int, max_pages? : Int) -> Self raise SqliteError
-pub fn CachedSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
-pub fn CachedSource::statistics(Self) -> CacheStatistics
-pub impl RangeSource for CachedSource
 
 pub struct Database {
   source : &PageSource
   header : Header
   page_count : Int
   limits : Limits
-  // private fields
 }
 pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
 pub fn Database::header(Self) -> Header
@@ -120,7 +87,6 @@ pub fn Database::read_page(Self, Int) -> Bytes raise SqliteError
 pub fn Database::read_table(Self, Int, limit? : Int) -> Array[Row] raise SqliteError
 pub fn Database::scan_btree(Self, Int, (BTreeRecord) -> Bool raise SqliteError, limit? : Int, max_total_payload_bytes? : UInt64) -> ScanSummary raise SqliteError
 pub fn Database::schema(Self) -> Array[SchemaEntry] raise SqliteError
-pub fn Database::source64(Self) -> &RangeSource
 pub fn Database::table_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::table_rows(Self, String, limit? : Int) -> Array[Row] raise SqliteError
 
@@ -325,14 +291,6 @@ pub fn PageOwnership::equal(Self, Self) -> Bool
 pub fn PageOwnership::not_equal(Self, Self) -> Bool
 pub fn PageOwnership::to_repr(Self) -> @debug.Repr
 
-pub struct PageSourceAdapter {
-  source : &PageSource
-}
-pub fn PageSourceAdapter::byte_length64(Self) -> Int64
-pub fn PageSourceAdapter::new(&PageSource) -> Self
-pub fn PageSourceAdapter::read_range64(Self, Int64, Int) -> Bytes raise SourceError
-pub impl RangeSource for PageSourceAdapter
-
 pub(all) struct PageStatistics {
   database_header_bytes : Int
   btree_header_bytes : Int
@@ -379,48 +337,6 @@ pub(all) enum PtrmapType {
 pub fn PtrmapType::equal(Self, Self) -> Bool
 pub fn PtrmapType::not_equal(Self, Self) -> Bool
 pub fn PtrmapType::to_repr(Self) -> @debug.Repr
-
-pub(all) struct RangeWalCommit {
-  frame_index : Int
-  database_pages : UInt
-} derive(Eq, @debug.Debug)
-pub fn RangeWalCommit::equal(Self, Self) -> Bool
-pub fn RangeWalCommit::not_equal(Self, Self) -> Bool
-pub fn RangeWalCommit::to_repr(Self) -> @debug.Repr
-
-pub(all) struct RangeWalFrame {
-  index : Int
-  byte_offset : Int64
-  page_number : UInt
-  database_pages : UInt
-  checksum1 : UInt
-  checksum2 : UInt
-} derive(Eq, @debug.Debug)
-pub fn RangeWalFrame::equal(Self, Self) -> Bool
-pub fn RangeWalFrame::not_equal(Self, Self) -> Bool
-pub fn RangeWalFrame::to_repr(Self) -> @debug.Repr
-
-pub(all) struct RangeWalInspection {
-  header : WalHeader?
-  frames : Array[RangeWalFrame]
-  commits : Array[RangeWalCommit]
-  committed_frames : Int
-  database_pages : UInt?
-  stop_reason : WalStopReason
-  stop_offset : Int64
-  trailing_bytes : Int64
-} derive(@debug.Debug)
-pub fn RangeWalInspection::to_repr(Self) -> @debug.Repr
-
-pub struct RangeWalSource {
-  // private fields
-}
-pub fn RangeWalSource::byte_length64(Self) -> Int64
-pub fn RangeWalSource::inspection(Self) -> RangeWalInspection
-pub fn RangeWalSource::new(&RangeSource, &RangeSource, tail_policy? : WalTailPolicy, max_frames? : Int, max_overlay_pages? : Int) -> Self raise SqliteError
-pub fn RangeWalSource::page_count(Self) -> Int
-pub fn RangeWalSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
-pub impl RangeSource for RangeWalSource
 
 pub(all) struct Row {
   rowid : Int64
@@ -562,9 +478,4 @@ pub fn WalTailPolicy::to_repr(Self) -> @debug.Repr
 pub(open) trait PageSource {
   fn byte_length(Self) -> Int
   fn read_range(Self, Int, Int) -> Bytes raise SqliteError
-}
-
-pub(open) trait RangeSource {
-  fn byte_length64(Self) -> Int64
-  fn read_range64(Self, Int64, Int) -> Bytes raise SourceError
 }

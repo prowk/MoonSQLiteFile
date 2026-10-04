@@ -167,7 +167,8 @@ fn OwnershipState::finish(
   let unclaimed : Array[Int] = []
   // 预检拒绝超预算的数据库，避免枚举或分配无界的页列表。
   if page_count <= self.max_pages {
-    for number = 1; number <= page_count; number = number + 1 {
+    for index = 0; index < page_count; index = index + 1 {
+      let number = index + 1
       if self.owners.get(number) is Some(owner) {
         pages.push(owner)
       } else {
@@ -222,7 +223,7 @@ fn Database::inspect_database_traced(
     issues: [],
     located_issues,
     trace: InspectionTrace::new(),
-    max_pages: self.limits.max_pages,
+    max_pages: Int::min(self.limits.max_pages, self.report_max_pages),
     max_issues: if max_issues > 0 {
       max_issues
     } else {
@@ -240,7 +241,7 @@ fn Database::inspect_database_traced(
     state.error(None, Invalid("诊断条数上限必须为正数"))
     return state.finish(0, !vacuum)
   }
-  if self.page_count > self.limits.max_pages {
+  if self.page_count > state.max_pages {
     state.error(
       None,
       LimitExceeded("数据库逻辑页数超过全局检查预算"),
@@ -285,6 +286,9 @@ fn Database::inspect_database_traced(
           LimitExceeded(message) => state.error(None, LimitExceeded(message))
           Unsupported(message) => state.error(None, Unsupported(message))
         }
+      }
+      if self.page_count - number < step {
+        break
       }
       number = number + step
     }

@@ -2,11 +2,13 @@
 
 ## 0.6.0（待发布）
 
-修复 SQLite 正常产生的较长空闲间隙被误拒：累计页内未覆盖字节并核对 fragmented bytes，碎片不一致统一定位为 FragmentCount。
+新增 `RangeSource`、`SourceError`、`open_range_source` 与 `PageSourceAdapter`：文件长度及偏移使用 Int64，页面乘法在 64 位中计算；旧 PageSource、Bytes 和 Database 公开字段保持原类型。页号仍为 Int，超过 2147483647 页显式拒绝。`Database.source64()` 提供完整范围源，新入口的宿主失败统一保留 source 分类并映射为 Incomplete。
 
-拒绝非根空 B-tree 页及非页 1 的空内部根，保留空叶根和页 1 虚拟根，继续检查叶页深度。
+新增有界 FIFO `CachedSource`、命中/读取统计与独立报告页预算；新增 `inspect_wal_source`、64 位帧报告、`RangeWalSource` 和 `open_range_wal_source`。WAL 逐帧读取、不保存整文件，帧与覆盖页索引分别限制；尾部、提交、缩小和增长语义与字节入口一致。CLI 改为只读文件范围 I/O，提供缓存及资源选项和可选 stderr I/O 测量，关闭所有句柄并检测实际读取时的文件变化。
 
-CLI 与离线界面保留错误分类及具体消息；54 组合法 SQL 操作、受控空子页及错误消息回归纳入 CI。
+修复三项审查缺陷：不再仅因空闲间隙大于等于四字节而误拒 SQLite 正常文件，改为核对总碎片；拒绝非根空 B-tree 页，保留空叶根和页 1 内部虚拟根；CLI/离线界面输出错误分类及具体原因。碎片不一致现在统一定位为 FragmentCount，超出 Int 范围的页指针返回 LimitExceeded，详见[v0.6.0 升级说明](docs/migration-0.6.md)。
+
+新增 v0.5.0 的 160 项公开 API 基线和外部字段读取/解构、第三方范围源、缓存及范围 WAL 消费验证。四后端各 114 项回归，54 组合法 SQLite SQL 操作、空子页破坏及 CLI 错误消息差分；2 GiB 稀疏文件末页仅两次读取、4608 字节，覆盖短读、范围越界、变化检测及释放。29 个 WAL 快照、5470 条记录的独立恢复对照继续覆盖双 checksum 字节序、reset、未提交尾部和缩小/增长。扫描、全局检查和 WAL 打开的读取次数、峰值 RSS 与耗时有[固定规模基准](docs/io-benchmark.md)。补充 CLI 单条/UInt64 累计 payload 选项，并修正 PageSourceAdapter 的越界、短读与实际宿主抛错分类。正式 CI 增加有效数据超过 64 MiB 的预算端到端回归、32769 帧且覆盖偏移超过 2 GiB 的虚拟 WAL、重复更新少量页的 WAL 基准；范围入口、缓存、适配器和故障报告加入可重放持续 fuzz。四后端还覆盖高位 WAL 索引的整页/页内读取。当前源码待发布；远程验证以本次提交对应的 GitHub CI 为准，registry 发布后消费留待实际发布。
 
 ## 0.5.0
 

@@ -60,18 +60,38 @@ fn open_sized_source(
   limits : Limits,
   committed_pages : Int?,
 ) -> Database raise SqliteError {
+  open_data_source(LegacySource(source), limits, committed_pages)
+}
+
+///|
+fn open_data_source(
+  source : DataSource,
+  limits : Limits,
+  committed_pages : Int?,
+  max_report_pages? : Int = limits.max_pages,
+) -> Database raise SqliteError {
+  if max_report_pages < 1 {
+    raise Invalid("报告页数预算必须为正数")
+  }
   if limits.max_rows < 1 ||
     limits.max_payload_bytes < 1 ||
     limits.max_pages < 1 ||
     limits.max_depth < 1 {
     raise Invalid("所有资源限制必须为正数")
   }
-  let size = source.byte_length()
-  let header = parse_header(source_read(source, 0, 100))
-  if size % header.page_size != 0 || size < header.page_size {
+  let size = data_length(source)
+  let header = parse_header(data_read(source, 0L, 100))
+  if size % header.page_size.to_int64() != 0L ||
+    size < header.page_size.to_int64() {
     raise Invalid("数据库文件不包含完整页面")
   }
-  let physical_pages = size / header.page_size
+  if size / header.page_size.to_int64() > 2147483647L {
+    raise LimitExceeded("数据库页数超出当前 Int 页号接口范围")
+  }
+  let physical_pages = bounded_int(
+    (size / header.page_size.to_int64()).reinterpret_as_uint64(),
+    "database pages",
+  )
   let page_count = if committed_pages is Some(pages) {
     if pages != physical_pages {
       raise Invalid("WAL 逻辑页数与快照长度不一致")
@@ -95,5 +115,16 @@ fn open_sized_source(
   if header.freelist_pages.to_uint64() > page_count.to_uint64() {
     raise Invalid("freelist 页数超过数据库页数")
   }
-  { source, header, page_count, limits, }
+  let legacy : &PageSource = match source {
+    LegacySource(source) => source
+    WideSource(source) => LegacyRangeView::{ source, }
+  }
+  {
+    source: legacy,
+    data_source: source,
+    header,
+    page_count,
+    limits,
+    report_max_pages: max_report_pages,
+  }
 }

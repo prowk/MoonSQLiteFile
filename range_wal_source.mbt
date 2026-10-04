@@ -1,0 +1,183 @@
+///|
+pub struct RangeWalSource {
+  priv base : &RangeSource
+  priv wal : &RangeSource
+  priv page_size : Int
+  priv page_count : Int
+  priv base_pages : Int
+  priv overlay : Map[Int, Int64]
+  priv inspection : RangeWalInspection
+}
+
+///|
+pub extend RangeWalSource with RangeSource::{byte_length64, read_range64}
+
+///|
+/// 只读最新已提交快照；调用者负责提供同一数据库、同一时刻的不可变副本。
+pub fn RangeWalSource::new(
+  base : &RangeSource,
+  wal : &RangeSource,
+  tail_policy? : WalTailPolicy = RejectInvalidTail,
+  max_frames? : Int = 100000,
+  max_overlay_pages? : Int = 100000,
+) -> RangeWalSource raise SqliteError {
+  if max_overlay_pages < 1 {
+    raise Invalid("WAL 覆盖页预算必须为正数")
+  }
+  let inspection = inspect_wal_source(wal, max_frames~)
+  if inspection.stop_reason == WalFrameLimit {
+    raise LimitExceeded(
+      "WAL 帧上限不足，不能确定最新已提交快照",
+    )
+  }
+  if tail_policy == RejectInvalidTail && inspection.stop_reason != WalEndOfFile {
+    raise Invalid(
+      "WAL 存在无效或截断尾部；请检查报告并显式选择 UseValidPrefix",
+    )
+  }
+  let size = base.byte_length64()
+  if size < 0L {
+    raise Invalid("主文件长度不能为负数")
+  }
+  let base_header = if size == 0L {
+    None
+  } else {
+    Some(parse_header(range_sqlite_read(base, 0L, 100)))
+  }
+  let page_size = match inspection.header {
+    Some(header) => header.page_size
+    None =>
+      base_header.unwrap_or_else(() => {
+        raise Invalid("没有 WAL 或可用主文件")
+      }).page_size
+  }
+  if size % page_size.to_int64() != 0L {
+    raise Invalid("WAL 主文件不包含完整页面")
+  }
+  if base_header is Some(header) && header.page_size != page_size {
+    raise Invalid("WAL 与主文件 page_size 不一致")
+  }
+  let physical_pages = bounded_int(
+    (size / page_size.to_int64()).reinterpret_as_uint64(),
+    "database pages",
+  )
+  let mut base_pages = physical_pages
+  let page_count = match inspection.database_pages {
+    Some(pages) => bounded_int(pages.to_uint64(), "WAL database pages")
+    None => {
+      let header = base_header.unwrap_or_else(() => {
+        raise Invalid("没有已提交 WAL 或可用主文件")
+      })
+      if header.declared_pages != 0U &&
+        header.change_counter == header.version_valid_for {
+        let count = bounded_int(
+          header.declared_pages.to_uint64(),
+          "database pages",
+        )
+        if count > physical_pages {
+          raise Invalid("主文件声明页数超过文件长度")
+        }
+        count
+      } else {
+        physical_pages
+      }
+    }
+  }
+  if page_count < 1 {
+    raise Invalid("WAL 快照页数必须为正数")
+  }
+  let overlay : Map[Int, Int64] = Map([])
+  // 逆序保留最新版本；后续提交的缩小边界使更早的高页号版本失效。
+  // 只扫描一次，避免每个提交反复遍历整张覆盖表。
+  let mut retained_pages = page_count
+  for i = inspection.committed_frames - 1; i >= 0; i = i - 1 {
+    let frame = inspection.frames[i]
+    if frame.database_pages != 0U &&
+      frame.database_pages.to_uint64() < retained_pages.to_uint64() {
+      retained_pages = frame.database_pages.reinterpret_as_int()
+    }
+    if frame.page_number.to_uint64() <= retained_pages.to_uint64() {
+      let number = frame.page_number.reinterpret_as_int()
+      if !overlay.contains(number) {
+        if overlay.length() >= max_overlay_pages {
+          raise LimitExceeded("WAL 覆盖页索引超过独立预算")
+        }
+        overlay[number] = frame.byte_offset + 24L
+      }
+    }
+  }
+  base_pages = Int::min(base_pages, retained_pages)
+  // 文件增长的所有新页必须由 WAL 提供；避免从旧的截断残留页读取数据。
+  let mut new_pages = 0
+  for number, _ in overlay {
+    if number > base_pages {
+      new_pages = new_pages + 1
+    }
+  }
+  if page_count > base_pages && new_pages != page_count - base_pages {
+    raise Invalid("WAL 快照缺少增长后的页面")
+  }
+  { base, wal, page_size, page_count, base_pages, overlay, inspection, }
+}
+
+///|
+pub fn RangeWalSource::inspection(self : RangeWalSource) -> RangeWalInspection {
+  self.inspection
+}
+
+///|
+pub fn RangeWalSource::page_count(self : RangeWalSource) -> Int {
+  self.page_count
+}
+
+///|
+pub impl RangeSource for RangeWalSource with fn byte_length64(self) {
+  self.page_count.to_int64() * self.page_size.to_int64()
+}
+
+///|
+pub impl RangeSource for RangeWalSource with fn read_range64(
+  self,
+  offset,
+  count,
+) {
+  let size = self.byte_length64()
+  check_source_range(size, offset, count)
+  let output : FixedArray[Byte] = FixedArray::make(count, 0)
+  let mut copied = 0
+  while copied < count {
+    let position = offset + copied.to_int64()
+    let number = (position / self.page_size.to_int64()).to_int() + 1
+    let in_page = (position % self.page_size.to_int64()).to_int()
+    let length = Int::min(count - copied, self.page_size - in_page)
+    let input = match self.overlay.get(number) {
+      Some(wal_offset) =>
+        range_read(self.wal, wal_offset + in_page.to_int64(), length)
+      None => {
+        if number > self.base_pages {
+          raise HostFailure("WAL 快照页面缺失")
+        }
+        range_read(self.base, position, length)
+      }
+    }
+    for i = 0; i < length; i = i + 1 {
+      output[copied + i] = input[i]
+    }
+    copied = copied + length
+  }
+  Bytes::from_array(output)
+}
+
+///|
+pub fn open_range_wal_source(
+  source : RangeWalSource,
+  limits? : Limits = Limits::default(),
+  max_report_pages? : Int = 100000,
+) -> Database raise SqliteError {
+  open_data_source(
+    WideSource(source),
+    limits,
+    Some(source.page_count),
+    max_report_pages~,
+  )
+}

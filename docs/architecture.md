@@ -92,7 +92,7 @@ CLI `summary` 提供中文文本摘要，显示上述范围、占页与带位置
 
 `DiagnosticLocation.phase` 标识检查阶段，`page_number` 是该阶段实际读取或检查的页面；`byte_offset` 从页起点计数，`cell_index` 从零计数。页布局失败额外保留 `PageDiagnostic`；record/schema 解码错误指向所属 cell 起点，不承诺解码 payload 内部或跨页字段的精确地址。overflow 链错误指向保存链接的源页字段，目标页读取失败则指向尝试读取的页且无页内偏移。Ptrmap 格式与对照失败指向 map 页的条目或父页字段。不能确定位置时保留 None，资源与 schema 元数据错误不沿用上一页的位置。
 
-位置快照与诊断一起保存；达到 max_issues 后两者一起截断，状态与进度均保留原有检查契约。未出现错误的 RecordLimit 前缀返回 Incomplete 和空 location。详细树及全局报告使用现有检查状态：宿主抛出 Invalid 仍可能表现为 Failed，但 ReadPage 阶段明确表示该页未能取得，调用者不能据此宣称数据库格式损坏。这与单页 inspect_page 对读取失败返回 Incomplete 的新契约不同。
+位置快照与诊断一起保存；达到 max_issues 后两者一起截断，状态与进度均保留原有检查契约。未出现错误的 RecordLimit 前缀返回 Incomplete 和空 location。详细树及全局报告使用现有检查状态：旧 `open_source` 的宿主抛出 Invalid 仍可能表现为 Failed，但 ReadPage 阶段明确表示该页未能取得，调用者不能据此宣称数据库格式损坏。这与单页 inspect_page 对读取失败返回 Incomplete 的新契约不同。
 
 CLI `tree-inspect ROOT [LIMIT]` 返回状态、成功解码记录数、完成原因、错误和位置；`inspect-details` 返回原有 `inspection` JSON 及与其 issues 逐项对应的 `locations` 数组。位置中的 `page_code` 是可选页布局分类，原始错误保留在相应报告中。两个命令均向 stdout 输出报告，退出码 0/1/2 分别表示 Complete/Failed/Incomplete；参数与初始化错误仍写 stderr。
 
@@ -127,4 +127,4 @@ CLI `page-inspect N` 返回上述报告；退出码为 0（Complete）、1（Fai
 
 ## 后续方向
 
-v0.5.0 已完成 WAL 帧检查与已提交快照覆盖；后续依次扩展 64 位与异步宿主读取、稳定版契约及有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。
+v0.6.0 已新增 `RangeSource`、`CachedSource` 和范围 WAL 源，64 位乘法用于页面寻址；WAL 逐帧读取，帧、覆盖索引、遍历和报告预算分开。新宿主错误统一映射为 Incomplete；旧入口保持原有语义。详见[范围读取契约](range-source.md)。后续依次扩展异步宿主读取、稳定版契约及有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。

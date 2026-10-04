@@ -1,36 +1,5 @@
 ///|
-extern "js" fn host_has_wal() -> Bool =
-  #| () => globalThis.moonsqlitefileHost.walBytes !== undefined
-
-///|
-extern "js" fn host_wal_bytes() -> Bytes =
-  #| () => globalThis.moonsqlitefileHost.walBytes
-
-///|
-extern "js" fn host_wal_prefix() -> Bool =
-  #| () => globalThis.moonsqlitefileHost.walPrefix === true
-
-///|
-fn cli_database() -> (@sqlite.Database, @sqlite.WalSource?) raise @sqlite.SqliteError {
-  if host_has_wal() {
-    let tail_policy = if host_wal_prefix() {
-      @sqlite.UseValidPrefix
-    } else {
-      @sqlite.RejectInvalidTail
-    }
-    let source = @sqlite.WalSource::new(
-      @sqlite.BytesSource::new(host_bytes()),
-      host_wal_bytes(),
-      tail_policy~,
-    )
-    (@sqlite.open_wal_source(source), Some(source))
-  } else {
-    (@sqlite.open_database(host_bytes()), None)
-  }
-}
-
-///|
-fn wal_json(report : @sqlite.WalInspection) -> Json {
+fn wal_json(report : @sqlite.RangeWalInspection) -> Json {
   let header = match report.header {
     None => Json::null()
     Some(header) =>
@@ -64,7 +33,7 @@ fn wal_json(report : @sqlite.WalInspection) -> Json {
       report.frames.map(frame => {
         Json::object({
           "index": frame.index.to_json(),
-          "byte_offset": frame.byte_offset.to_json(),
+          "byte_offset": wal_offset_json(frame.byte_offset),
           "page_number": frame.page_number.to_json(),
           "database_pages": frame.database_pages.to_json(),
           "checksum1": frame.checksum1.to_json(),
@@ -87,7 +56,17 @@ fn wal_json(report : @sqlite.WalInspection) -> Json {
       None => Json::null()
     },
     "stop_reason": Json::string(stop),
-    "stop_offset": report.stop_offset.to_json(),
-    "trailing_bytes": report.trailing_bytes.to_json(),
+    "stop_offset": wal_offset_json(report.stop_offset),
+    "trailing_bytes": wal_offset_json(report.trailing_bytes),
   })
+}
+
+///|
+// 既有 JSON 数值契约保持；超过 JavaScript 精确整数范围时才使用十进制字符串。
+fn wal_offset_json(value : Int64) -> Json {
+  if value <= 9007199254740991L {
+    Json::number(value.to_double())
+  } else {
+    Json::string(value.to_string())
+  }
 }

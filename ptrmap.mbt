@@ -61,7 +61,8 @@ fn Database::visit_ptrmap(
   let lock_page = 1073741824 / self.header.page_size + 1
   let mut cached_number = 0
   let mut cached = b""
-  for number = 2; number <= self.page_count; number = number + 1 {
+  for index = 1; index < self.page_count; index = index + 1 {
+    let number = index + 1
     if number == lock_page {
       continue
     }

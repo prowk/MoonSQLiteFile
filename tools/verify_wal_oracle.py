@@ -114,6 +114,9 @@ def verify(directory, name, base, wal):
     assert cli(journal, 'wal-inspect', code=1 if damaged else 0) == expected_wal
     args = ['--wal', journal]
     if damaged:
+        strict = subprocess.run(['node', str(CLI), str(main), '--wal', str(journal), 'header'],
+                                cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=30)
+        assert strict.returncode == 1 and 'invalid:' in strict.stderr and 'UseValidPrefix' in strict.stderr, strict.stderr
         cli(main, *args, 'header', code=1)
         args.append('--wal-prefix')
     info = cli(main, *args, 'wal-info')

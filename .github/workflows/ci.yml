@@ -45,6 +45,14 @@ jobs:
         run: python tools/verify_wal_oracle.py
       - name: Verify reviewed SQLite regressions
         run: python tools/verify_review.py
+      - name: Verify bounded file I/O and sparse 2 GiB reads
+        run: node tools/verify_range_io.cjs
+      - name: Verify valid WAL frame offsets beyond 2 GiB
+        run: node tools/verify_wide_wal.cjs
+      - name: Verify large payload budgets and UInt64 CLI options
+        run: python tools/verify_large_payload.py
+      - name: Verify repeated-page WAL benchmark and record I/O costs
+        run: python tools/benchmark_io.py
       - name: Run library example
         run: moon run --target js examples/basic
       - name: Verify packaged library in a separate consumer workspace
@@ -61,5 +69,17 @@ jobs:
         with:
           name: fuzz-failures-${{ github.run_id }}
           path: _build/fuzz-failures/
+          if-no-files-found: ignore
+          retention-days: 30
+      - name: Preserve range and large-data acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: range-acceptance-${{ github.run_id }}
+          path: |
+            _build/wide-wal.json
+            _build/large-payload.json
+            _build/io-benchmark.json
+            _build/inspection-evidence.json
           if-no-files-found: ignore
           retention-days: 30

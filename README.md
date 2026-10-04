@@ -24,7 +24,9 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 - **有界扫描**：逐条回调、提前停止、完成状态，以及记录数、树深度、页数和 payload 预算。
 - **结构检查**：单树检查和全局页归属报告，检测跨对象重复占页、freelist 冲突、未认领页及 auto-vacuum Ptrmap 不一致。
 - **WAL 快照**：两种 checksum 字节序、salt 与提交边界校验、只读覆盖数据源和最新已提交页版本；CLI 显式接收 db/WAL 一致副本。
-- **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource`、空间与位置报告、中文/JSON CLI，以及单文件离线页面导航。
+- **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource` / `RangeSource`、空间与位置报告、中文/JSON CLI，以及单文件离线页面导航。
+
+当前源码版本为 **v0.6.0（待发布）**：新增同步 64 位范围读取并修复已确认的空间与树结构缺陷。契约及迁移方法见[范围读取](docs/range-source.md)和[升级说明](docs/migration-0.6.md)。上方 Mooncakes 链接及下方安装命令仍指向当前已发布的 v0.5.0。
 
 ## 安装
 
@@ -172,7 +174,7 @@ v0.4.0 补齐所访问 B-tree 页的空间覆盖与碎片计数校验，提供�
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
-当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
+当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；旧同步 `PageSource` 使用 `Int` 偏移；v0.6.0 源码新增 `RangeSource`、`CachedSource` 和 `RangeWalSource`，支持 64 位长度/偏移与 db/WAL 按需读取，页号最多为 2147483647。仍未提供异步 I/O；全局报告及 WAL 索引须独立预算，见[范围读取契约](docs/range-source.md)。
 
 扫描或检查结果为 `Complete` 只表示其覆盖范围内的工作完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`；检查 API 将错误保留在报告中。
 
@@ -205,6 +207,8 @@ python tools/generate_btree_fixtures.py --check
 python tools/verify_btree_oracle.py
 python tools/verify_inspection.py
 python tools/verify_wal_oracle.py
+python tools/verify_review.py
+node tools/verify_range_io.cjs
 moon run --target js examples/basic
 python tools/verify_consumer.py
 python tools/build_viewer.py
@@ -212,7 +216,7 @@ node tools/verify_viewer.cjs
 node tools/fuzz.cjs --seed 20261003 --iterations 512
 ```
 
-v0.5.0 四后端各执行 98 项用例；新增 29 组 WAL 快照和 5470 条记录的 SQLite 独立恢复对照。原有对照继续覆盖 1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 18 个数据库 2412 页；Linux CI 启用 dbstat。当前代码生成的接口对照 v0.3.0 的 85 项和 v0.4.0 的 123 项声明，发布包在四后端实际运行。CI 执行 512 次主文件/WAL 混合变更，每日任务执行 5000 次；失败时保存配对主文件。详见[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
+v0.6.0 源码四后端各执行 112 项用例，新增 54 组 SQLite SQL 操作差分、2 GiB 稀疏文件及范围输入对照；新增 29 组 WAL 快照和 5470 条记录的 SQLite 独立恢复对照。原有对照继续覆盖 1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 18 个数据库 2412 页；Linux CI 启用 dbstat。当前代码生成的接口对照 v0.3.0 的 85 项、v0.4.0 的 123 项和 v0.5.0 的 160 项声明，发布包在四后端实际运行。CI 执行 512 次主文件/WAL 混合变更，每日任务执行 5000 次；失败时保存配对主文件。详见[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

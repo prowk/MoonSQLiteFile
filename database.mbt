@@ -22,9 +22,11 @@ pub fn Limits::default() -> Limits {
 ///|
 pub struct Database {
   source : &PageSource
+  priv data_source : DataSource
   header : Header
   page_count : Int
   limits : Limits
+  priv report_max_pages : Int
 }
 
 ///|
@@ -53,11 +55,14 @@ pub fn Database::read_page(
   if number < 1 || number > self.page_count {
     raise Invalid("页号越界：\{number}")
   }
-  let offset = (number - 1) * self.header.page_size
-  source_read(self.source, offset, self.header.page_size)
+  let offset = (number - 1).to_int64() * self.header.page_size.to_int64()
+  data_read(self.data_source, offset, self.header.page_size)
 }
 
 ///|
 fn page_number(value : UInt) -> Int raise SqliteError {
-  bounded_int(value.to_uint64(), "page number")
+  if value > 2147483647U {
+    raise LimitExceeded("页号超出当前 Int 页号接口范围")
+  }
+  value.reinterpret_as_int()
 }

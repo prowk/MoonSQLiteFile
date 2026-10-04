@@ -9,10 +9,6 @@ extern "js" fn host_args() -> FixedArray[String] =
   #| () => globalThis.moonsqlitefileHost.args
 
 ///|
-extern "js" fn host_bytes() -> Bytes =
-  #| () => globalThis.moonsqlitefileHost.bytes
-
-///|
 extern "js" fn host_output(text : String) -> Unit =
   #| text => globalThis.moonsqlitefileHost.output(text)
 
@@ -158,7 +154,10 @@ fn run(args : FixedArray[String]) -> Json raise {
     if host_has_wal() {
       raise Usage("wal-inspect 直接接收 WAL 文件，不接受 --wal")
     }
-    let report = @sqlite.inspect_wal(host_bytes())
+    let report = @sqlite.inspect_wal_source(
+      HostSource::{ wal: false, },
+      max_frames=host_option("max-frames", 100000),
+    )
     host_exit_code(
       match report.stop_reason {
         @sqlite.WalEndOfFile => 0
@@ -261,9 +260,18 @@ fn run(args : FixedArray[String]) -> Json raise {
     "scan" => {
       let root = parse_number(args[2], false)
       let summary = if args.length() == 4 {
-        db.scan_btree(root, _ => true, limit=parse_number(args[3], true))
+        db.scan_btree(
+          root,
+          _ => true,
+          limit=parse_number(args[3], true),
+          max_total_payload_bytes=host_payload_budget(),
+        )
       } else {
-        db.scan_btree(root, _ => true)
+        db.scan_btree(
+          root,
+          _ => true,
+          max_total_payload_bytes=host_payload_budget(),
+        )
       }
       let completion = match summary.completion {
         @sqlite.Complete => "complete"
@@ -279,7 +287,10 @@ fn run(args : FixedArray[String]) -> Json raise {
     }
     "freelist" => db.freelist().to_json()
     "viewer-data" => {
-      let details = db.inspect_database_details()
+      let details = db.inspect_database_details(
+        max_issues=host_option("max-issues", 100),
+        max_total_payload_bytes=host_payload_budget(),
+      )
       report_exit(details.inspection.status)
       Json::object({
         "header": header_json(db),
@@ -291,12 +302,18 @@ fn run(args : FixedArray[String]) -> Json raise {
       })
     }
     "summary-json" => {
-      let report = db.inspect_database()
+      let report = db.inspect_database(
+        max_issues=host_option("max-issues", 100),
+        max_total_payload_bytes=host_payload_budget(),
+      )
       report_exit(report.status)
       summary_json(db, report)
     }
     "inspect-details" => {
-      let details = db.inspect_database_details()
+      let details = db.inspect_database_details(
+        max_issues=host_option("max-issues", 100),
+        max_total_payload_bytes=host_payload_budget(),
+      )
       report_exit(details.inspection.status)
       Json::object({
         "inspection": inspection_json(details.inspection),
@@ -308,9 +325,16 @@ fn run(args : FixedArray[String]) -> Json raise {
     "tree-inspect" => {
       let root = parse_number(args[2], false)
       let details = if args.length() == 4 {
-        db.inspect_btree_details(root, limit=parse_number(args[3], true))
+        db.inspect_btree_details(
+          root,
+          limit=parse_number(args[3], true),
+          max_total_payload_bytes=host_payload_budget(),
+        )
       } else {
-        db.inspect_btree_details(root)
+        db.inspect_btree_details(
+          root,
+          max_total_payload_bytes=host_payload_budget(),
+        )
       }
       let report = details.inspection
       report_exit(report.status)
@@ -348,7 +372,10 @@ fn run(args : FixedArray[String]) -> Json raise {
       })
     }
     "inspect" => {
-      let report = db.inspect_database()
+      let report = db.inspect_database(
+        max_issues=host_option("max-issues", 100),
+        max_total_payload_bytes=host_payload_budget(),
+      )
       // JSON 报告始终保留在 stdout，退出码区分完整、失败和未完成。
       host_exit_code(
         match report.status {
@@ -465,7 +492,10 @@ fn main {
         raise Usage("用法：node tools/inspect.cjs FILE summary")
       }
       let (db, _) = cli_database()
-      let details = db.inspect_database_details()
+      let details = db.inspect_database_details(
+        max_issues=host_option("max-issues", 100),
+        max_total_payload_bytes=host_payload_budget(),
+      )
       report_exit(details.inspection.status)
       host_output(summary_text(db, details))
     } else {

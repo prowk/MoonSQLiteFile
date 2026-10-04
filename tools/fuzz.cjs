@@ -55,7 +55,7 @@ async function main() {
       fs.writeFileSync(path.join(directory, `${hash}.sqlite`), bytes);
       if (base != null) fs.writeFileSync(path.join(directory, `${hash}.base.sqlite`), base);
       fs.writeFileSync(path.join(directory, `${hash}.json`), JSON.stringify({...metadata, seed, page,
-        sha256: hash, bytes: bytes.length, error: error.stack || String(error)}, null, 2), 'utf8');
+        probes: ['legacy','range','adapter','range_cache','adapter_cache','fault_reports'], sha256: hash, bytes: bytes.length, error: error.stack || String(error)}, null, 2), 'utf8');
       throw new Error(`模糊测试失败，样本：_build/fuzz-failures/${hash}.sqlite\n${error.stack || error}`);
     }
   }
@@ -105,7 +105,7 @@ async function main() {
         await execute(bytes, page, {kind: isWal ? 'wal' : 'db', corpus: names[index], iteration, mutation: mode}, isWal ? corpus[index] : null);
       }
     }
-    console.log(`Fuzz passed: seed=${seed}, mutations=${replay ? 'replay' : iterations}, corpus=${corpus.length}, wal_corpus=${walCorpus.length}, results=${JSON.stringify(counts)}`);
+    console.log(`Fuzz passed: seed=${seed}, mutations=${replay ? 'replay' : iterations}, entrypoints=legacy/range/adapter+cache/fault_reports, corpus=${corpus.length}, wal_corpus=${walCorpus.length}, results=${JSON.stringify(counts)}`);
   } finally { await worker.terminate(); }
 }
 function numeric(text, maximum) {

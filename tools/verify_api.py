@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def declarations(source):
     # 生成的接口每个声明独占一行或一个无嵌套大括号块；完整块比较保护构造与穷举匹配。
+    # moon info 的私有字段占位注释不属于公开声明；仍完整比较所有可见字段及类型。
+    source = re.sub(r'^  // private fields\n', '', source, flags=re.M)
     return re.findall(r'^pub[^\n{]*(?:\{[^}]*\}[^\n]*|[^\n]*)', source, re.M)
 
 
@@ -23,7 +25,7 @@ def main():
     if actual != expected:
         raise SystemExit('公开接口文件未同步；已生成当前接口，请审查变化并重新验证')
     current = set(declarations(actual))
-    for version in ['0.3.0', '0.4.0']:
+    for version in ['0.3.0', '0.4.0', '0.5.0']:
         baseline = declarations((ROOT / f'tools/api-v{version}.mbti').read_text(encoding='utf-8'))
         assert baseline, f'公开 API 基线为空：{version}'
         removed = [declaration for declaration in baseline if declaration not in current]
