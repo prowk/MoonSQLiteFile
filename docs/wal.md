@@ -14,7 +14,7 @@ salt 不匹配可能是 WAL reset 后未覆盖的旧尾部，checksum 或截断�
 
 ## 覆盖数据源
 
-`WalSource::new(base, wal, tail_policy?, max_frames?)` 接收第三方同步 `PageSource` 和不可变 WAL 字节，提供只读 `PageSource`。`source.inspection()` 提供帧报告，`source.page_count()` 提供提交后逻辑页数。使用 `open_wal_source(source, limits?)` 得到原有 `Database`，或用 `open_wal_database(db_bytes, wal_bytes, ...)` 简化内存输入。
+`WalSource::new(base, wal, tail_policy?, max_frames?)` 接收第三方同步 `PageSource` 和不可变 WAL 字节，提供只读 `PageSource`。`source.inspection()` 提供帧报告，`source.page_count()` 提供提交后逻辑页数。使用 `open_wal_source(source, limits?)` 得到原有 `Database`，或用 `open_wal_database(db_bytes, wal_bytes, ...)` 简化内存输入。打开 WAL 视图时使用这两个专用入口，普通 `open_source` 仍按主文件页 1 的原始声明确定页数。覆盖源不会改写原始页 1 字节，因此 `header().declared_pages` 可能与权威的 `page_count()` 不同。
 
 默认 `RejectInvalidTail` 拒绝非 EOF 的异常尾部，包括 reset 后的旧 salt。调用者先检查报告，再显式选择 `UseValidPrefix`，可按 SQLite 的有效前缀规则忽略首个无效帧及其后全部内容，只读取此前最后一个完整提交。合法的未提交尾帧在两种策略中都不进入快照。帧限额即使使用前缀策略也抛出 `LimitExceeded`，避免把较早的提交当作最新提交。
 

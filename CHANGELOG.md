@@ -1,6 +1,6 @@
 # 更新记录
 
-## 未发布
+## 0.5.0
 
 持续模糊测试扩展到 WAL：每四次变更中一次使用配对主文件与 WAL，覆盖双 checksum 字节序和未提交尾帧；部分变更重算 checksum，继续检查覆盖源及损坏页面。失败样本同时保存主文件并自动配对重放。修正模糊工具对 65536 页头编码 1 的实际页长定位。
 
@@ -8,7 +8,9 @@ CLI 新增 `--wal WAL [--wal-prefix]`，所有原有命令可读取覆盖快照�
 
 新增 WAL header/frame 校验、两种累计 checksum 字节序、salt 和提交边界报告。`parse_wal_header` 与 `inspect_wal` 提供连续有效帧及首个停止原因，覆盖空 WAL、未提交帧、异常尾部与资源上限。
 
-新增只读 `WalSource`、`open_wal_source` 和 `open_wal_database`，复用原有 Database 检查器读取最新已提交快照，采用提交后的逻辑页数；正确隔离未提交更新、缩小及重新增长后的旧页面版本。默认拒绝异常尾部，显式 `UseValidPrefix` 才使用此前完整提交；帧限额不足不能作为旧快照成功返回。宿主负责同一时刻的一致静态 db/WAL 副本，不提供在线锁或 checkpoint。详见 [WAL 契约](docs/wal.md)。相关能力随 v0.5.0 整体验收后统一发布。
+新增只读 `WalSource`、`open_wal_source` 和 `open_wal_database`，复用原有 Database 检查器读取最新已提交快照，采用提交后的逻辑页数；正确隔离未提交更新、缩小及重新增长后的旧页面版本。默认拒绝异常尾部，显式 `UseValidPrefix` 才使用此前完整提交；帧限额不足不能作为旧快照成功返回。宿主负责同一时刻的一致静态 db/WAL 副本，不提供在线锁或 checkpoint。详见 [WAL 契约](docs/wal.md)。
+
+保持 v0.3.0 的 85 项和 v0.4.0 的 123 项公开声明兼容，检查器先重新生成当前接口以确认同步。独立消费项目覆盖第三方 PageSource、WAL header/frame 报告和已提交视图，并在四后端运行。四后端各 98 项回归通过，新增 29 组 WAL 快照、5470 条记录的 SQLite 恢复对照；原有 1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 2412 页对照继续通过。新入口的严格尾部、逻辑页数及副本责任见 [v0.5.0 升级说明](docs/migration-0.5.md)。
 
 ## 0.4.0
 

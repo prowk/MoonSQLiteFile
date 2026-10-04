@@ -3,12 +3,12 @@
 # MoonSQLiteFile
 
 [![CI](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml)
-[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.4.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.4.0)
+[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.5.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.5.0)
 [![License](https://img.shields.io/badge/License-Apache--2.0-2563eb)](https://github.com/prowk/MoonSQLiteFile/blob/main/LICENSE)
 
 **纯 MoonBit 的 SQLite 文件解析与检查库**
 
-[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.4.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
+[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.5.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
 
 </div>
 
@@ -23,6 +23,7 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 - **表与索引读取**：多层 rowid 表、索引内部页记录、WITHOUT ROWID 表、overflow 链及 `sqlite_schema`。
 - **有界扫描**：逐条回调、提前停止、完成状态，以及记录数、树深度、页数和 payload 预算。
 - **结构检查**：单树检查和全局页归属报告，检测跨对象重复占页、freelist 冲突、未认领页及 auto-vacuum Ptrmap 不一致。
+- **WAL 快照**：两种 checksum 字节序、salt 与提交边界校验、只读覆盖数据源和最新已提交页版本；CLI 显式接收 db/WAL 一致副本。
 - **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource`、空间与位置报告、中文/JSON CLI，以及单文件离线页面导航。
 
 ## 安装
@@ -30,7 +31,7 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 使用 MoonBit release 工具链，在现有项目中运行：
 
 ```sh
-moon add prowk/moonsqlitefile@0.4.0
+moon add prowk/moonsqlitefile@0.5.0
 ```
 
 在消费包的 `moon.pkg` 中添加导入：
@@ -104,6 +105,16 @@ fn inspect_file(data : Bytes) -> @sqlite.DatabaseInspection raise @sqlite.Sqlite
 
 只检查一棵树时使用 `db.inspect_btree(root_page)`；读取原始反向指针时使用 `db.ptrmap_entries()`。结构检查范围与各标记的含义详见 [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md)。
 
+### 读取 WAL 快照
+
+```moonbit
+fn read_committed(db_bytes : Bytes, wal_bytes : Bytes) -> @sqlite.Database raise @sqlite.SqliteError {
+  @sqlite.open_wal_database(db_bytes, wal_bytes)
+}
+```
+
+`inspect_wal` 提供帧/提交报告；`WalSource::new` 可包装第三方同步源，再用 `open_wal_source` 打开。默认拒绝异常尾部，显式 `UseValidPrefix` 才读取异常前的完整提交；帧预算不足不能当作最新快照成功。输入必须是同一时刻的一致静态副本，详见 [WAL 契约](docs/wal.md)和[升级说明](docs/migration-0.5.md)。
+
 ## 命令行工具
 
 CLI 需要 MoonBit release 工具链和 Node.js 22 或更新版本，无 npm 依赖：
@@ -138,12 +149,22 @@ node tools/inspect.cjs fixtures/btree.sqlite summary
 | `summary` | 中文检查摘要、页面分类、对象占页及诊断 |
 | `summary-json` | 精简 JSON 汇总，适合展示层消费 |
 | `viewer-data` | 同一次扫描的文件头、汇总、详细诊断与导航数据 |
+| `wal-inspect` | 输入为 WAL 文件，输出连续有效帧和提交边界 |
+| `wal-info` | 配合 `--wal` 输出帧报告、最新快照页数与尾部策略 |
 
 除 `summary` 输出中文文本外，成功时 stdout 输出一行 JSON；参数、初始化或读取错误写入 stderr，并返回非零退出码。能够构造报告的检查与摘要命令始终将报告写入 stdout：退出码 `0` 表示完整、`1` 表示失败、`2` 表示未完成，诊断与覆盖范围保留在报告中。整数和 rowid 输出为十进制字符串，BLOB 输出为十六进制字符串，避免 JavaScript 丢失 64 位整数精度。`rows` 默认上限为 100000 行，显式传入 `0` 返回空数组。
 
+WAL 输入格式为 `node tools/inspect.cjs DB --wal WAL [--wal-prefix] COMMAND [arguments]`。选项放在命令前；原有命令都读取同一已提交覆盖视图。不提供 `--wal` 时继续只读主文件，不自动加载相邻日志。`wal-inspect` 直接接收 WAL 文件并以 0/1/2 区分 EOF/异常尾部/帧预算不足。示例：
+
+```sh
+node tools/inspect.cjs snapshot.wal wal-inspect
+node tools/inspect.cjs snapshot.db --wal snapshot.wal wal-info
+node tools/inspect.cjs snapshot.db --wal snapshot.wal inspect-details
+```
+
 ## 离线页面导航
 
-从 [v0.4.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.4.0) 下载 `moonsqlitefile-viewer.html`，或执行 `python tools/build_viewer.py` 构建单个 HTML。在支持 Blob Worker 的现代浏览器中打开，选择静态数据库副本或载入示例，即可从对象跳到根页、父子页和 overflow，查看空间分布、cell 位置与原始字节。演示限制 64 MiB 和单次 30 秒，不加载外部资源。完整使用方法见[离线示例](examples/offline-viewer/README.md)。
+从 [v0.5.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.5.0) 下载 `moonsqlitefile-viewer.html`，或执行 `python tools/build_viewer.py` 构建单个 HTML。在支持 Blob Worker 的现代浏览器中打开，选择静态数据库副本或载入示例，即可从对象跳到根页、父子页和 overflow，查看空间分布、cell 位置与原始字节。演示仅接收单个静态主文件，不接收 WAL；限制 64 MiB 和单次 30 秒，不加载外部资源。完整使用方法见[离线示例](examples/offline-viewer/README.md)。
 
 ## 支持范围与限制
 
@@ -151,7 +172,7 @@ v0.4.0 补齐所访问 B-tree 页的空间覆盖与碎片计数校验，提供�
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
-当前版本只读静态数据库文件，不执行 SQL、不写数据库、不合并 WAL。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
+当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；同步 `PageSource` 使用 `Int` 偏移，尚未提供完整的大文件及异步 I/O 支持。
 
 扫描或检查结果为 `Complete` 只表示其覆盖范围内的工作完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`；检查 API 将错误保留在报告中。
 
@@ -183,6 +204,7 @@ python tools/verify_oracle.py
 python tools/generate_btree_fixtures.py --check
 python tools/verify_btree_oracle.py
 python tools/verify_inspection.py
+python tools/verify_wal_oracle.py
 moon run --target js examples/basic
 python tools/verify_consumer.py
 python tools/build_viewer.py
@@ -190,7 +212,7 @@ node tools/verify_viewer.cjs
 node tools/fuzz.cjs --seed 20261003 --iterations 512
 ```
 
-v0.4.0 在四后端各执行 86 项用例；SQLite 对照覆盖 1063 行普通表数据、4407 条索引及 WITHOUT ROWID 记录，以及 18 个数据库的 2412 页。Linux CI 使用 SQLite dbstat 核实逐页空间和每对象占页；本地没有 dbstat 时仍验证字节分项、元数据和受控损坏。CI 另验证 85 项旧版 API 声明、实际打包 HTML、独立包消费和 512 次固定种子的有界变更；每日模糊任务运行 5000 次并保存失败输入。详见[模糊测试与重放](docs/fuzzing.md)和[样本说明](fixtures/README.md)。
+v0.5.0 四后端各执行 98 项用例；新增 29 组 WAL 快照和 5470 条记录的 SQLite 独立恢复对照。原有对照继续覆盖 1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 18 个数据库 2412 页；Linux CI 启用 dbstat。当前代码生成的接口对照 v0.3.0 的 85 项和 v0.4.0 的 123 项声明，发布包在四后端实际运行。CI 执行 512 次主文件/WAL 混合变更，每日任务执行 5000 次；失败时保存配对主文件。详见[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

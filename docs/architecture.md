@@ -115,9 +115,16 @@ CLI `page-inspect N` 返回上述报告；退出码为 0（Complete）、1（Fai
 - 支持 SQLite 3 普通 rowid 表、多层 table B-tree、schema、overflow、freelist、UTF-8/UTF-16LE/UTF-16BE、512–65536 字节页。
 - 四种 B-tree 均可遍历记录；索引采用左子树 → 内部 cell → 右子树顺序。WITHOUT ROWID 返回主键列在前的磁盘存储顺序，rowid 为 None。索引返回索引字段与附加 rowid/主键；附加值保留在 values 中，不单独推断。
 - `read_table`/`table_rows` 保持 v0.1 的普通 rowid 表接口；WITHOUT ROWID 请使用 `table_records`。尚不解释 SQL 列映射、collation、DESC 排序或约束，不对这些语义宣称验证通过。
-- 不执行 SQL、不写入数据库、不合并 WAL、不处理 hot rollback journal、不恢复删除记录、不解密文件。
-- 输入须为未被其他进程写入的完整数据库副本。WAL 模式应先在 SQLite 中 checkpoint 并安全复制或使用备份 API 获取快照；只读取 `.db` 无法看到未 checkpoint 的事务。文件头允许 WAL 版本号不代表实现了 WAL。
+- 提供 WAL 帧校验和最新已提交只读覆盖源；默认拒绝无效尾部，显式前缀策略只采用此前完整提交。只读快照不写回主文件。
+- 不执行 SQL、不写入数据库、不执行 checkpoint、不处理 hot rollback journal、不恢复删除记录、不解密文件。
+- 输入须为未被其他进程写入的完整静态副本。WAL 模式可先 checkpoint/备份后读取主文件，或提供同一时刻的一致 db/WAL 副本并显式使用 WAL 入口；只读取 `.db` 无法看到未 checkpoint 的事务。salt/checksum 不验证主文件身份，在线锁协议仍由宿主提供。
+
+## WAL 快照（v0.5.0）
+
+`parse_wal_header` / `inspect_wal` 验证格式、两种 checksum 输入字节序、salt、连续有效范围和提交边界，保留首个停止原因。`WalSource` 实现 PageSource，反向线性索引最后提交前的页版本，忽略未提交帧；缩小边界淘汰旧的高页号版本，再次增长需要完整新页覆盖。`open_wal_source` 用提交页数初始化原有 Database；原始页 1 声明不覆盖逻辑边界。
+
+接口、异常尾部、空 WAL 与一致副本责任详见 [WAL 契约](wal.md)。这里只读取最新已提交视图，不提供历史事务、在线锁、shm、checkpoint 或写事务。原有静态主文件 API、公开结构和 JSON 不增加字段。
 
 ## 后续方向
 
-v0.4.0 已完成结构化诊断、页面统计与最小离线导航；后续依次扩展 WAL 帧检查与已提交快照覆盖、64 位与异步宿主读取、稳定版契约及有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。
+v0.5.0 已完成 WAL 帧检查与已提交快照覆盖；后续依次扩展 64 位与异步宿主读取、稳定版契约及有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。

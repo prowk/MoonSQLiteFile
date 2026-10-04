@@ -16,3 +16,5 @@ __pycache__/
 /tools/verify_viewer.cjs
 
 /tools/api-v0.3.0.mbti
+
+/tools/api-v0.4.0.mbti

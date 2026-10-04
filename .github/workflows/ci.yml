@@ -29,7 +29,7 @@ jobs:
       - run: moon build --target all --deny-warn
       - run: moon test --target all --deny-warn
       - run: moon fmt --check
-      - name: Verify v0.3.0 public API remains source compatible
+      - name: Verify historical public API and generated interface
         run: python tools/verify_api.py
       - name: Verify committed fixture bytes
         run: python tools/generate_fixtures.py --check

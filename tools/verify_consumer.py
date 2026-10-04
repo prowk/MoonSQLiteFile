@@ -133,13 +133,37 @@ impl @sqlite.PageSource for ConsumerSource with read_range(self, offset, count) 
       abort("独立消费项目的对象占页汇总失败")
     }
     println(''')
+        if not args.registry or tuple(map(int, version.split(".")[:2])) >= (0, 5):
+            main_source = main_source.replace('    println(', '''    let payload = data.to_array()
+    payload[63] = 11
+    let wal = b"\\x37\\x7f\\x06\\x83\\x00\\x2d\\xe2\\x18\\x00\\x00\\x02\\x00\\x00\\x00\\x00\\x11\\x11\\x22\\x33\\x44\\x55\\x66\\x77\\x88\\x27\\x26\\xfe\\x2c\\x23\\x66\\x4f\\x7e\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x11\\x22\\x33\\x44\\x55\\x66\\x77\\x88\\x49\\x40\\x5d\\xe6\\xbc\\xc9\\x5c\\x00" + Bytes::from_array(payload)
+    if @sqlite.parse_wal_header(wal).checksum_order != @sqlite.BigEndianChecksum {
+      abort("独立消费项目的 WAL header 验证失败")
+    }
+    let inspection = @sqlite.inspect_wal(wal)
+    if inspection.committed_frames != 1 || inspection.database_pages != Some(1U) || inspection.stop_reason != @sqlite.WalEndOfFile {
+      abort("独立消费项目的 WAL 帧报告失败")
+    }
+    let source = @sqlite.WalSource::new(ConsumerSource::{data,}, wal)
+    if source.byte_length() != 512 || source.page_count() != 1 || source.read_range(60,4) != b"\\x00\\x00\\x00\\x0b" || source.inspection().commits.length() != 1 {
+      abort("第三方数据源的 WAL 覆盖失败")
+    }
+    let snapshot = @sqlite.open_wal_source(source)
+    if snapshot.header().user_version != 11U || snapshot.inspect_database().status != @sqlite.Complete {
+      abort("独立消费项目的 WAL 快照检查失败")
+    }
+    if @sqlite.open_wal_database(data, wal, tail_policy=@sqlite.UseValidPrefix).header().user_version != 11U || @sqlite.open_wal_database(data,b"").page_count() != 1 {
+      abort("内存 WAL 与空日志消费失败")
+    }
+    println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:
             run(["moon", "update"], consumer)
         for action in ("check", "build", "test"):
             run(["moon", action, "--target", "all", "--deny-warn"], consumer)
-        output = run(["moon", "run", "--target", "js", "."], consumer)
-        assert output.strip() == "pages=1, schema=0", output
+        for backend in ("wasm", "wasm-gc", "js", "native"):
+            output = run(["moon", "run", "--target", backend, "."], consumer)
+            assert output.strip() == "pages=1, schema=0", output
     print(f"Verified {'registry' if args.registry else 'packaged'} consumer: {name}@{version}, four backends")
 
 
