@@ -10,11 +10,19 @@ pub fn decode_record(Bytes, Int) -> Array[Value] raise SqliteError
 
 pub fn decode_varint(Bytes, Int) -> (UInt64, Int) raise SqliteError
 
+pub fn inspect_wal(Bytes, max_frames? : Int) -> WalInspection raise SqliteError
+
 pub fn open_database(Bytes, limits? : Limits) -> Database raise SqliteError
 
 pub fn open_source(&PageSource, limits? : Limits) -> Database raise SqliteError
 
+pub fn open_wal_database(Bytes, Bytes, limits? : Limits, tail_policy? : WalTailPolicy, max_frames? : Int) -> Database raise SqliteError
+
+pub fn open_wal_source(WalSource, limits? : Limits) -> Database raise SqliteError
+
 pub fn parse_header(Bytes) -> Header raise SqliteError
+
+pub fn parse_wal_header(Bytes) -> WalHeader raise SqliteError
 
 // Errors
 pub(all) suberror SqliteError {
@@ -373,6 +381,96 @@ pub(all) enum Value {
 pub fn Value::equal(Self, Self) -> Bool
 pub fn Value::not_equal(Self, Self) -> Bool
 pub fn Value::to_repr(Self) -> @debug.Repr
+
+pub(all) enum WalChecksumOrder {
+  LittleEndianChecksum
+  BigEndianChecksum
+} derive(Eq, @debug.Debug)
+pub fn WalChecksumOrder::equal(Self, Self) -> Bool
+pub fn WalChecksumOrder::not_equal(Self, Self) -> Bool
+pub fn WalChecksumOrder::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalCommit {
+  frame_index : Int
+  database_pages : UInt
+} derive(Eq, @debug.Debug)
+pub fn WalCommit::equal(Self, Self) -> Bool
+pub fn WalCommit::not_equal(Self, Self) -> Bool
+pub fn WalCommit::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalFrame {
+  index : Int
+  byte_offset : Int
+  page_number : UInt
+  database_pages : UInt
+  checksum1 : UInt
+  checksum2 : UInt
+} derive(Eq, @debug.Debug)
+pub fn WalFrame::equal(Self, Self) -> Bool
+pub fn WalFrame::not_equal(Self, Self) -> Bool
+pub fn WalFrame::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalHeader {
+  checksum_order : WalChecksumOrder
+  version : UInt
+  page_size : Int
+  checkpoint_sequence : UInt
+  salt1 : UInt
+  salt2 : UInt
+  checksum1 : UInt
+  checksum2 : UInt
+} derive(Eq, @debug.Debug)
+pub fn WalHeader::equal(Self, Self) -> Bool
+pub fn WalHeader::not_equal(Self, Self) -> Bool
+pub fn WalHeader::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalInspection {
+  header : WalHeader?
+  frames : Array[WalFrame]
+  commits : Array[WalCommit]
+  committed_frames : Int
+  database_pages : UInt?
+  stop_reason : WalStopReason
+  stop_offset : Int
+  trailing_bytes : Int
+} derive(@debug.Debug)
+pub fn WalInspection::to_repr(Self) -> @debug.Repr
+
+pub struct WalSource {
+  base : &PageSource
+  wal : Bytes
+  page_size : Int
+  page_count : Int
+  base_pages : Int
+  overlay : Map[Int, Int]
+  inspection : WalInspection
+}
+pub fn WalSource::byte_length(Self) -> Int
+pub fn WalSource::inspection(Self) -> WalInspection
+pub fn WalSource::new(&PageSource, Bytes, tail_policy? : WalTailPolicy, max_frames? : Int) -> Self raise SqliteError
+pub fn WalSource::page_count(Self) -> Int
+pub fn WalSource::read_range(Self, Int, Int) -> Bytes raise SqliteError
+pub impl PageSource for WalSource
+
+pub(all) enum WalStopReason {
+  WalEndOfFile
+  WalTruncatedFrame
+  WalSaltMismatch
+  WalChecksumMismatch
+  WalInvalidFrame
+  WalFrameLimit
+} derive(Eq, @debug.Debug)
+pub fn WalStopReason::equal(Self, Self) -> Bool
+pub fn WalStopReason::not_equal(Self, Self) -> Bool
+pub fn WalStopReason::to_repr(Self) -> @debug.Repr
+
+pub(all) enum WalTailPolicy {
+  RejectInvalidTail
+  UseValidPrefix
+} derive(Eq, @debug.Debug)
+pub fn WalTailPolicy::equal(Self, Self) -> Bool
+pub fn WalTailPolicy::not_equal(Self, Self) -> Bool
+pub fn WalTailPolicy::to_repr(Self) -> @debug.Repr
 
 // Type aliases
 

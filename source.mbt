@@ -51,6 +51,15 @@ pub fn open_source(
   source : &PageSource,
   limits? : Limits = Limits::default(),
 ) -> Database raise SqliteError {
+  open_sized_source(source, limits, None)
+}
+
+///|
+fn open_sized_source(
+  source : &PageSource,
+  limits : Limits,
+  committed_pages : Int?,
+) -> Database raise SqliteError {
   if limits.max_rows < 1 ||
     limits.max_payload_bytes < 1 ||
     limits.max_pages < 1 ||
@@ -63,7 +72,12 @@ pub fn open_source(
     raise Invalid("数据库文件不包含完整页面")
   }
   let physical_pages = size / header.page_size
-  let page_count = if header.declared_pages != 0U &&
+  let page_count = if committed_pages is Some(pages) {
+    if pages != physical_pages {
+      raise Invalid("WAL 逻辑页数与快照长度不一致")
+    }
+    pages
+  } else if header.declared_pages != 0U &&
     header.change_counter == header.version_valid_for {
     let declared = bounded_int(
       header.declared_pages.to_uint64(),
