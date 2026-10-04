@@ -132,7 +132,7 @@ fn page_json(page : @sqlite.Page) -> Json {
 
 ///|
 fn run(args : FixedArray[String]) -> Json raise {
-  let usage = "用法：node tools/inspect.cjs FILE header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json|viewer-data"
+  let usage = "用法：node tools/inspect.cjs FILE [--wal WAL [--wal-prefix]] header|schema|page N|page-inspect N|rows TABLE [LIMIT]|records TABLE [LIMIT]|index INDEX [LIMIT]|scan ROOT [LIMIT]|freelist|inspect|inspect-details|tree-inspect ROOT [LIMIT]|summary|summary-json|viewer-data|wal-inspect|wal-info"
   if args.length() < 2 {
     raise Usage(usage)
   }
@@ -144,6 +144,8 @@ fn run(args : FixedArray[String]) -> Json raise {
     | "inspect"
     | "inspect-details"
     | "summary-json"
+    | "wal-inspect"
+    | "wal-info"
     | "viewer-data" => if args.length() != 2 { raise Usage(usage) }
     "page" | "page-inspect" => if args.length() != 3 { raise Usage(usage) }
     "rows" | "records" | "index" | "scan" | "tree-inspect" =>
@@ -152,8 +154,37 @@ fn run(args : FixedArray[String]) -> Json raise {
       }
     _ => raise Usage("未知命令：\{command}\n\{usage}")
   }
-  let db = @sqlite.open_database(host_bytes())
+  if command == "wal-inspect" {
+    if host_has_wal() {
+      raise Usage("wal-inspect 直接接收 WAL 文件，不接受 --wal")
+    }
+    let report = @sqlite.inspect_wal(host_bytes())
+    host_exit_code(
+      match report.stop_reason {
+        @sqlite.WalEndOfFile => 0
+        @sqlite.WalFrameLimit => 2
+        _ => 1
+      },
+    )
+    return wal_json(report)
+  }
+  if command == "wal-info" && !host_has_wal() {
+    raise Usage("wal-info 必须提供 --wal WAL")
+  }
+  let (db, wal) = cli_database()
   match command {
+    "wal-info" =>
+      Json::object({
+        "wal": wal_json(wal.unwrap().inspection()),
+        "snapshot": header_json(db),
+        "tail_policy": Json::string(
+          if host_wal_prefix() {
+            "valid_prefix"
+          } else {
+            "strict"
+          },
+        ),
+      })
     "header" => header_json(db)
     "schema" => {
       let entries = db.schema()
@@ -433,7 +464,7 @@ fn main {
       if args.length() != 2 {
         raise Usage("用法：node tools/inspect.cjs FILE summary")
       }
-      let db = @sqlite.open_database(host_bytes())
+      let (db, _) = cli_database()
       let details = db.inspect_database_details()
       report_exit(details.inspection.status)
       host_output(summary_text(db, details))

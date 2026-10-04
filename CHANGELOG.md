@@ -2,6 +2,8 @@
 
 ## 未发布
 
+CLI 新增 `--wal WAL [--wal-prefix]`，所有原有命令可读取覆盖快照；`wal-inspect` 检查独立 WAL，`wal-info` 展示帧、提交边界、停止原因与快照页数。新增真实 SQLite WAL 恢复对照，覆盖两种 checksum 字节序、三种文本编码、512/4096/65536 页、多事务、未提交尾部、中间损坏、reset 与缩小后增长；核实输入文件没有被改写。
+
 新增 WAL header/frame 校验、两种累计 checksum 字节序、salt 和提交边界报告。`parse_wal_header` 与 `inspect_wal` 提供连续有效帧及首个停止原因，覆盖空 WAL、未提交帧、异常尾部与资源上限。
 
 新增只读 `WalSource`、`open_wal_source` 和 `open_wal_database`，复用原有 Database 检查器读取最新已提交快照，采用提交后的逻辑页数；正确隔离未提交更新、缩小及重新增长后的旧页面版本。默认拒绝异常尾部，显式 `UseValidPrefix` 才使用此前完整提交；帧限额不足不能作为旧快照成功返回。宿主负责同一时刻的一致静态 db/WAL 副本，不提供在线锁或 checkpoint。详见 [WAL 契约](docs/wal.md)。相关能力随 v0.5.0 整体验收后统一发布。
