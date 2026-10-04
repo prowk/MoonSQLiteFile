@@ -231,9 +231,9 @@ def corrupt_page_space(directory):
         located = json.loads(result.stdout)
         assert located['status'] == 'failed' and located['statistics'] is None and located['page'] is None
         diagnostic = located['diagnostic']
-        assert diagnostic['code'] == {'fragment-count': 'fragment_count', 'untracked-gap': 'untracked_space'}[name]
+        assert diagnostic['code'] == 'fragment_count'
         assert diagnostic['page_number'] == target['page_number'] and diagnostic['error_kind'] == 'invalid'
-        assert diagnostic['byte_offset'] == (7 if name == 'fragment-count' else start - 4)
+        assert diagnostic['byte_offset'] == 7
         assert diagnostic['cell_index'] is None
         detailed = inspect(path, exit_code=1, command='inspect-details')
         assert detailed['inspection'] == failed

@@ -225,3 +225,20 @@ test "cell sizes stop at usable space and include minimum padding" {
   bytes[512 + 477] = 128
   assert_space_invalid(Bytes::from_array(bytes))
 }
+
+///|
+test "SQLite fragmentation may include four byte gaps and tails" {
+  for tail in [false, true] {
+    let start = if tail { 500 } else { 496 }
+    let cells = if tail {
+      [(500, b"\x02\x01\x02\x08")]
+    } else {
+      [(496, b"\x02\x01\x02\x08"), (508, b"\x02\x02\x02\x00")]
+    }
+    let report = open_database(space_fixture(13, start, cells, 8, [])).inspect_page(
+      2,
+    )
+    assert_eq(report.status, Complete)
+    assert_eq(report.statistics.unwrap().fragmented_bytes, 8)
+  }
+}

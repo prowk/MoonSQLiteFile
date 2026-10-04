@@ -168,8 +168,8 @@ test "page diagnostics distinguish overlap gap fragments and malformed cells" {
           0,
           [],
         ),
-        UntrackedSpace,
-        500,
+        FragmentCount,
+        7,
         None,
       ),
       (

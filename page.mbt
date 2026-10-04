@@ -228,26 +228,10 @@ fn Database::parse_btree_page(
       )
     }
     let gap = start - cursor
-    if gap >= 4 {
-      raise page_invalid(
-        number,
-        UntrackedSpace,
-        cursor,
-        "页 \{number} 的空闲区间未登记为 freeblock：offset=\{cursor}",
-      )
-    }
     fragments = fragments + gap
     cursor = end
   }
   let tail = usable - cursor
-  if tail >= 4 {
-    raise page_invalid(
-      number,
-      UntrackedSpace,
-      cursor,
-      "页 \{number} 的尾部空闲区间未登记为 freeblock：offset=\{cursor}",
-    )
-  }
   fragments = fragments + tail
   if fragments != fragmented_bytes {
     raise page_invalid(
