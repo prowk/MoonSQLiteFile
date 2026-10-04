@@ -207,7 +207,7 @@ fn uneven_leaf_depth_fixture(first_leaf_nonempty : Bool) -> Bytes {
 }
 
 ///|
-test "empty leaf pages cannot hide unequal btree depth" {
+test "empty child pages cannot hide missing records at any depth" {
   for first_leaf_nonempty in [false, true] {
     let db = open_database(uneven_leaf_depth_fixture(first_leaf_nonempty))
     let report = db.inspect_btree(1)
@@ -215,9 +215,68 @@ test "empty leaf pages cannot hide unequal btree depth" {
     assert_eq(report.records_decoded, if first_leaf_nonempty { 1 } else { 0 })
     assert_true(
       match report.error {
-        Some(Invalid(message)) => message == "B-tree 叶页深度不一致"
+        Some(Invalid(message)) =>
+          message == "B-tree 非根页面或非页 1 内部根页不能为空"
         _ => false
       },
     )
   }
+}
+
+///|
+test "empty table and index roots remain valid and page one permits a virtual root" {
+  for kind in [13, 10] {
+    assert_eq(
+      open_database(space_fixture(kind.to_byte(), 512, [], 0, [])).inspect_btree(
+        2,
+      ).status,
+      Complete,
+    )
+  }
+  for kind in [5, 2] {
+    assert_eq(
+      open_database(space_fixture(kind.to_byte(), 512, [], 0, [])).inspect_btree(
+        2,
+      ).status,
+      Failed,
+    )
+  }
+  // 页 1 因为数据库头占用空间，可以保留零 cell 的内部虚拟根。
+  let root = test_database().to_array()
+  root[100] = 5
+  root[111] = 2
+  let leaf = space_fixture(13, 508, [(508, b"\x02\x01\x02\x08")], 0, [])
+  let db = open_database(Bytes::from_array(root) + leaf[512:].to_owned())
+  assert_eq(db.inspect_btree(1).status, Complete)
+  assert_eq(db.inspect_btree(1).records_decoded, 1)
+  let empty = space_fixture(13, 512, [], 0, [])
+  assert_eq(
+    open_database(Bytes::from_array(root) + empty[512:].to_owned()).inspect_btree(
+      1,
+    ).status,
+    Failed,
+  )
+}
+
+///|
+test "nonempty leaf pages at different depths are still rejected" {
+  let original = uneven_leaf_depth_fixture(true)
+  let branch = space_fixture(5, 507, [(507, b"\x00\x00\x00\x04\x02")], 0, []).to_array()
+  branch[512 + 11] = 5
+  let leaf = space_fixture(13, 508, [(508, b"\x02\x02\x02\x08")], 0, [])
+  let tail = space_fixture(13, 508, [(508, b"\x02\x03\x02\x08")], 0, [])
+  let data = original[0:1024].to_owned() +
+    Bytes::from_array(branch)[512:].to_owned() +
+    leaf[512:].to_owned() +
+    tail[512:].to_owned()
+  let report = open_database(data).inspect_btree_details(1)
+  assert_eq(report.inspection.status, Failed)
+  assert_eq(report.inspection.records_decoded, 1)
+  assert_eq(report.location.unwrap().page_number, Some(4))
+  assert_true(
+    match report.inspection.error {
+      Some(Invalid(message)) => message == "B-tree 叶页深度不一致"
+      _ => false
+    },
+  )
 }

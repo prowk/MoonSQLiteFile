@@ -120,6 +120,17 @@ fn Database::walk_frame(
   if page_is_table != table {
     raise Invalid("B-tree 中混入不同类型的页面")
   }
+  // 非根空页会丢失记录；仅页 1 允许零 cell 的内部虚拟根。
+  if page.cell_count == 0 &&
+    (
+      parent is Some(_) ||
+      (
+        (page.kind == TableInterior || page.kind == IndexInterior) &&
+        number != 1
+      )
+    ) {
+    raise Invalid("B-tree 非根页面或非页 1 内部根页不能为空")
+  }
   {
     page,
     bytes,

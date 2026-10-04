@@ -70,7 +70,7 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 集合读取的显式小 limit 返回前缀，默认资源上限导致未完成则抛出异常。读取完成只说明遍历结束，不代表执行了 SQLite integrity_check 或索引排序语义验证。
 
-范围检查覆盖记录、cell pointer、保留空间、overflow 链和 freelist；B-tree 校验 rowid 顺序及父键上下界，拒绝子页重复/环，空叶页也参与深度验证。全局检查追踪逻辑数据库的页归属与 Ptrmap；检查器不是 SQLite `integrity_check` 的替代品，尚不检查索引排序或索引与表的内容一致性。
+范围检查覆盖记录、cell pointer、保留空间、overflow 链和 freelist；B-tree 校验 rowid 顺序及父键上下界，拒绝子页重复/环，叶页参与深度验证，非根空页拒绝，页 1 虚拟根作为内部根的特例保留。全局检查追踪逻辑数据库的页归属与 Ptrmap；检查器不是 SQLite `integrity_check` 的替代品，尚不检查索引排序或索引与表的内容一致性。
 
 v0.4.0 补齐页内空间覆盖：四类 cell 的 varint、子页指针、页内 payload、overflow 指针和最小四字节填充均计入完整区间；与 freeblock 区间一起按物理偏移排序，拒绝重叠和碎片计数不一致。v0.6.0 改为累计全部未覆盖字节后比较碎片总数，兼容 SQLite 正常生成的较长间隙；仍拒绝未登记且不计入碎片的空间。freeblock 链必须递增且相隔至少四字节。校验只检查当前页，不读取 overflow 链或分配完整 payload；每页额外空间与区间数量成正比，排序后线性核对覆盖。
 

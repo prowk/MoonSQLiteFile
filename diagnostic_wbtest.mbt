@@ -32,7 +32,7 @@ test "record decoding and tree depth diagnostics retain progress and actual cell
   )
   assert_eq(report.inspection.records_decoded, 1)
   assert_eq(report.location.unwrap().phase, TreeTraversal)
-  assert_eq(report.location.unwrap().page_number, Some(4))
+  assert_eq(report.location.unwrap().page_number, Some(3))
   assert_eq(report.location.unwrap().byte_offset, None)
 }
 
