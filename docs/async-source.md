@@ -4,7 +4,7 @@ MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapte
 
 ## 本地构建与消费
 
-此版本尚未发布。异步包尚未上传 npm，不能使用不存在的 registry 安装命令。
+异步包随 v0.7.0 Release 以 `prowk-moonsqlitefile-async-0.7.0.tgz` 附件提供，下载后执行 `npm install ./prowk-moonsqlitefile-async-0.7.0.tgz`，也可按下文从源码构建。该包尚未上传 npm registry。
 
 ```sh
 moon build --target js --deny-warn

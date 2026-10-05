@@ -1,4 +1,6 @@
-# v0.6.0 升级说明
+# 同步范围读取升级说明（v0.6.0 内部里程碑）
+
+v0.6.0 未单独发布，本页内容随 v0.7.0 一并交付。由 v0.5.0 升级时，请同时阅读[v0.7.0 升级说明](migration-0.7.md)；本页的“本版”指同步范围读取里程碑。
 
 v0.6.0 修复三项已复现缺陷，并新增同步 64 位范围读取。v0.3.0、v0.4.0 和 v0.5.0 的公开声明继续受兼容基线保护；既有公开结构体的可见字段和错误枚举分支保持原有形式。`Database` 新内部字段为私有，兼容检查只忽略生成接口中的私有字段占位注释，不忽略任何公开字段或类型变化。
 
@@ -35,4 +37,4 @@ WAL 偏移的 JSON 数值保持至 JavaScript 精确整数边界；更大的值�
 
 CLI 新增 `--max-payload-bytes`（单条 Int）和 `--max-total-payload-bytes`（累计 UInt64），保留 16 MiB / 64 MiB 默认值。大数据完整扫描需独立提高累计预算；集合读取命令仍收集数组，不受新增累计参数控制。适配器自行发现的越界和短读现在分别为 RangeOutOfBounds 和 ShortRead，只有旧源实际抛出的错误为 HostFailure；经 Database 映射后的报告仍为 Incomplete。详见[范围契约](range-source.md)。
 
-CI 纳入合法大 payload、高位 WAL、重复更新基准及范围/缓存/适配器/故障差分 fuzz，并保存成本证据。源码提交和 GitHub CI 验收完成后仍需在实际发布时核对 tag、附件和 Mooncakes registry 消费；当前版本未发布。
+CI 纳入合法大 payload、高位 WAL、重复更新基准及范围/缓存/适配器/故障差分 fuzz，并保存成本证据。发布 tag、附件、对应提交的 GitHub CI 和 Mooncakes registry 消费证据统一记录在 v0.7.0 Release。

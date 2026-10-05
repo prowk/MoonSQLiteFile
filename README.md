@@ -3,12 +3,12 @@
 # MoonSQLiteFile
 
 [![CI](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml)
-[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.5.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.5.0)
+[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.7.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.7.0)
 [![License](https://img.shields.io/badge/License-Apache--2.0-2563eb)](https://github.com/prowk/MoonSQLiteFile/blob/main/LICENSE)
 
 **纯 MoonBit 的 SQLite 文件解析与检查库**
 
-[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.5.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
+[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.7.0) · [架构说明](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/architecture.md) · [版本记录](https://github.com/prowk/MoonSQLiteFile/blob/main/CHANGELOG.md)
 
 </div>
 
@@ -26,14 +26,14 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 - **WAL 快照**：两种 checksum 字节序、salt 与提交边界校验、只读覆盖数据源和最新已提交页版本；CLI 显式接收 db/WAL 一致副本。
 - **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource` / `RangeSource`、空间与位置报告、中文/JSON CLI，独立异步 JS 范围源、背压与取消，以及单文件 Blob/WAL 页面导航。
 
-当前源码版本为 **v0.7.0（待发布）**：新增独立异步 JS 适配包、无 I/O 的核心游标与 Blob/WAL 浏览器分块检查。契约及迁移方法见[异步范围读取](docs/async-source.md)和[v0.7.0 升级说明](docs/migration-0.7.md)。同步大文件能力见[范围读取](docs/range-source.md)。上方 Mooncakes 链接及下方安装命令仍指向当前已发布的 v0.5.0。
+当前版本为 **v0.7.0**，从 v0.5.0 直接升级：包含同步 64 位范围读取、独立异步 JS 适配包、无 I/O 核心游标与 Blob/WAL 浏览器分块检查。v0.6.0 仅作为内部开发里程碑，未单独发布。契约及迁移方法见[范围读取](docs/range-source.md)、[异步范围读取](docs/async-source.md)和[v0.7.0 升级说明](docs/migration-0.7.md)。
 
 ## 安装
 
 使用 MoonBit release 工具链，在现有项目中运行：
 
 ```sh
-moon add prowk/moonsqlitefile@0.5.0
+moon add prowk/moonsqlitefile@0.7.0
 ```
 
 在消费包的 `moon.pkg` 中添加导入：
@@ -168,9 +168,9 @@ node tools/inspect.cjs snapshot.db --wal snapshot.wal inspect-details
 
 当前源码先执行 `moon build --target js --deny-warn` 和 `python tools/build_viewer.py`，生成 `_build/moonsqlitefile-viewer.html`。界面支持静态 db/WAL、对象/父子/overflow 页导航、空间分布、cell 和原始字节；File/Blob 交给 Worker 按需分块读取，取消或预算耗尽显示部分结果。默认累计 payload 64 MiB、检查时间 120 秒，预算可调整，文件长度不再限制为 64 MiB。单文件没有外部资源，真实 Chrome 验收已覆盖本机页面载入后断网；直接 file:// 打开按本次交付范围保留为未验收项。详见[离线示例](examples/offline-viewer/README.md)。
 
-[v0.5.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.5.0) 中的历史附件仍是单主文件、64 MiB/30 秒版本，不能据此获取新增异步与 WAL 能力。
+[v0.7.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.7.0) 提供可下载的单文件 HTML 和异步 JS 包 tarball。HTML 可通过本机静态 HTTP 服务载入后断网使用；直接 file:// 打开尚未验收。
 
-独立异步包尚未发布 npm；本地执行 `python tools/build_async.py`，使用 `_build/async-adapter`。它提供 Node 22 与 Blob 源、异步迭代器/visitor 背压、取消和详细检查，运行时没有第三方依赖，使用方式见[适配契约](docs/async-source.md)。
+独立异步包尚未发布 npm；下载 Release 中的 `prowk-moonsqlitefile-async-0.7.0.tgz` 后可执行 `npm install ./prowk-moonsqlitefile-async-0.7.0.tgz`，也可本地执行 `python tools/build_async.py`，使用 `_build/async-adapter`。它提供 Node 22 与 Blob 源、异步迭代器/visitor 背压、取消和详细检查，运行时没有第三方依赖，使用方式见[适配契约](docs/async-source.md)。
 
 ## 支持范围与限制
 
@@ -178,7 +178,7 @@ v0.4.0 补齐所访问 B-tree 页的空间覆盖与碎片计数校验，提供�
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
-当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；旧同步 `PageSource` 使用 `Int` 偏移；v0.6.0 源码新增 `RangeSource`、`CachedSource` 和 `RangeWalSource`，支持 64 位长度/偏移与 db/WAL 按需读取，页号最多为 2147483647。v0.7.0 在独立 JS 包提供异步 I/O；全局报告及 WAL 索引仍须独立预算，见[范围读取契约](docs/range-source.md)及[异步契约](docs/async-source.md)。
+当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；旧同步 `PageSource` 使用 `Int` 偏移；v0.7.0 合入原 v0.6.0 里程碑的 `RangeSource`、`CachedSource` 和 `RangeWalSource`，支持 64 位长度/偏移与 db/WAL 按需读取，页号最多为 2147483647。v0.7.0 在独立 JS 包提供异步 I/O；全局报告及 WAL 索引仍须独立预算，见[范围读取契约](docs/range-source.md)及[异步契约](docs/async-source.md)。
 
 扫描或检查结果为 `Complete` 只表示其覆盖范围内的工作完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`；检查 API 将错误保留在报告中。
 

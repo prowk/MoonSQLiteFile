@@ -1,24 +1,19 @@
 # 更新记录
 
-## 0.7.0（待发布）
+## 0.7.0
 
-新增无 I/O 的 `BTreeCursor`、`WalCursor` 和 `InspectionCursor`：宿主逐页/逐帧供给，核心仍执行页面、record/overflow、树结构、schema、freelist、Ptrmap 和 WAL checksum 校验。同步入口改为驱动同一状态机。新增 schema 记录校验与已校验 WAL 游标构造覆盖快照、实际页范围查询接口，保留原错误枚举、报告类型与同步公开声明。
+本次从 v0.5.0 直接升级，合并原 v0.6.0 内部开发里程碑的同步范围读取与修复；不单独发布 v0.6.0。
 
-新增独立 JS 异步适配包 `@prowk/moonsqlitefile-async`，提供 Blob/Node BigInt 范围源、有界 FIFO 缓存、异步扫描与 visitor 背压、AbortSignal 取消和详细全库报告。读取失败保持 source 细分类别，检查返回未完成及已观察页/记录/诊断；关闭、取消和迭代器 break 释放核心句柄和接管源。核心四后端继续支持，异步宿主当前验证 Node 22 与 Chrome。该包仅本地构建，尚未发布 npm。
+- 新增 `RangeSource`、`SourceError`、`open_range_source` 和 `PageSourceAdapter`，主文件长度/偏移与页面乘法使用 Int64；旧 `PageSource`、Bytes 入口及公开字段保持原类型。`Database.source64()` 提供完整范围源，页号最多为 2147483647。宿主读取失败保留 source 分类并映射为 Incomplete，适配器区分越界、短读与实际宿主抛错。
+- 新增有界 FIFO `CachedSource`、读取统计及独立报告页预算；`inspect_wal_source`、64 位帧报告、`RangeWalSource` 和 `open_range_wal_source` 逐帧读取 WAL，分别限制帧数与覆盖页索引。CLI 使用只读文件范围 I/O，检测实际读取时的文件变化并关闭句柄，提供缓存、单条/UInt64 累计 payload 等资源选项及 stderr I/O 测量。尾部、提交、缩小和增长语义与字节入口一致。
+- 新增无 I/O 的 `BTreeCursor`、`WalCursor` 和 `InspectionCursor`，由宿主逐页/逐帧供给；同步入口驱动同一状态机。核心继续执行页面、record/overflow、树结构、schema、freelist、Ptrmap 和 WAL checksum 校验，并可从已校验 WAL 游标构造覆盖快照、查询实际页范围。
+- 新增独立 JS 异步适配包 `@prowk/moonsqlitefile-async`：Blob/Node BigInt 范围源、有界 FIFO 缓存、异步扫描与 visitor 背压、AbortSignal 取消和详细全库报告。失败保留已观察页/记录/诊断；关闭、取消及迭代器 break 释放核心句柄和接管源。以 Release tarball 附件提供，尚未发布 npm；宿主验证范围为 Node 22 与 Chrome/Chromium。
+- 离线 HTML 改用 File/Blob Worker 分块检查静态 db/WAL，提供帧/页/记录进度、取消、部分结果、可调整预算及页面导航。移除 64 MiB 文件长度限制；默认累计 payload 仍为 64 MiB，默认时间预算从 30 秒改为可调整的 120 秒。浏览器验收覆盖本机 HTTP 载入后断网，直接 file:// 打开仍未验收。
+- 修复合法 SQLite 页面四字节及更长间隙被误拒的问题，改为核对总碎片；拒绝非根空 B-tree 页，保留空叶根及页 1 内部虚拟根；CLI/界面显示错误分类与具体原因。碎片不一致定位为 FragmentCount，超出 Int 范围的页指针返回 LimitExceeded。
 
-离线 HTML 改为 File/Blob Worker 分块读取静态 db/WAL，提供帧/页/记录进度、取消、部分结果、可调整预算及原有对象/页面导航；移除 64 MiB 文件长度限制，累计 payload 默认仍为 64 MiB，默认可调整时间预算改为 120 秒。真实 Chrome 验收在本机页面载入后断网，覆盖 WAL 尾部策略、读取失败、损坏、预算、切换和释放。72663040 字节合法库提高预算后检查 17740 页、1101 条记录，最大读取块 4096 字节。直接 file:// 打开按本轮确认保留为未验收项。
+验证覆盖四后端各 121 项回归、v0.3.0–v0.6.0 API 基线（其中 v0.6.0 仅为内部兼容基线）、独立打包消费、54 组合法 SQLite SQL 操作、六组数据库同步/异步差分、29 组 WAL 快照和 5470 条恢复记录。大文件验收包含 2 GiB 稀疏库、32769 帧且覆盖偏移超过 2 GiB 的虚拟 WAL、有效 payload 超过 64 MiB 的预算回归、重复更新少量页的 WAL 基准，以及范围源/缓存/适配器/故障报告的持续 fuzz。真实浏览器对 72663040 字节合法库提高预算后检查 17740 页、1101 条记录，最大读取块为 4096 字节。具体发布提交的 CI 与 registry 消费证据见 Release 发布页。
 
-新增 v0.6.0 的 199 项 API 基线、四后端游标回归、六组数据库同步/异步差分、29 组 WAL 快照与 5470 条恢复记录对照，以及独立 npm tarball 消费和真实浏览器持续检查。四后端各 121 项回归；远程验证以该提交对应的 GitHub CI 为准；公开发布未执行。完整契约及迁移见[异步范围读取](docs/async-source.md)和[升级说明](docs/migration-0.7.md)。
-
-## 0.6.0（待发布）
-
-新增 `RangeSource`、`SourceError`、`open_range_source` 与 `PageSourceAdapter`：文件长度及偏移使用 Int64，页面乘法在 64 位中计算；旧 PageSource、Bytes 和 Database 公开字段保持原类型。页号仍为 Int，超过 2147483647 页显式拒绝。`Database.source64()` 提供完整范围源，新入口的宿主失败统一保留 source 分类并映射为 Incomplete。
-
-新增有界 FIFO `CachedSource`、命中/读取统计与独立报告页预算；新增 `inspect_wal_source`、64 位帧报告、`RangeWalSource` 和 `open_range_wal_source`。WAL 逐帧读取、不保存整文件，帧与覆盖页索引分别限制；尾部、提交、缩小和增长语义与字节入口一致。CLI 改为只读文件范围 I/O，提供缓存及资源选项和可选 stderr I/O 测量，关闭所有句柄并检测实际读取时的文件变化。
-
-修复三项审查缺陷：不再仅因空闲间隙大于等于四字节而误拒 SQLite 正常文件，改为核对总碎片；拒绝非根空 B-tree 页，保留空叶根和页 1 内部虚拟根；CLI/离线界面输出错误分类及具体原因。碎片不一致现在统一定位为 FragmentCount，超出 Int 范围的页指针返回 LimitExceeded，详见[v0.6.0 升级说明](docs/migration-0.6.md)。
-
-新增 v0.5.0 的 160 项公开 API 基线和外部字段读取/解构、第三方范围源、缓存及范围 WAL 消费验证。四后端各 114 项回归，54 组合法 SQLite SQL 操作、空子页破坏及 CLI 错误消息差分；2 GiB 稀疏文件末页仅两次读取、4608 字节，覆盖短读、范围越界、变化检测及释放。29 个 WAL 快照、5470 条记录的独立恢复对照继续覆盖双 checksum 字节序、reset、未提交尾部和缩小/增长。扫描、全局检查和 WAL 打开的读取次数、峰值 RSS 与耗时有[固定规模基准](docs/io-benchmark.md)。补充 CLI 单条/UInt64 累计 payload 选项，并修正 PageSourceAdapter 的越界、短读与实际宿主抛错分类。正式 CI 增加有效数据超过 64 MiB 的预算端到端回归、32769 帧且覆盖偏移超过 2 GiB 的虚拟 WAL、重复更新少量页的 WAL 基准；范围入口、缓存、适配器和故障报告加入可重放持续 fuzz。四后端还覆盖高位 WAL 索引的整页/页内读取。当前源码待发布；远程验证以本次提交对应的 GitHub CI 为准，registry 发布后消费留待实际发布。
+完整契约见[同步范围读取](docs/range-source.md)、[异步范围读取](docs/async-source.md)及[固定规模基准](docs/io-benchmark.md)；从 v0.5.0 升级请阅读[v0.7.0 升级说明](docs/migration-0.7.md)。
 
 ## 0.5.0
 
