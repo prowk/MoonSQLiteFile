@@ -36,6 +36,12 @@ def main():
         if not args.registry:
             with zipfile.ZipFile(archive) as package:
                 names = package.namelist()
+                if tuple(map(int,version.split('.')[:2])) >= (0,8):
+                    assert {'moon.mod','src/moon.pkg','src/pkg.generated.mbti','src/examples/cursors/main.mbt'} <= set(names)
+                    assert 'moon.pkg' not in names and 'pkg.generated.mbti' not in names
+                    assert not any(path.startswith(('src/cmd/fuzz/','src/cmd/async-bridge/','adapters/','fixtures/cli-contract/','fixtures/regressions/')) for path in names)
+                    packaged_manifest=package.read('moon.mod').decode('utf-8')
+                    assert 'source = "src"' in packaged_manifest
                 for relative in names:
                     normalized = relative.replace("\\", "/")
                     assert normalized not in {"AGENTS.md", "docs/roadmap.md", "docs/proposal.md", "tools/github_publish.py"}, f"发布包包含本地文件：{relative}"

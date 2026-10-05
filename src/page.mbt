@@ -1,4 +1,5 @@
 ///|
+/// 四种 SQLite B-tree 页面类型；不用于 overflow、freelist、Ptrmap 或 lock-byte 页面。
 pub(all) enum PageType {
   TableLeaf
   TableInterior
@@ -13,6 +14,7 @@ pub extend PageType with @debug.Debug::{to_repr}
 pub extend PageType with Eq::{equal, not_equal}
 
 ///|
+/// 已校验的 B-tree 页元数据。number 从 1 开始，所有偏移均相对页起始；right_child 只存在于内部页，cell_offsets 按逻辑 cell 顺序排列。
 pub(all) struct Page {
   number : Int
   kind : PageType
@@ -28,6 +30,7 @@ pub(all) struct Page {
 pub extend Page with @debug.Debug::{to_repr}
 
 ///|
+/// 读取并验证指定 B-tree 页的完整 cell/freeblock 空间布局；不是通用 overflow/freelist 解码入口，不检查 record 或 overflow 内容。
 pub fn Database::page(self : Database, number : Int) -> Page raise SqliteError {
   self.page_from_bytes(number, self.read_page(number))
 }

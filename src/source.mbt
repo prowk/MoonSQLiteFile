@@ -1,16 +1,19 @@
 ///|
 /// 源必须在 Database 的使用期间保持同一份静态快照；不提供并发锁或事务语义。
+/// 旧同步静态源；长度与偏移为 Int，必须精确返回请求字节。不得修改快照；宿主 SqliteError 保留历史映射。大文件和细分类别应使用 RangeSource。
 pub(open) trait PageSource {
   fn byte_length(Self) -> Int
   fn read_range(Self, Int, Int) -> Bytes raise SqliteError
 }
 
 ///|
+/// 不可变内存字节源；同时实现旧 PageSource 与 64 位 RangeSource，实际容量仍受 Bytes 和宿主内存限制。
 pub struct BytesSource {
   data : Bytes
 }
 
 ///|
+/// 包装不可变 Bytes，不复制整个输入；源容量受 Bytes/Int 限制。
 pub fn BytesSource::new(data : Bytes) -> BytesSource {
   { data, }
 }
@@ -19,11 +22,13 @@ pub fn BytesSource::new(data : Bytes) -> BytesSource {
 pub extend BytesSource with PageSource::{byte_length, read_range}
 
 ///|
+/// 返回静态源字节长度，不执行格式检查。
 pub impl PageSource for BytesSource with fn byte_length(self) {
   self.data.length()
 }
 
 ///|
+/// 按源契约返回准确范围字节；范围和长度错误按实现所属的源错误类型返回。
 pub impl PageSource for BytesSource with fn read_range(self, offset, count) {
   require_range(self.data, offset, count)
   self.data[offset:offset + count].to_owned()
@@ -47,6 +52,7 @@ fn source_read(
 }
 
 ///|
+/// 打开旧同步 PageSource；初始化只请求 100 字节头。长度/偏移受 Int 限制，宿主 SqliteError 保留历史分类；调用者管理源生命周期。
 pub fn open_source(
   source : &PageSource,
   limits? : Limits = Limits::default(),

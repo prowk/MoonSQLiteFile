@@ -22,3 +22,5 @@ try {
 `db.scan(root)` 支持 for await 背压与 break；`db.scanBtree` 等待异步 visitor；`schema`、`inspectPage`、`inspectDatabase` 返回进度/完整状态与部分结果。支持 AbortSignal 取消。所有成功记录/页面仍完整解码，有界缓存不代表整个检查为常量内存。
 
 可选打开参数包括 wal、tailPolicy（strict/valid_prefix）、max_frames、max_overlay_pages，以及页数、记录数、单条/累计 payload、路径深度及报告预算。db/WAL 必须为同一时刻不可变副本，未实现在线锁或 SQL 执行。完整契约和本地验收见仓库 `docs/async-source.md`。
+
+当前源码版本 0.8.0 为待发布开发版，只有本地打包消费证据；正式 v0.7.0 的导出、函数 arity 和原型由持续契约检查保护。源码迁移不改变 Node/Blob 协议或运行时依赖，支持范围见仓库 `docs/support.md`。

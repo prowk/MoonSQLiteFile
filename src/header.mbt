@@ -1,4 +1,5 @@
 ///|
+/// 已校验的 100 字节 SQLite 头。page_size 为实际字节数，usable_size 扣除保留空间；declared_pages 是头部声明值，不一定等于打开视图的逻辑页数。text_encoding 为 1/2/3，未初始化空库也允许 0。
 pub(all) struct Header {
   page_size : Int
   usable_size : Int
@@ -26,6 +27,7 @@ pub extend Header with @debug.Debug::{to_repr}
 pub extend Header with Eq::{equal, not_equal}
 
 ///|
+/// 验证至少 100 字节的 SQLite 文件头，不读取页面；页长编码 1 还原为 65536。输入无效或格式不支持时抛 SqliteError。
 pub fn parse_header(data : Bytes) -> Header raise SqliteError {
   require_range(data, 0, 100)
   if data[0:16].to_owned() != b"SQLite format 3\x00" {

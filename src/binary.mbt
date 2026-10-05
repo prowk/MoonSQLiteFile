@@ -39,6 +39,7 @@ fn bounded_int(value : UInt64, name : String) -> Int raise SqliteError {
 }
 
 ///|
+/// 从 offset 解码 1–9 字节 SQLite varint，返回无符号值与消耗字节数；截断或越界抛 Invalid，不进行有符号 rowid 转换。
 pub fn decode_varint(
   data : Bytes,
   offset : Int,

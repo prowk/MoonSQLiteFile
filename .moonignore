@@ -25,8 +25,14 @@ __pycache__/
 /tools/verify_wide_wal.cjs
 
 /tools/api-v0.6.0.mbti
+/tools/api-v0.7.0.mbti
 
 /adapters/
 /src/cmd/async-bridge/
 /tools/verify_async.mjs
 /tools/verify_browser.cjs
+
+/fixtures/cli-contract/
+
+/tools/verify_async_api.mjs
+/tools/async-api-v0.7.0.json

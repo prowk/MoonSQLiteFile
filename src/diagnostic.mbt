@@ -1,5 +1,6 @@
 ///|
 /// 失败发生的检查阶段；读取失败不能仅凭 SqliteError 判断为格式损坏。
+/// 失败时实际执行的检查阶段；不从错误文本猜测阶段或位置。
 pub(all) enum DiagnosticPhase {
   Configuration
   ReadPage
@@ -22,6 +23,7 @@ pub extend DiagnosticPhase with Eq::{equal, not_equal}
 
 ///|
 /// 偏移从页面起点计数，下标从零计数；不能确定位置时保留 None。
+/// 可用的失败位置。页号从 1 开始，byte_offset 相对页面，cell_index 从 0 开始；未知字段为 None，初始化失败不产生该报告。
 pub(all) struct DiagnosticLocation {
   phase : DiagnosticPhase
   page_number : Int?
@@ -34,6 +36,7 @@ pub(all) struct DiagnosticLocation {
 pub extend DiagnosticLocation with @debug.Debug::{to_repr}
 
 ///|
+/// 单树检查与可用的失败位置；inspection 的状态语义与原同步报告一致。
 pub(all) struct BTreeInspectionDetails {
   inspection : BTreeInspection
   location : DiagnosticLocation?
@@ -43,6 +46,7 @@ pub(all) struct BTreeInspectionDetails {
 pub extend BTreeInspectionDetails with @debug.Debug::{to_repr}
 
 ///|
+/// 全库问题及观察到的位置；缺失位置不代表页 0，不从根页或字符串推断。
 pub(all) struct LocatedDatabaseIssue {
   issue : DatabaseIssue
   location : DiagnosticLocation?
@@ -53,6 +57,7 @@ pub extend LocatedDatabaseIssue with @debug.Debug::{to_repr}
 
 ///|
 /// issues 与 inspection.issues 同序同长度，位置来自同一次检查，不重新读取源。
+/// 全库报告与按问题顺序对应的位置；不会额外重读数据库。
 pub(all) struct DatabaseInspectionDetails {
   inspection : DatabaseInspection
   issues : Array[LocatedDatabaseIssue]
@@ -109,6 +114,7 @@ fn InspectionTrace::snapshot(self : InspectionTrace) -> DiagnosticLocation {
 
 ///|
 /// 与 inspect_btree 使用相同扫描和状态语义，额外保留失败上下文。
+/// 返回单树报告及实际失败位置，不进行第二次扫描；位置未知为 None。
 pub fn Database::inspect_btree_details(
   self : Database,
   root : Int,
@@ -159,6 +165,7 @@ pub fn Database::inspect_btree_details(
 }
 
 ///|
+/// 一次全库检查同时保留每个问题的可用位置，不从错误字符串猜测；语义与 inspect_database 相同。
 pub fn Database::inspect_database_details(
   self : Database,
   max_total_payload_bytes? : UInt64 = 67108864UL,

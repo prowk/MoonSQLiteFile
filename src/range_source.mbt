@@ -1,5 +1,6 @@
 ///|
 /// 宿主错误与文件格式错误分离；所有数据源须提供不可变的静态快照。
+/// 宿主范围读取错误：HostFailure 为实际宿主抛错，ShortRead 为返回长度不符，RangeOutOfBounds 为范围越界。不是 SQLite 格式损坏。
 pub(all) suberror SourceError {
   HostFailure(String)
   ShortRead(String)
@@ -8,27 +9,32 @@ pub(all) suberror SourceError {
 
 ///|
 /// 长度和偏移为有符号 64 位；单次读取长度仍为 Int，必须精确返回请求长度。
+/// 同步静态范围源；长度与偏移为非负 Int64，单次长度为非负 Int，必须精确返回请求字节，失败抛 SourceError。宿主负责一致副本、I/O 和句柄生命周期。
 pub(open) trait RangeSource {
   fn byte_length64(Self) -> Int64
   fn read_range64(Self, Int64, Int) -> Bytes raise SourceError
 }
 
 ///|
+/// 将旧 PageSource 包装为 RangeSource。自身检查越界和短读；旧源实际抛出的 SqliteError 归为 HostFailure。不能扩展旧源的实际 Int 地址空间。
 pub struct PageSourceAdapter {
   source : &PageSource
 }
 
 ///|
+/// 包装旧同步源，不立即读取；之后分别检查越界和短读，实际宿主抛错归 HostFailure。
 pub fn PageSourceAdapter::new(source : &PageSource) -> PageSourceAdapter {
   { source, }
 }
 
 ///|
+/// 返回静态源字节长度，不执行格式检查。
 pub impl RangeSource for PageSourceAdapter with fn byte_length64(self) {
   self.source.byte_length().to_int64()
 }
 
 ///|
+/// 按源契约返回准确范围字节；范围和长度错误按实现所属的源错误类型返回。
 pub impl RangeSource for PageSourceAdapter with fn read_range64(
   self,
   offset,
@@ -48,11 +54,13 @@ pub impl RangeSource for PageSourceAdapter with fn read_range64(
 }
 
 ///|
+/// 返回静态源字节长度，不执行格式检查。
 pub impl RangeSource for BytesSource with fn byte_length64(self) {
   self.data.length().to_int64()
 }
 
 ///|
+/// 按源契约返回准确范围字节；范围和长度错误按实现所属的源错误类型返回。
 pub impl RangeSource for BytesSource with fn read_range64(self, offset, count) {
   check_source_range(self.byte_length64(), offset, count)
   let start = offset.to_int()
@@ -139,6 +147,7 @@ fn data_read(
 
 ///|
 /// 64 位寻址；页号保持 Int，超过 2147483647 页显式拒绝，避免静默截断。
+/// 打开 64 位静态范围源，初始化只读取 100 字节头；页号仍最多 2147483647。宿主 SourceError 映射为 Unsupported(source/...)，报告为 Incomplete。max_report_pages 独立约束全库报告。
 pub fn open_range_source(
   source : &RangeSource,
   limits? : Limits = Limits::default(),
@@ -148,6 +157,7 @@ pub fn open_range_source(
 }
 
 ///|
+/// 缓存累计统计；hits/misses 是块请求次数，bytes_read 是宿主实际返回字节数，resident_pages 是当前驻留块数。
 pub(all) struct CacheStatistics {
   hits : Int64
   misses : Int64
@@ -157,6 +167,7 @@ pub(all) struct CacheStatistics {
 
 ///|
 /// 按固定块缓存，FIFO 淘汰；缓存与扫描状态、归属报告、WAL 索引预算互相独立。
+/// 固定块 FIFO 范围缓存；驻留块有界，返回字节副本，失败不缓存。不会限制遍历状态、单条 payload、全库报告或 WAL 索引的内存。
 pub struct CachedSource {
   priv source : &RangeSource
   priv size : Int64
@@ -171,6 +182,7 @@ pub struct CachedSource {
 }
 
 ///|
+/// 创建固定块 FIFO 缓存；block_size 默认 4096，max_pages 默认 256，均须为正并符合限制。不是数据库或报告内存上限。
 pub fn CachedSource::new(
   source : &RangeSource,
   block_size? : Int = 4096,
@@ -203,6 +215,7 @@ pub fn CachedSource::new(
 }
 
 ///|
+/// 返回累计块命中、未命中、实际宿主字节和当前驻留块数，不进行额外读取。
 pub fn CachedSource::statistics(self : CachedSource) -> CacheStatistics {
   {
     hits: self.hits,
@@ -213,11 +226,13 @@ pub fn CachedSource::statistics(self : CachedSource) -> CacheStatistics {
 }
 
 ///|
+/// 返回静态源字节长度，不执行格式检查。
 pub impl RangeSource for CachedSource with fn byte_length64(self) {
   self.size
 }
 
 ///|
+/// 按源契约返回准确范围字节；范围和长度错误按实现所属的源错误类型返回。
 pub impl RangeSource for CachedSource with fn read_range64(self, offset, count) {
   check_source_range(self.size, offset, count)
   let result : FixedArray[Byte] = FixedArray::make(count, 0)
@@ -297,6 +312,7 @@ impl PageSource for LegacyRangeView with fn read_range(self, offset, count) {
 
 ///|
 /// 返回用于完整读取的 64 位源；旧 source 字段保持 v0.5 的 Int 契约。
+/// 获取完整 64 位静态范围视图；旧源经适配器返回，不扩展旧源实际地址空间。
 pub fn Database::source64(self : Database) -> &RangeSource {
   let result : &RangeSource = match self.data_source {
     LegacySource(source) => (PageSourceAdapter::new(source) : &RangeSource)

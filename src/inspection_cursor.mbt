@@ -1,5 +1,6 @@
 ///|
 /// 全库检查按需请求页面，进度事件允许宿主让出执行权和取消。
+/// 全库供页协议：按需请求完整页、发送可让出执行权的进度事件，最后交付包含部分结果的详细报告。
 pub(all) enum InspectionEvent {
   NeedInspectionPage(Int)
   InspectionProgress(ScanProgress)
@@ -10,6 +11,7 @@ pub(all) enum InspectionEvent {
 pub extend InspectionEvent with @debug.Debug::{to_repr}
 
 ///|
+/// 无 I/O 全库检查游标；包含 schema、对象树、freelist 和 Ptrmap。宿主可供页、拒绝当前读请求或停止，并保留此前观察到的归属与诊断。
 pub struct InspectionCursor {
   priv db : Database
   priv state : OwnershipState
@@ -33,6 +35,7 @@ pub struct InspectionCursor {
 }
 
 ///|
+/// 创建包含 schema、对象树、freelist、Ptrmap 的全库游标；默认累计 payload 64 MiB、诊断 100 条。配置错误返回失败报告，宿主按事件供页或拒绝读请求。
 pub fn Database::inspection_cursor(
   self : Database,
   max_total_payload_bytes? : UInt64 = 67108864UL,
@@ -152,6 +155,7 @@ fn Database::inspection_cursor_traced(
 }
 
 ///|
+/// 返回全库已成功解码记录、已认领页面和已请求 payload；schema 记录也计数。
 pub fn InspectionCursor::progress(self : InspectionCursor) -> ScanProgress {
   {
     records_read: self.state.records,
@@ -161,6 +165,7 @@ pub fn InspectionCursor::progress(self : InspectionCursor) -> ScanProgress {
 }
 
 ///|
+/// 返回检查实际阶段及可用位置；None 字段表示未掌握位置。
 pub fn InspectionCursor::location(
   self : InspectionCursor,
 ) -> DiagnosticLocation {
@@ -168,6 +173,7 @@ pub fn InspectionCursor::location(
 }
 
 ///|
+/// 供给当前请求的完整页；错页、重复或长度不符抛 Invalid，不允许把宿主短读送入格式解析。
 pub fn InspectionCursor::provide_page(
   self : InspectionCursor,
   number : Int,
@@ -186,6 +192,7 @@ pub fn InspectionCursor::provide_page(
 
 ///|
 /// 宿主失败或取消保留观察结果，并明确标记检查未完成。
+/// 停止全库检查并释放游标，保留已观察页面、记录、诊断和位置；未完成时状态为 Incomplete，可提供停止原因。
 pub fn InspectionCursor::stop(
   self : InspectionCursor,
   reason? : SqliteError = Unsupported("检查由宿主提前终止"),
@@ -238,6 +245,7 @@ fn InspectionCursor::request(
 }
 
 ///|
+/// 推进一个供页/进度事件或返回详细报告；已完成或停止后重复调用保持最终结果，不执行宿主 I/O。
 pub fn InspectionCursor::next(self : InspectionCursor) -> InspectionEvent {
   if self.finished is Some(details) {
     return InspectionFinished(details)
@@ -505,6 +513,7 @@ fn InspectionCursor::advance(
 
 ///|
 /// 将本次页读取失败送回状态机，其他可独立检查的对象仍可继续。
+/// 将当前页面读取错误交给核心，保留部分报告并继续可独立检查的对象；schema 读取失败不能继续发现全部根页。范围宿主错误应先使用 source/ 映射。
 pub fn InspectionCursor::reject_page(
   self : InspectionCursor,
   reason : SqliteError,

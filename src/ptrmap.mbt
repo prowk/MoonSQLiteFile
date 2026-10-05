@@ -1,4 +1,5 @@
 ///|
+/// auto-vacuum Ptrmap 的五种页面反向引用类型。
 pub(all) enum PtrmapType {
   RootPage
   FreePage
@@ -14,6 +15,7 @@ pub extend PtrmapType with @debug.Debug::{to_repr}
 pub extend PtrmapType with Eq::{equal, not_equal}
 
 ///|
+/// 已校验的反向指针；page_number 和 map_page 从 1 开始，parent_page 为格式存储的父页值，根页/空闲页使用 0。
 pub(all) struct PtrmapEntry {
   page_number : Int
   map_page : Int
@@ -62,6 +64,7 @@ fn Database::visit_ptrmap(
 
 ///|
 /// 读取 auto-vacuum 反向指针；与真实页归属对照请使用 inspect_database。
+/// 读取并校验 auto-vacuum 的 Ptrmap 条目；非 auto-vacuum 返回空数组。真实归属交叉检查由 inspect_database 完成。
 pub fn Database::ptrmap_entries(
   self : Database,
 ) -> Array[PtrmapEntry] raise SqliteError {

@@ -1,18 +1,23 @@
 import compiledCore from './core.mjs';
 
 // 所有异步 I/O 与生命周期留在适配层，格式校验由 MoonBit 核心完成。
+/** 宿主错误；kind 为 range_out_of_bounds、short_read 或 host_failure，不代表 SQLite 损坏。 */
 export class SourceError extends Error {
   constructor(kind, message) { super(message); this.name = 'SourceError'; this.kind = kind; }
 }
+/** 可辨认的取消错误；kind 固定为 cancelled，不应作为格式损坏。 */
 export class CancelledError extends Error {
   constructor(message = '操作已取消') { super(message); this.name = 'CancelledError'; this.kind = 'cancelled'; }
 }
+/** 核心格式/预算错误；kind 保留 Invalid、Unsupported 或 LimitExceeded 对应类别。 */
 export class SqliteError extends Error {
   constructor(kind, message) { super(message); this.name = 'SqliteError'; this.kind = kind; }
 }
+/** signal 已取消时抛 CancelledError；没有 signal 时不做操作。 */
 export function checkAbort(signal) {
   if (signal?.aborted) throw new CancelledError(signal.reason?.message || '操作已取消');
 }
+/** 让等待操作响应 signal；不会强制终止底层系统 I/O，晚到结果和异常仍被处理。 */
 export function withAbort(operation, signal) {
   const promise = Promise.resolve(operation);
   if (!signal) return promise;
@@ -31,6 +36,7 @@ function range(size, offset, count) {
     throw new SourceError('range_out_of_bounds', '范围读取越界或整数类型不符合约定');
   }
 }
+/** 检查非负有符号 64 位 BigInt 范围及 Int32 长度，精确读取 Uint8Array；宿主失败与短读分别分类。 */
 export async function readExact(source, offset, count, signal) {
   checkAbort(signal);
   range(source.size, offset, count);
@@ -49,6 +55,7 @@ export async function readExact(source, offset, count, signal) {
     throw new SourceError('host_failure', error?.message || String(error));
   }
 }
+/** 不可变 Blob 的分块源；每次只 slice 当前范围，close 释放引用，所有偏移为 BigInt。 */
 export class BlobSource {
   constructor(blob) {
     if (!blob || !Number.isSafeInteger(blob.size) || typeof blob.slice !== 'function') throw new TypeError('需要有效 Blob');
@@ -67,6 +74,7 @@ export class BlobSource {
   }
   async close() { this.closed = true; this.blob = null; }
 }
+/** 有界 FIFO 块缓存；返回副本，失败/取消不缓存，closeSources 控制是否关闭被包装源。 */
 export class CachedSource {
   constructor(source, {blockSize = 4096, cachePages = 256, closeSource = true} = {}) {
     if (!Number.isInteger(blockSize) || blockSize < 1 || blockSize > 65536 ||
@@ -117,6 +125,7 @@ function failure(error) {
   return {status: error instanceof SqliteError && kind === 'invalid' ? 'failed' : 'incomplete',
     reason: kind, error: {kind, message: error.message}};
 }
+/** 由核心验证索引指定实际来源的静态 db/WAL 覆盖源；应通过 openDatabase 创建，不能自行重写覆盖规则。 */
 export class WalSource {
   constructor(base, wal, core, index, report) {
     this.base = base; this.wal = wal; this.core = core; this.index = index.id;
@@ -172,6 +181,7 @@ async function openWal(base, wal, options, core) {
     throw error;
   } finally { if (id) bridge(core, {op: 'wal-close', id}); }
 }
+/** 逐条异步迭代器；消费者等待时不预读，不允许并发 next，return/break 释放游标并保存部分结果。 */
 export class Scan {
   constructor(database, root, options = {}) {
     database.assertOpen(); this.database = database; this.options = options; this.controller = new AbortController();
@@ -231,6 +241,7 @@ export class Scan {
     return {done: true, value: this.result};
   }
 }
+/** 已打开静态视图；扫描和检查返回完整度/部分证据，调用者须在 finally 中 await close 释放接管源。 */
 export class Database {
   constructor(core, handle, source, options) {
     this.core = core; this.id = handle.id; this.header = handle.header; this.source = source; this.options = options;
@@ -318,6 +329,7 @@ export class Database {
     await this.source.close?.();
   }
 }
+/** 从异步静态源打开库及可选 WAL；默认接管源，失败时清理。closeSources:false 保留原始源，初始化失败没有可用 Database。 */
 export async function openDatabase(source, options = {}) {
   const core = options.core ?? compiledCore;
   let cached, wal;

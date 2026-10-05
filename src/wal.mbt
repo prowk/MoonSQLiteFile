@@ -1,4 +1,5 @@
 ///|
+/// WAL 累计 checksum 的字节序，由 header magic 决定；其他 WAL 数值仍按大端存储。
 pub(all) enum WalChecksumOrder {
   LittleEndianChecksum
   BigEndianChecksum
@@ -11,6 +12,7 @@ pub extend WalChecksumOrder with @debug.Debug::{to_repr}
 pub extend WalChecksumOrder with Eq::{equal, not_equal}
 
 ///|
+/// 已校验的 32 字节 WAL 头；page_size 是实际页长，salt 与 checksum 用于逐帧验证，不提供在线锁或恢复协议。
 pub(all) struct WalHeader {
   checksum_order : WalChecksumOrder
   version : UInt
@@ -29,6 +31,7 @@ pub extend WalHeader with @debug.Debug::{to_repr}
 pub extend WalHeader with Eq::{equal, not_equal}
 
 ///|
+/// 内存 WAL 中的一帧；index 从 1 开始，byte_offset 指向帧头，database_pages 非零表示提交边界。
 pub(all) struct WalFrame {
   index : Int
   byte_offset : Int
@@ -45,6 +48,7 @@ pub extend WalFrame with @debug.Debug::{to_repr}
 pub extend WalFrame with Eq::{equal, not_equal}
 
 ///|
+/// 完整有效提交边界；frame_index 从 1 开始，database_pages 是该提交的逻辑页数。
 pub(all) struct WalCommit {
   frame_index : Int
   database_pages : UInt
@@ -57,6 +61,7 @@ pub extend WalCommit with @debug.Debug::{to_repr}
 pub extend WalCommit with Eq::{equal, not_equal}
 
 ///|
+/// WAL 扫描停止原因；异常尾部与完整提交分开记录。WalFrameLimit 不能被有效前缀策略当作最新快照成功。
 pub(all) enum WalStopReason {
   WalEndOfFile
   WalTruncatedFrame
@@ -73,6 +78,7 @@ pub extend WalStopReason with @debug.Debug::{to_repr}
 pub extend WalStopReason with Eq::{equal, not_equal}
 
 ///|
+/// 内存 WAL 连续有效帧和提交报告；异常尾部可返回报告而非抛错，构造快照时再应用尾部策略。空 WAL 没有 header。
 pub(all) struct WalInspection {
   header : WalHeader?
   frames : Array[WalFrame]
@@ -120,6 +126,7 @@ fn wal_checksum(
 
 ///|
 /// 验证 WAL header；头部不完整、格式或 checksum 错误直接抛出错误。
+/// 验证 32 字节 WAL header、magic、版本、页长及 checksum；不扫描帧。
 pub fn parse_wal_header(data : Bytes) -> WalHeader raise SqliteError {
   require_range(data, 0, 32)
   let checksum_order = match read_u32(data, 0) {
@@ -155,6 +162,7 @@ pub fn parse_wal_header(data : Bytes) -> WalHeader raise SqliteError {
 
 ///|
 /// 只接受连续有效帧；遇到首个无效帧后不搜索更后面的提交标记。
+/// 顺序验证完整内存 WAL，返回连续有效帧、提交边界和停止原因。默认最多 100000 帧；异常尾部与帧预算在报告中区分。
 pub fn inspect_wal(
   data : Bytes,
   max_frames? : Int = 100000,

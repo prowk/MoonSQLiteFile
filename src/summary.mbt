@@ -1,4 +1,5 @@
 ///|
+/// 某一页用途的首次归属页数；不重复计入冲突引用。
 pub(all) struct PageKindCount {
   kind : PageKind
   pages : Int
@@ -12,6 +13,7 @@ pub extend PageKindCount with Eq::{equal, not_equal}
 
 ///|
 /// 仅统计已经认领的页，不把冲突引用重复计入另一个对象。
+/// 一个对象已认领的 B-tree 与 overflow 页数；包含页内空闲空间，不是有效 payload 长度。
 pub(all) struct ObjectPageCount {
   root_page : Int
   object_name : String?
@@ -27,6 +29,7 @@ pub extend ObjectPageCount with Eq::{equal, not_equal}
 
 ///|
 /// 对已有报告的纯汇总；完整程度、诊断及 payload 请求总量仍以原报告为准。
+/// 已有归属报告的纯汇总；不重新读取源。未完成检查的统计只代表已观察前缀，完整程度仍看原报告。
 pub(all) struct InspectionSummary {
   claimed_pages : Int
   unclaimed_pages : Int
@@ -62,6 +65,7 @@ fn page_kind_index(kind : PageKind) -> Int {
 
 ///|
 /// 不读取数据源、不解码记录；未完成报告的统计只表示已观察到的页。
+/// 对已有页归属报告作纯汇总，不重读数据源；冲突页只按首次归属计数，未完成报告只代表已观察前缀。
 pub fn DatabaseInspection::summarize(
   self : DatabaseInspection,
 ) -> InspectionSummary {

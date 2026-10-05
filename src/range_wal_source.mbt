@@ -1,4 +1,5 @@
 ///|
+/// 64 位主文件/WAL 静态覆盖源；只保存有界覆盖索引，按范围读取实际来源，逻辑页数以最新完整提交为准。宿主必须提供一致且不可变的配对副本。
 pub struct RangeWalSource {
   priv base : &RangeSource
   priv wal : &RangeSource
@@ -14,6 +15,7 @@ pub extend RangeWalSource with RangeSource::{byte_length64, read_range64}
 
 ///|
 /// 只读最新已提交快照；调用者负责提供同一数据库、同一时刻的不可变副本。
+/// 逐帧校验配对静态范围源并构建有界最新提交覆盖索引；max_frames/max_overlay_pages 默认各 100000。宿主失败或预算不足不能回退为旧成功快照。
 pub fn RangeWalSource::new(
   base : &RangeSource,
   wal : &RangeSource,
@@ -32,6 +34,7 @@ pub fn RangeWalSource::new(
 
 ///|
 /// 使用已经完成的供帧游标创建索引；游标输入必须来自相同的不可变 WAL。
+/// 从完成的 WalCursor 构造覆盖索引，不重新验证 WAL；传入源必须与供给校验时相同且不可变。未完成/取消游标拒绝构造。
 pub fn RangeWalSource::from_cursor(
   base : &RangeSource,
   wal : &RangeSource,
@@ -161,21 +164,25 @@ fn build_range_wal_source(
 }
 
 ///|
+/// 返回覆盖视图的 64 位 WAL 验证报告，不重新读取源；调用者不应修改报告数组。
 pub fn RangeWalSource::inspection(self : RangeWalSource) -> RangeWalInspection {
   self.inspection
 }
 
 ///|
+/// 返回最新完整提交的逻辑页数，隔离未提交尾部和缩小后旧页。
 pub fn RangeWalSource::page_count(self : RangeWalSource) -> Int {
   self.page_count
 }
 
 ///|
+/// 返回静态源字节长度，不执行格式检查。
 pub impl RangeSource for RangeWalSource with fn byte_length64(self) {
   self.page_count.to_int64() * self.page_size.to_int64()
 }
 
 ///|
+/// 按源契约返回准确范围字节；范围和长度错误按实现所属的源错误类型返回。
 pub impl RangeSource for RangeWalSource with fn read_range64(
   self,
   offset,
@@ -209,6 +216,7 @@ pub impl RangeSource for RangeWalSource with fn read_range64(
 }
 
 ///|
+/// 从已校验的 64 位覆盖源打开 Database，使用提交逻辑页数；初始化失败没有部分检查报告，调用者仍管理源生命周期。
 pub fn open_range_wal_source(
   source : RangeWalSource,
   limits? : Limits = Limits::default(),
@@ -224,6 +232,7 @@ pub fn open_range_wal_source(
 
 ///|
 /// 异步适配器使用同一个核心覆盖索引确定页来源，不重复实现提交或缩小语义。
+/// 覆盖视图中页面的真实来源；MainPage/WalPage 携带页面内容起始的 Int64 字节偏移，WalPage 跳过 24 字节帧头。
 pub(all) enum SnapshotPageRange {
   MainPage(Int64)
   WalPage(Int64)
@@ -236,6 +245,7 @@ pub extend SnapshotPageRange with @debug.Debug::{to_repr}
 pub extend SnapshotPageRange with Eq::{equal, not_equal}
 
 ///|
+/// 查询逻辑页实际读取来源；返回页面内容起始的 Int64 偏移，WAL 偏移不包含 24 字节帧头。页号越界抛 Invalid。
 pub fn RangeWalSource::page_range(
   self : RangeWalSource,
   number : Int,

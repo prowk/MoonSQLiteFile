@@ -1,0 +1,3088 @@
+{
+  "baseline_commit": "8a3a4c79ecd54c893604839f9136081289b8f21b",
+  "cases": [
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "header"
+      ],
+      "exit": 0,
+      "stdout": {
+        "page_size": 512,
+        "usable_size": 512,
+        "page_count": 96,
+        "write_version": 1,
+        "read_version": 1,
+        "change_counter": 3,
+        "declared_pages": 96,
+        "freelist_trunk": 91,
+        "freelist_pages": 7,
+        "schema_cookie": 7,
+        "schema_format": 4,
+        "largest_root_page": 0,
+        "incremental_vacuum": false,
+        "text_encoding": 1,
+        "user_version": 0,
+        "application_id": 0,
+        "version_valid_for": 3,
+        "sqlite_version": 3045003
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "schema"
+      ],
+      "exit": 0,
+      "stdout": [
+        {
+          "object_type": "table",
+          "name": "samples",
+          "table_name": "samples",
+          "root_page": 2,
+          "sql": "CREATE TABLE samples(id INTEGER PRIMARY KEY, label TEXT, n INTEGER, x REAL, data BLOB, missing)"
+        },
+        {
+          "object_type": "table",
+          "name": "branches",
+          "table_name": "branches",
+          "root_page": 3,
+          "sql": "CREATE TABLE branches(id INTEGER PRIMARY KEY, label TEXT)"
+        },
+        {
+          "object_type": "table",
+          "name": "overflow_data",
+          "table_name": "overflow_data",
+          "root_page": 74,
+          "sql": "CREATE TABLE overflow_data(id INTEGER PRIMARY KEY, content TEXT, payload BLOB)"
+        },
+        {
+          "object_type": "table",
+          "name": "keyed",
+          "table_name": "keyed",
+          "root_page": 86,
+          "sql": "CREATE TABLE keyed(name TEXT PRIMARY KEY, value INTEGER) WITHOUT ROWID"
+        },
+        {
+          "object_type": "index",
+          "name": "samples_label",
+          "table_name": "samples",
+          "root_page": 88,
+          "sql": "CREATE INDEX samples_label ON samples(label)"
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "page",
+        "2"
+      ],
+      "exit": 0,
+      "stdout": {
+        "number": 2,
+        "kind": "table_leaf",
+        "first_freeblock": 0,
+        "cell_count": 6,
+        "content_start": 330,
+        "fragmented_bytes": 0,
+        "right_child": null,
+        "cell_offsets": [
+          456,
+          447,
+          420,
+          391,
+          360,
+          330
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "page-inspect",
+        "2"
+      ],
+      "exit": 0,
+      "stdout": {
+        "status": "complete",
+        "page": {
+          "number": 2,
+          "kind": "table_leaf",
+          "first_freeblock": 0,
+          "cell_count": 6,
+          "content_start": 330,
+          "fragmented_bytes": 0,
+          "right_child": null,
+          "cell_offsets": [
+            456,
+            447,
+            420,
+            391,
+            360,
+            330
+          ]
+        },
+        "statistics": {
+          "database_header_bytes": 0,
+          "btree_header_bytes": 8,
+          "pointer_bytes": 12,
+          "unallocated_bytes": 310,
+          "cell_bytes": 182,
+          "freeblock_bytes": 0,
+          "fragmented_bytes": 0,
+          "reserved_bytes": 0,
+          "payload_bytes": "159",
+          "local_payload_bytes": "159",
+          "max_payload_bytes": 46,
+          "overflow_cells": 0
+        },
+        "diagnostic": null
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "rows",
+        "samples"
+      ],
+      "exit": 0,
+      "stdout": [
+        {
+          "rowid": "-7",
+          "page_number": 2,
+          "values": [
+            {
+              "type": "null",
+              "value": null
+            },
+            {
+              "type": "text",
+              "value": "中文 SQLite 🌙"
+            },
+            {
+              "type": "integer",
+              "value": "-9223372036854775808"
+            },
+            {
+              "type": "real",
+              "value": -1.25
+            },
+            {
+              "type": "blob",
+              "value": "00ff104180"
+            },
+            {
+              "type": "null",
+              "value": null
+            }
+          ]
+        },
+        {
+          "rowid": "0",
+          "page_number": 2,
+          "values": [
+            {
+              "type": "null",
+              "value": null
+            },
+            {
+              "type": "text",
+              "value": ""
+            },
+            {
+              "type": "integer",
+              "value": "0"
+            },
+            {
+              "type": "integer",
+              "value": "0"
+            },
+            {
+              "type": "blob",
+              "value": ""
+            },
+            {
+              "type": "null",
+              "value": null
+            }
+          ]
+        },
+        {
+          "rowid": "1",
+          "page_number": 2,
+          "values": [
+            {
+              "type": "null",
+              "value": null
+            },
+            {
+              "type": "text",
+              "value": "hello"
+            },
+            {
+              "type": "integer",
+              "value": "1"
+            },
+            {
+              "type": "real",
+              "value": 3.141592653589793
+            },
+            {
+              "type": "blob",
+              "value": "68656c6c6f"
+            },
+            {
+              "type": "null",
+              "value": null
+            }
+          ]
+        },
+        {
+          "rowid": "127",
+          "page_number": 2,
+          "values": [
+            {
+              "type": "null",
+              "value": null
+            },
+            {
+              "type": "text",
+              "value": "varint 127"
+            },
+            {
+              "type": "integer",
+              "value": "127"
+            },
+            {
+              "type": "real",
+              "value": 1e+100
+            },
+            {
+              "type": "blob",
+              "value": "7f"
+            },
+            {
+              "type": "null",
+              "value": null
+            }
+          ]
+        },
+        {
+          "rowid": "128",
+          "page_number": 2,
+          "values": [
+            {
+              "type": "null",
+              "value": null
+            },
+            {
+              "type": "text",
+              "value": "varint 128"
+            },
+            {
+              "type": "integer",
+              "value": "128"
+            },
+            {
+              "type": "real",
+              "value": 1e-100
+            },
+            {
+              "type": "blob",
+              "value": "80"
+            },
+            {
+              "type": "null",
+              "value": null
+            }
+          ]
+        },
+        {
+          "rowid": "16384",
+          "page_number": 2,
+          "values": [
+            {
+              "type": "null",
+              "value": null
+            },
+            {
+              "type": "text",
+              "value": "大整数"
+            },
+            {
+              "type": "integer",
+              "value": "9223372036854775807"
+            },
+            {
+              "type": "integer",
+              "value": "42"
+            },
+            {
+              "type": "blob",
+              "value": "ff"
+            },
+            {
+              "type": "null",
+              "value": null
+            }
+          ]
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "records",
+        "keyed"
+      ],
+      "exit": 0,
+      "stdout": [
+        {
+          "rowid": null,
+          "page_number": 86,
+          "cell_offset": 503,
+          "values": [
+            {
+              "type": "text",
+              "value": "alpha"
+            },
+            {
+              "type": "integer",
+              "value": "1"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 86,
+          "cell_offset": 492,
+          "values": [
+            {
+              "type": "text",
+              "value": "中文"
+            },
+            {
+              "type": "integer",
+              "value": "2"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 86,
+          "cell_offset": 483,
+          "values": [
+            {
+              "type": "text",
+              "value": "🌙"
+            },
+            {
+              "type": "integer",
+              "value": "3"
+            }
+          ]
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "index",
+        "samples_label"
+      ],
+      "exit": 0,
+      "stdout": [
+        {
+          "rowid": null,
+          "page_number": 88,
+          "cell_offset": 508,
+          "values": [
+            {
+              "type": "text",
+              "value": ""
+            },
+            {
+              "type": "integer",
+              "value": "0"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 88,
+          "cell_offset": 499,
+          "values": [
+            {
+              "type": "text",
+              "value": "hello"
+            },
+            {
+              "type": "integer",
+              "value": "1"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 88,
+          "cell_offset": 484,
+          "values": [
+            {
+              "type": "text",
+              "value": "varint 127"
+            },
+            {
+              "type": "integer",
+              "value": "127"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 88,
+          "cell_offset": 468,
+          "values": [
+            {
+              "type": "text",
+              "value": "varint 128"
+            },
+            {
+              "type": "integer",
+              "value": "128"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 88,
+          "cell_offset": 445,
+          "values": [
+            {
+              "type": "text",
+              "value": "中文 SQLite 🌙"
+            },
+            {
+              "type": "integer",
+              "value": "-7"
+            }
+          ]
+        },
+        {
+          "rowid": null,
+          "page_number": 88,
+          "cell_offset": 430,
+          "values": [
+            {
+              "type": "text",
+              "value": "大整数"
+            },
+            {
+              "type": "integer",
+              "value": "16384"
+            }
+          ]
+        }
+      ],
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "scan",
+        "2",
+        "1"
+      ],
+      "exit": 0,
+      "stdout": {
+        "records_read": 1,
+        "pages_read": 1,
+        "payload_bytes": "46",
+        "completion": "record_limit"
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "freelist"
+      ],
+      "exit": 0,
+      "stdout": [
+        91,
+        92,
+        94,
+        93,
+        96,
+        95,
+        90
+      ],
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "inspect"
+      ],
+      "exit": 0,
+      "stdout": {
+        "status": "complete",
+        "ownership_complete": true,
+        "ptrmap_checked": true,
+        "diagnostics_truncated": false,
+        "roots_inspected": 6,
+        "records_decoded": 701,
+        "payload_bytes": "37408",
+        "pages": [
+          {
+            "page_number": 1,
+            "kind": "btree_root",
+            "root_page": 1,
+            "object_name": "sqlite_schema",
+            "parent_page": null
+          },
+          {
+            "page_number": 2,
+            "kind": "btree_root",
+            "root_page": 2,
+            "object_name": "samples",
+            "parent_page": null
+          },
+          {
+            "page_number": 3,
+            "kind": "btree_root",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": null
+          },
+          {
+            "page_number": 4,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 5,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 6,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 7,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 8,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 9,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 10,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 11,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 12,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 13,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 14,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 15,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 16,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 17,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 18,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 19,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 20,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 21,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 22,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 23,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 24,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 25,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 26,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 27,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 28,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 29,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 30,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 31,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 32,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 33,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 34,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 35,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 36,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 37,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 70
+          },
+          {
+            "page_number": 38,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 39,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 40,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 41,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 42,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 43,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 44,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 45,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 46,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 47,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 48,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 49,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 50,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 51,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 52,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 53,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 54,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 55,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 56,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 57,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 58,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 59,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 60,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 61,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 62,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 63,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 64,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 65,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 66,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 67,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 68,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 69,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 70,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 3
+          },
+          {
+            "page_number": 71,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 3
+          },
+          {
+            "page_number": 72,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 73,
+            "kind": "btree_child",
+            "root_page": 3,
+            "object_name": "branches",
+            "parent_page": 71
+          },
+          {
+            "page_number": 74,
+            "kind": "btree_root",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": null
+          },
+          {
+            "page_number": 75,
+            "kind": "overflow_first",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 74
+          },
+          {
+            "page_number": 76,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 75
+          },
+          {
+            "page_number": 77,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 76
+          },
+          {
+            "page_number": 78,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 77
+          },
+          {
+            "page_number": 79,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 78
+          },
+          {
+            "page_number": 80,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 79
+          },
+          {
+            "page_number": 81,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 80
+          },
+          {
+            "page_number": 82,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 81
+          },
+          {
+            "page_number": 83,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 82
+          },
+          {
+            "page_number": 84,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 83
+          },
+          {
+            "page_number": 85,
+            "kind": "overflow_continuation",
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "parent_page": 84
+          },
+          {
+            "page_number": 86,
+            "kind": "btree_root",
+            "root_page": 86,
+            "object_name": "keyed",
+            "parent_page": null
+          },
+          {
+            "page_number": 87,
+            "kind": "btree_child",
+            "root_page": 1,
+            "object_name": "sqlite_schema",
+            "parent_page": 1
+          },
+          {
+            "page_number": 88,
+            "kind": "btree_root",
+            "root_page": 88,
+            "object_name": "samples_label",
+            "parent_page": null
+          },
+          {
+            "page_number": 89,
+            "kind": "btree_child",
+            "root_page": 1,
+            "object_name": "sqlite_schema",
+            "parent_page": 1
+          },
+          {
+            "page_number": 90,
+            "kind": "freelist_leaf",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          },
+          {
+            "page_number": 91,
+            "kind": "freelist_trunk",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          },
+          {
+            "page_number": 92,
+            "kind": "freelist_leaf",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          },
+          {
+            "page_number": 93,
+            "kind": "freelist_leaf",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          },
+          {
+            "page_number": 94,
+            "kind": "freelist_leaf",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          },
+          {
+            "page_number": 95,
+            "kind": "freelist_leaf",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          },
+          {
+            "page_number": 96,
+            "kind": "freelist_leaf",
+            "root_page": null,
+            "object_name": null,
+            "parent_page": null
+          }
+        ],
+        "unclaimed_pages": [],
+        "issues": []
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "inspect-details"
+      ],
+      "exit": 0,
+      "stdout": {
+        "inspection": {
+          "status": "complete",
+          "ownership_complete": true,
+          "ptrmap_checked": true,
+          "diagnostics_truncated": false,
+          "roots_inspected": 6,
+          "records_decoded": 701,
+          "payload_bytes": "37408",
+          "pages": [
+            {
+              "page_number": 1,
+              "kind": "btree_root",
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "parent_page": null
+            },
+            {
+              "page_number": 2,
+              "kind": "btree_root",
+              "root_page": 2,
+              "object_name": "samples",
+              "parent_page": null
+            },
+            {
+              "page_number": 3,
+              "kind": "btree_root",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": null
+            },
+            {
+              "page_number": 4,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 5,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 6,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 7,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 8,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 9,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 10,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 11,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 12,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 13,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 14,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 15,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 16,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 17,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 18,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 19,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 20,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 21,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 22,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 23,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 24,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 25,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 26,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 27,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 28,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 29,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 30,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 31,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 32,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 33,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 34,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 35,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 36,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 37,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 38,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 39,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 40,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 41,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 42,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 43,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 44,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 45,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 46,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 47,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 48,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 49,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 50,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 51,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 52,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 53,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 54,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 55,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 56,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 57,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 58,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 59,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 60,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 61,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 62,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 63,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 64,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 65,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 66,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 67,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 68,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 69,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 70,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 3
+            },
+            {
+              "page_number": 71,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 3
+            },
+            {
+              "page_number": 72,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 73,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 74,
+              "kind": "btree_root",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": null
+            },
+            {
+              "page_number": 75,
+              "kind": "overflow_first",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 74
+            },
+            {
+              "page_number": 76,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 75
+            },
+            {
+              "page_number": 77,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 76
+            },
+            {
+              "page_number": 78,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 77
+            },
+            {
+              "page_number": 79,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 78
+            },
+            {
+              "page_number": 80,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 79
+            },
+            {
+              "page_number": 81,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 80
+            },
+            {
+              "page_number": 82,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 81
+            },
+            {
+              "page_number": 83,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 82
+            },
+            {
+              "page_number": 84,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 83
+            },
+            {
+              "page_number": 85,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 84
+            },
+            {
+              "page_number": 86,
+              "kind": "btree_root",
+              "root_page": 86,
+              "object_name": "keyed",
+              "parent_page": null
+            },
+            {
+              "page_number": 87,
+              "kind": "btree_child",
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "parent_page": 1
+            },
+            {
+              "page_number": 88,
+              "kind": "btree_root",
+              "root_page": 88,
+              "object_name": "samples_label",
+              "parent_page": null
+            },
+            {
+              "page_number": 89,
+              "kind": "btree_child",
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "parent_page": 1
+            },
+            {
+              "page_number": 90,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 91,
+              "kind": "freelist_trunk",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 92,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 93,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 94,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 95,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 96,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            }
+          ],
+          "unclaimed_pages": [],
+          "issues": []
+        },
+        "locations": []
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "tree-inspect",
+        "2"
+      ],
+      "exit": 0,
+      "stdout": {
+        "root_page": 2,
+        "status": "complete",
+        "records_decoded": 6,
+        "completion": "complete",
+        "error": null,
+        "location": null
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "summary"
+      ],
+      "exit": 0,
+      "stdout": "检查状态：完整（当前结构检查范围）\n逻辑页数：96，页大小：512 字节\n页归属：完整；Ptrmap：已核对或不适用；诊断：未截断\n已认领页：96，已枚举的未认领页：0\n已尝试根页：6，已解码记录：701，已请求 payload：37408 字节\n\n页面分类（已认领）：\n  btree_root：6\n  btree_child：72\n  overflow_first：1\n  overflow_continuation：10\n  freelist_trunk：1\n  freelist_leaf：6\n\n对象占页（已认领，含 sqlite_schema）：\n  \"sqlite_schema\"，根页 1：B-tree 3，overflow 0，占页字节 1536\n  \"samples\"，根页 2：B-tree 1，overflow 0，占页字节 512\n  \"branches\"，根页 3：B-tree 71，overflow 0，占页字节 36352\n  \"overflow_data\"，根页 74：B-tree 1，overflow 11，占页字节 6144\n  \"keyed\"，根页 86：B-tree 1，overflow 0，占页字节 512\n  \"samples_label\"，根页 88：B-tree 1，overflow 0，占页字节 512\n\n诊断：0 条\n",
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "summary-json"
+      ],
+      "exit": 0,
+      "stdout": {
+        "status": "complete",
+        "ownership_complete": true,
+        "ptrmap_checked": true,
+        "diagnostics_truncated": false,
+        "logical_pages": 96,
+        "page_size": 512,
+        "claimed_pages": 96,
+        "unclaimed_pages": 0,
+        "roots_inspected": 6,
+        "records_decoded": 701,
+        "payload_bytes": "37408",
+        "issue_count": 0,
+        "page_kinds": [
+          {
+            "kind": "btree_root",
+            "pages": 6
+          },
+          {
+            "kind": "btree_child",
+            "pages": 72
+          },
+          {
+            "kind": "overflow_first",
+            "pages": 1
+          },
+          {
+            "kind": "overflow_continuation",
+            "pages": 10
+          },
+          {
+            "kind": "freelist_trunk",
+            "pages": 1
+          },
+          {
+            "kind": "freelist_leaf",
+            "pages": 6
+          },
+          {
+            "kind": "pointer_map",
+            "pages": 0
+          },
+          {
+            "kind": "lock_byte",
+            "pages": 0
+          }
+        ],
+        "objects": [
+          {
+            "root_page": 1,
+            "object_name": "sqlite_schema",
+            "btree_pages": 3,
+            "overflow_pages": 0,
+            "storage_bytes": "1536"
+          },
+          {
+            "root_page": 2,
+            "object_name": "samples",
+            "btree_pages": 1,
+            "overflow_pages": 0,
+            "storage_bytes": "512"
+          },
+          {
+            "root_page": 3,
+            "object_name": "branches",
+            "btree_pages": 71,
+            "overflow_pages": 0,
+            "storage_bytes": "36352"
+          },
+          {
+            "root_page": 74,
+            "object_name": "overflow_data",
+            "btree_pages": 1,
+            "overflow_pages": 11,
+            "storage_bytes": "6144"
+          },
+          {
+            "root_page": 86,
+            "object_name": "keyed",
+            "btree_pages": 1,
+            "overflow_pages": 0,
+            "storage_bytes": "512"
+          },
+          {
+            "root_page": 88,
+            "object_name": "samples_label",
+            "btree_pages": 1,
+            "overflow_pages": 0,
+            "storage_bytes": "512"
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "viewer-data"
+      ],
+      "exit": 0,
+      "stdout": {
+        "header": {
+          "page_size": 512,
+          "usable_size": 512,
+          "page_count": 96,
+          "write_version": 1,
+          "read_version": 1,
+          "change_counter": 3,
+          "declared_pages": 96,
+          "freelist_trunk": 91,
+          "freelist_pages": 7,
+          "schema_cookie": 7,
+          "schema_format": 4,
+          "largest_root_page": 0,
+          "incremental_vacuum": false,
+          "text_encoding": 1,
+          "user_version": 0,
+          "application_id": 0,
+          "version_valid_for": 3,
+          "sqlite_version": 3045003
+        },
+        "summary": {
+          "status": "complete",
+          "ownership_complete": true,
+          "ptrmap_checked": true,
+          "diagnostics_truncated": false,
+          "logical_pages": 96,
+          "page_size": 512,
+          "claimed_pages": 96,
+          "unclaimed_pages": 0,
+          "roots_inspected": 6,
+          "records_decoded": 701,
+          "payload_bytes": "37408",
+          "issue_count": 0,
+          "page_kinds": [
+            {
+              "kind": "btree_root",
+              "pages": 6
+            },
+            {
+              "kind": "btree_child",
+              "pages": 72
+            },
+            {
+              "kind": "overflow_first",
+              "pages": 1
+            },
+            {
+              "kind": "overflow_continuation",
+              "pages": 10
+            },
+            {
+              "kind": "freelist_trunk",
+              "pages": 1
+            },
+            {
+              "kind": "freelist_leaf",
+              "pages": 6
+            },
+            {
+              "kind": "pointer_map",
+              "pages": 0
+            },
+            {
+              "kind": "lock_byte",
+              "pages": 0
+            }
+          ],
+          "objects": [
+            {
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "btree_pages": 3,
+              "overflow_pages": 0,
+              "storage_bytes": "1536"
+            },
+            {
+              "root_page": 2,
+              "object_name": "samples",
+              "btree_pages": 1,
+              "overflow_pages": 0,
+              "storage_bytes": "512"
+            },
+            {
+              "root_page": 3,
+              "object_name": "branches",
+              "btree_pages": 71,
+              "overflow_pages": 0,
+              "storage_bytes": "36352"
+            },
+            {
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "btree_pages": 1,
+              "overflow_pages": 11,
+              "storage_bytes": "6144"
+            },
+            {
+              "root_page": 86,
+              "object_name": "keyed",
+              "btree_pages": 1,
+              "overflow_pages": 0,
+              "storage_bytes": "512"
+            },
+            {
+              "root_page": 88,
+              "object_name": "samples_label",
+              "btree_pages": 1,
+              "overflow_pages": 0,
+              "storage_bytes": "512"
+            }
+          ]
+        },
+        "inspection": {
+          "status": "complete",
+          "ownership_complete": true,
+          "ptrmap_checked": true,
+          "diagnostics_truncated": false,
+          "roots_inspected": 6,
+          "records_decoded": 701,
+          "payload_bytes": "37408",
+          "pages": [
+            {
+              "page_number": 1,
+              "kind": "btree_root",
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "parent_page": null
+            },
+            {
+              "page_number": 2,
+              "kind": "btree_root",
+              "root_page": 2,
+              "object_name": "samples",
+              "parent_page": null
+            },
+            {
+              "page_number": 3,
+              "kind": "btree_root",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": null
+            },
+            {
+              "page_number": 4,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 5,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 6,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 7,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 8,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 9,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 10,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 11,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 12,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 13,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 14,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 15,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 16,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 17,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 18,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 19,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 20,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 21,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 22,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 23,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 24,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 25,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 26,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 27,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 28,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 29,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 30,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 31,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 32,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 33,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 34,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 35,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 36,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 37,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 70
+            },
+            {
+              "page_number": 38,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 39,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 40,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 41,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 42,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 43,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 44,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 45,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 46,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 47,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 48,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 49,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 50,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 51,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 52,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 53,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 54,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 55,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 56,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 57,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 58,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 59,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 60,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 61,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 62,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 63,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 64,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 65,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 66,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 67,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 68,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 69,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 70,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 3
+            },
+            {
+              "page_number": 71,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 3
+            },
+            {
+              "page_number": 72,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 73,
+              "kind": "btree_child",
+              "root_page": 3,
+              "object_name": "branches",
+              "parent_page": 71
+            },
+            {
+              "page_number": 74,
+              "kind": "btree_root",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": null
+            },
+            {
+              "page_number": 75,
+              "kind": "overflow_first",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 74
+            },
+            {
+              "page_number": 76,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 75
+            },
+            {
+              "page_number": 77,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 76
+            },
+            {
+              "page_number": 78,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 77
+            },
+            {
+              "page_number": 79,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 78
+            },
+            {
+              "page_number": 80,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 79
+            },
+            {
+              "page_number": 81,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 80
+            },
+            {
+              "page_number": 82,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 81
+            },
+            {
+              "page_number": 83,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 82
+            },
+            {
+              "page_number": 84,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 83
+            },
+            {
+              "page_number": 85,
+              "kind": "overflow_continuation",
+              "root_page": 74,
+              "object_name": "overflow_data",
+              "parent_page": 84
+            },
+            {
+              "page_number": 86,
+              "kind": "btree_root",
+              "root_page": 86,
+              "object_name": "keyed",
+              "parent_page": null
+            },
+            {
+              "page_number": 87,
+              "kind": "btree_child",
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "parent_page": 1
+            },
+            {
+              "page_number": 88,
+              "kind": "btree_root",
+              "root_page": 88,
+              "object_name": "samples_label",
+              "parent_page": null
+            },
+            {
+              "page_number": 89,
+              "kind": "btree_child",
+              "root_page": 1,
+              "object_name": "sqlite_schema",
+              "parent_page": 1
+            },
+            {
+              "page_number": 90,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 91,
+              "kind": "freelist_trunk",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 92,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 93,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 94,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 95,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            },
+            {
+              "page_number": 96,
+              "kind": "freelist_leaf",
+              "root_page": null,
+              "object_name": null,
+              "parent_page": null
+            }
+          ],
+          "unclaimed_pages": [],
+          "issues": []
+        },
+        "locations": []
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "--max-pages",
+        "1",
+        "inspect-details"
+      ],
+      "exit": 2,
+      "stdout": {
+        "inspection": {
+          "status": "incomplete",
+          "ownership_complete": false,
+          "ptrmap_checked": false,
+          "diagnostics_truncated": false,
+          "roots_inspected": 0,
+          "records_decoded": 0,
+          "payload_bytes": "0",
+          "pages": [],
+          "unclaimed_pages": [],
+          "issues": [
+            {
+              "code": "scan_error",
+              "root_page": null,
+              "error_kind": "limit_exceeded",
+              "message": "数据库逻辑页数超过全局检查预算"
+            }
+          ]
+        },
+        "locations": [
+          {
+            "phase": "configuration",
+            "page_number": null,
+            "byte_offset": null,
+            "cell_index": null,
+            "page_code": null
+          }
+        ]
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "page-inspect",
+        "999"
+      ],
+      "exit": 2,
+      "stdout": {
+        "status": "incomplete",
+        "page": null,
+        "statistics": null,
+        "diagnostic": {
+          "code": "page_read",
+          "page_number": 999,
+          "byte_offset": null,
+          "cell_index": null,
+          "error_kind": "invalid",
+          "message": "页号越界：999"
+        }
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/core.sqlite",
+      "args": [
+        "tree-inspect",
+        "999"
+      ],
+      "exit": 1,
+      "stdout": {
+        "root_page": 999,
+        "status": "failed",
+        "records_decoded": 0,
+        "completion": null,
+        "error": {
+          "error_kind": "invalid",
+          "message": "页号越界：999"
+        },
+        "location": {
+          "phase": "read_page",
+          "page_number": 999,
+          "byte_offset": null,
+          "cell_index": null,
+          "page_code": null
+        }
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/cli-contract/empty.db",
+      "args": [
+        "--wal",
+        "fixtures/cli-contract/committed.wal",
+        "header"
+      ],
+      "exit": 0,
+      "stdout": {
+        "page_size": 512,
+        "usable_size": 512,
+        "page_count": 1,
+        "write_version": 1,
+        "read_version": 1,
+        "change_counter": 0,
+        "declared_pages": 0,
+        "freelist_trunk": 0,
+        "freelist_pages": 0,
+        "schema_cookie": 0,
+        "schema_format": 0,
+        "largest_root_page": 0,
+        "incremental_vacuum": false,
+        "text_encoding": 0,
+        "user_version": 11,
+        "application_id": 0,
+        "version_valid_for": 0,
+        "sqlite_version": 0
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/cli-contract/committed.wal",
+      "args": [
+        "wal-inspect"
+      ],
+      "exit": 0,
+      "stdout": {
+        "header": {
+          "checksum_order": "big_endian",
+          "version": 3007000,
+          "page_size": 512,
+          "checkpoint_sequence": 17,
+          "salt1": 287454020,
+          "salt2": 1432778632,
+          "checksum1": 656866860,
+          "checksum2": 593907582
+        },
+        "frames": [
+          {
+            "index": 1,
+            "byte_offset": 32,
+            "page_number": 1,
+            "database_pages": 1,
+            "checksum1": 1228955110,
+            "checksum2": 3167312896
+          }
+        ],
+        "commits": [
+          {
+            "frame_index": 1,
+            "database_pages": 1
+          }
+        ],
+        "committed_frames": 1,
+        "uncommitted_frames": 0,
+        "database_pages": 1,
+        "stop_reason": "end_of_file",
+        "stop_offset": 568,
+        "trailing_bytes": 0
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/cli-contract/empty.db",
+      "args": [
+        "--wal",
+        "fixtures/cli-contract/committed.wal",
+        "wal-info"
+      ],
+      "exit": 0,
+      "stdout": {
+        "wal": {
+          "header": {
+            "checksum_order": "big_endian",
+            "version": 3007000,
+            "page_size": 512,
+            "checkpoint_sequence": 17,
+            "salt1": 287454020,
+            "salt2": 1432778632,
+            "checksum1": 656866860,
+            "checksum2": 593907582
+          },
+          "frames": [
+            {
+              "index": 1,
+              "byte_offset": 32,
+              "page_number": 1,
+              "database_pages": 1,
+              "checksum1": 1228955110,
+              "checksum2": 3167312896
+            }
+          ],
+          "commits": [
+            {
+              "frame_index": 1,
+              "database_pages": 1
+            }
+          ],
+          "committed_frames": 1,
+          "uncommitted_frames": 0,
+          "database_pages": 1,
+          "stop_reason": "end_of_file",
+          "stop_offset": 568,
+          "trailing_bytes": 0
+        },
+        "snapshot": {
+          "page_size": 512,
+          "usable_size": 512,
+          "page_count": 1,
+          "write_version": 1,
+          "read_version": 1,
+          "change_counter": 0,
+          "declared_pages": 0,
+          "freelist_trunk": 0,
+          "freelist_pages": 0,
+          "schema_cookie": 0,
+          "schema_format": 0,
+          "largest_root_page": 0,
+          "incremental_vacuum": false,
+          "text_encoding": 0,
+          "user_version": 11,
+          "application_id": 0,
+          "version_valid_for": 0,
+          "sqlite_version": 0
+        },
+        "tail_policy": "strict"
+      },
+      "stderr": ""
+    },
+    {
+      "input": "fixtures/cli-contract/bad-magic.db",
+      "args": [
+        "header"
+      ],
+      "exit": 1,
+      "stdout": null,
+      "stderr": "invalid: 不是 SQLite 3 数据库：magic 不匹配\n"
+    }
+  ]
+}

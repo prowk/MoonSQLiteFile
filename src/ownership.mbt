@@ -1,4 +1,5 @@
 ///|
+/// 全库归属报告的八类页用途；一页只统计首次归属，冲突另外报告。
 pub(all) enum PageKind {
   BtreeRoot
   BtreeChild
@@ -17,6 +18,7 @@ pub extend PageKind with @debug.Debug::{to_repr}
 pub extend PageKind with Eq::{equal, not_equal}
 
 ///|
+/// 首次认领页面的用途、根页、对象和父页；不属于对象或没有父页时相应字段为 None。
 pub(all) struct PageOwnership {
   page_number : Int
   kind : PageKind
@@ -32,6 +34,7 @@ pub extend PageOwnership with @debug.Debug::{to_repr}
 pub extend PageOwnership with Eq::{equal, not_equal}
 
 ///|
+/// 全库结构问题：扫描错误、跨用途页冲突、完整覆盖后的未认领页、不支持特性及 Ptrmap 归属不一致。
 pub(all) enum DatabaseIssue {
   ScanError(Int?, SqliteError)
   PageConflict(PageOwnership, PageOwnership)
@@ -45,6 +48,7 @@ pub extend DatabaseIssue with @debug.Debug::{to_repr}
 
 ///|
 /// 只检查逻辑数据库页；完整页归属不等价于 SQL 完整性检查。
+/// 全库已观察报告。ownership_complete 与 ptrmap_checked 分别标记覆盖；diagnostics_truncated 表示诊断截断。schema 记录计入 records_decoded，失败 payload 请求也计费。
 pub(all) struct DatabaseInspection {
   status : InspectionStatus
   ownership_complete : Bool
@@ -203,6 +207,7 @@ fn OwnershipState::finish(
 
 ///|
 /// 扫描 schema、独立 B-tree 和 freelist，使用整个检查过程共享的预算。
+/// 检查 schema、对象树、freelist 和 Ptrmap 的全局归属；保存部分结果。默认累计 payload 64 MiB、最多 100 条诊断，不检查 SQL 排序或表/索引内容一致性。
 pub fn Database::inspect_database(
   self : Database,
   max_total_payload_bytes? : UInt64 = 67108864UL,

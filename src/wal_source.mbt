@@ -1,4 +1,5 @@
 ///|
+/// 异常尾部策略：默认 RejectInvalidTail；显式 UseValidPrefix 使用此前完整提交。帧预算不足或宿主读取失败不能降级为旧快照。
 pub(all) enum WalTailPolicy {
   RejectInvalidTail
   UseValidPrefix
@@ -11,6 +12,7 @@ pub extend WalTailPolicy with @debug.Debug::{to_repr}
 pub extend WalTailPolicy with Eq::{equal, not_equal}
 
 ///|
+/// 持有完整 WAL 字节的旧 PageSource 覆盖视图；读取最新完整提交，隔离未提交更新及缩小/增长后的旧页，受 Int 地址空间限制。
 pub struct WalSource {
   base : &PageSource
   wal : Bytes
@@ -26,6 +28,7 @@ pub extend WalSource with PageSource::{byte_length, read_range}
 
 ///|
 /// 只读最新已提交快照；调用者负责提供同一数据库、同一时刻的不可变副本。
+/// 使用完整 WAL 字节构造旧 Int 地址空间覆盖视图；默认拒绝异常尾部，显式有效前缀策略也不能绕过帧预算。配对源必须静态一致。
 pub fn WalSource::new(
   base : &PageSource,
   wal : Bytes,
@@ -123,21 +126,25 @@ pub fn WalSource::new(
 }
 
 ///|
+/// 返回构造覆盖视图时的 WAL 验证报告，不重新扫描源；调用者不应修改报告数组。
 pub fn WalSource::inspection(self : WalSource) -> WalInspection {
   self.inspection
 }
 
 ///|
+/// 返回最新完整提交的逻辑页数；没有提交时使用主文件逻辑页数。
 pub fn WalSource::page_count(self : WalSource) -> Int {
   self.page_count
 }
 
 ///|
+/// 返回静态源字节长度，不执行格式检查。
 pub impl PageSource for WalSource with fn byte_length(self) {
   self.page_count * self.page_size
 }
 
 ///|
+/// 按源契约返回准确范围字节；范围和长度错误按实现所属的源错误类型返回。
 pub impl PageSource for WalSource with fn read_range(self, offset, count) {
   let size = self.byte_length()
   if offset < 0 || count < 0 || offset > size || count > size - offset {
@@ -169,6 +176,7 @@ pub impl PageSource for WalSource with fn read_range(self, offset, count) {
 }
 
 ///|
+/// 从已构造的 WAL 覆盖源打开只读 Database；使用提交逻辑页数，包括缩小和增长，不把旧主文件页数当快照页数。
 pub fn open_wal_source(
   source : WalSource,
   limits? : Limits = Limits::default(),
@@ -177,6 +185,7 @@ pub fn open_wal_source(
 }
 
 ///|
+/// 便捷打开完整静态 db/WAL 字节；不是在线锁、checkpoint 或恢复协议。默认严格尾部策略，空 WAL 使用主文件。
 pub fn open_wal_database(
   base : Bytes,
   wal : Bytes,

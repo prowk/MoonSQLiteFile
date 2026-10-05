@@ -1,5 +1,11 @@
 # 架构与边界
 
+## v0.8.0 目录与职责
+
+核心与同包测试位于 `src/`，对外导入仍为 `prowk/moonsqlitefile`；CLI 和 MoonBit 示例迁入 `src/cmd/`、`src/examples/`，异步 JS 与 HTML 示例的位置不变。内部拆包与嵌入数据评估见[源码组织](source-layout.md)，正常构建排除测试源码。
+
+同步与异步路径共享 `BTreeCursor`、`PayloadReader`、`WalCursor` 和 `InspectionCursor` 状态机；宿主负责范围读取及生命周期，核心负责格式/预算/归属/诊断，不在 JS 重写 SQLite 解析。公开类型归属未改变，CLI JSON 和实际外部构造/穷举消费持续验证。
+
 ## 数据流
 
 `Bytes → parse_header → Database → page → read_table → cell_payload → decode_record → schema/table_rows`

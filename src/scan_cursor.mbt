@@ -1,5 +1,6 @@
 ///|
 /// 页面由调用者提供；游标不执行 I/O，记录之间可暂停以实现异步背压。
+/// B-tree 供页协议。NeedPage 请求一个完整页面；RecordReady 交付一条记录；ScanFinished 包含终止原因。等待供页时重复 next 保持相同请求。
 pub(all) enum ScanEvent {
   NeedPage(Int)
   RecordReady(BTreeRecord)
@@ -11,6 +12,7 @@ pub extend ScanEvent with @debug.Debug::{to_repr}
 
 ///|
 /// 已完成的记录和已认领页面进度，不表示整个扫描已完成。
+/// 尚未完成扫描的已交付记录、已认领页面及已请求 payload 进度；不能据此声称完整。
 pub(all) struct ScanProgress {
   records_read : Int
   pages_read : Int
@@ -43,6 +45,7 @@ priv struct CursorPayload {
 }
 
 ///|
+/// 无 I/O 的可暂停 B-tree 状态机。调用 next 后按请求 supply 页面；消费者等待期间不预读。失败后查看 progress/location，并 stop 释放状态。
 pub struct BTreeCursor {
   priv db : Database
   priv observer : ScanObserver
@@ -66,6 +69,7 @@ pub struct BTreeCursor {
 
 ///|
 /// 创建可恢复的扫描，不读取根页；next 返回需要的页面或一条记录。
+/// 创建无 I/O 扫描游标，next 按需请求完整页。limit 不能超过 Limits.max_rows，累计 payload 默认 64 MiB；table_only 额外要求 table B-tree。
 pub fn Database::scan_cursor(
   self : Database,
   root : Int,
@@ -124,6 +128,7 @@ fn Database::scan_cursor_observed(
 }
 
 ///|
+/// 返回已交付记录、已认领 B-tree/overflow 页与已请求 payload 进度；失败记录的 payload 可能已计费。
 pub fn BTreeCursor::progress(self : BTreeCursor) -> ScanProgress {
   if self.finished is Some(summary) {
     return {
@@ -140,12 +145,14 @@ pub fn BTreeCursor::progress(self : BTreeCursor) -> ScanProgress {
 }
 
 ///|
+/// 返回实际阶段和可用位置；失败后仍可读取，不从错误字符串推断。
 pub fn BTreeCursor::location(self : BTreeCursor) -> DiagnosticLocation {
   self.observer.trace.snapshot()
 }
 
 ///|
 /// 仅允许供应当前请求的完整页面；宿主须在调用前自行分类短读和读取失败。
+/// 仅接受当前 NeedPage 请求对应的完整页面；错页、短页、重复供给或未请求供给抛 Invalid。宿主应在供给前区分读取失败与格式失败。
 pub fn BTreeCursor::provide_page(
   self : BTreeCursor,
   number : Int,
@@ -165,6 +172,7 @@ pub fn BTreeCursor::provide_page(
 
 ///|
 /// 提前终止并释放当前路径和未完成的 payload；不再请求页面。
+/// 停止并释放路径、页缓冲和 payload；保留已观察计数。未自然结束时返回 VisitorStopped，不把取消当完整。
 pub fn BTreeCursor::stop(self : BTreeCursor) -> ScanSummary {
   self.finish(VisitorStopped)
 }
@@ -216,6 +224,7 @@ fn BTreeCursor::take_page(self : BTreeCursor) -> Bytes {
 
 ///|
 /// 连续 next 在尚未供页时重复同一请求；错误后游标不可继续使用。
+/// 推进至一条记录、一个供页请求或结束；等待供页时重复调用不改变请求。解析/预算失败抛 SqliteError，进度和位置仍可读取。
 pub fn BTreeCursor::next(self : BTreeCursor) -> ScanEvent raise SqliteError {
   if self.failed {
     raise Invalid("扫描游标已经失败")

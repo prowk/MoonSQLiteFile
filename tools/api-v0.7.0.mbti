@@ -1,0 +1,641 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "prowk/moonsqlitefile"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn decode_record(Bytes, Int) -> Array[Value] raise SqliteError
+
+pub fn decode_schema_entry(Array[Value], Int) -> SchemaEntry raise SqliteError
+
+pub fn decode_varint(Bytes, Int) -> (UInt64, Int) raise SqliteError
+
+pub fn inspect_wal(Bytes, max_frames? : Int) -> WalInspection raise SqliteError
+
+pub fn inspect_wal_source(&RangeSource, max_frames? : Int) -> RangeWalInspection raise SqliteError
+
+pub fn open_database(Bytes, limits? : Limits) -> Database raise SqliteError
+
+pub fn open_range_source(&RangeSource, limits? : Limits, max_report_pages? : Int) -> Database raise SqliteError
+
+pub fn open_range_wal_source(RangeWalSource, limits? : Limits, max_report_pages? : Int) -> Database raise SqliteError
+
+pub fn open_source(&PageSource, limits? : Limits) -> Database raise SqliteError
+
+pub fn open_wal_database(Bytes, Bytes, limits? : Limits, tail_policy? : WalTailPolicy, max_frames? : Int) -> Database raise SqliteError
+
+pub fn open_wal_source(WalSource, limits? : Limits) -> Database raise SqliteError
+
+pub fn parse_header(Bytes) -> Header raise SqliteError
+
+pub fn parse_wal_header(Bytes) -> WalHeader raise SqliteError
+
+// Errors
+pub(all) suberror SourceError {
+  HostFailure(String)
+  ShortRead(String)
+  RangeOutOfBounds(String)
+}
+
+pub(all) suberror SqliteError {
+  Invalid(String)
+  Unsupported(String)
+  LimitExceeded(String)
+} derive(@debug.Debug)
+pub fn SqliteError::to_repr(Self) -> @debug.Repr
+
+// Types and methods
+pub struct BTreeCursor {
+  // private fields
+}
+pub fn BTreeCursor::location(Self) -> DiagnosticLocation
+pub fn BTreeCursor::next(Self) -> ScanEvent raise SqliteError
+pub fn BTreeCursor::progress(Self) -> ScanProgress
+pub fn BTreeCursor::provide_page(Self, Int, Bytes) -> Unit raise SqliteError
+pub fn BTreeCursor::stop(Self) -> ScanSummary
+
+pub(all) struct BTreeInspection {
+  root_page : Int
+  status : InspectionStatus
+  records_decoded : Int
+  summary : ScanSummary?
+  error : SqliteError?
+} derive(@debug.Debug)
+pub fn BTreeInspection::to_repr(Self) -> @debug.Repr
+
+pub(all) struct BTreeInspectionDetails {
+  inspection : BTreeInspection
+  location : DiagnosticLocation?
+} derive(@debug.Debug)
+pub fn BTreeInspectionDetails::to_repr(Self) -> @debug.Repr
+
+pub(all) struct BTreeRecord {
+  rowid : Int64?
+  values : Array[Value]
+  page_number : Int
+  cell_offset : Int
+} derive(@debug.Debug)
+pub fn BTreeRecord::to_repr(Self) -> @debug.Repr
+
+pub struct BytesSource {
+  data : Bytes
+}
+pub fn BytesSource::byte_length(Self) -> Int
+pub fn BytesSource::byte_length64(Self) -> Int64
+pub fn BytesSource::new(Bytes) -> Self
+pub fn BytesSource::read_range(Self, Int, Int) -> Bytes raise SqliteError
+pub fn BytesSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
+pub impl PageSource for BytesSource
+pub impl RangeSource for BytesSource
+
+pub(all) struct CacheStatistics {
+  hits : Int64
+  misses : Int64
+  bytes_read : Int64
+  resident_pages : Int
+} derive(@debug.Debug)
+pub fn CacheStatistics::to_repr(Self) -> @debug.Repr
+
+pub struct CachedSource {
+  // private fields
+}
+pub fn CachedSource::byte_length64(Self) -> Int64
+pub fn CachedSource::new(&RangeSource, block_size? : Int, max_pages? : Int) -> Self raise SqliteError
+pub fn CachedSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
+pub fn CachedSource::statistics(Self) -> CacheStatistics
+pub impl RangeSource for CachedSource
+
+pub struct Database {
+  source : &PageSource
+  header : Header
+  page_count : Int
+  limits : Limits
+  // private fields
+}
+pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
+pub fn Database::header(Self) -> Header
+pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
+pub fn Database::inspect_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspection
+pub fn Database::inspect_btree_details(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> BTreeInspectionDetails
+pub fn Database::inspect_database(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspection
+pub fn Database::inspect_database_details(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspectionDetails
+pub fn Database::inspect_page(Self, Int) -> PageInspection
+pub fn Database::inspection_cursor(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> InspectionCursor
+pub fn Database::page(Self, Int) -> Page raise SqliteError
+pub fn Database::page_count(Self) -> Int
+pub fn Database::ptrmap_entries(Self) -> Array[PtrmapEntry] raise SqliteError
+pub fn Database::read_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> Array[BTreeRecord] raise SqliteError
+pub fn Database::read_index(Self, Int, limit? : Int) -> Array[BTreeRecord] raise SqliteError
+pub fn Database::read_page(Self, Int) -> Bytes raise SqliteError
+pub fn Database::read_table(Self, Int, limit? : Int) -> Array[Row] raise SqliteError
+pub fn Database::scan_btree(Self, Int, (BTreeRecord) -> Bool raise SqliteError, limit? : Int, max_total_payload_bytes? : UInt64) -> ScanSummary raise SqliteError
+pub fn Database::scan_cursor(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64, table_only? : Bool) -> BTreeCursor raise SqliteError
+pub fn Database::schema(Self) -> Array[SchemaEntry] raise SqliteError
+pub fn Database::source64(Self) -> &RangeSource
+pub fn Database::table_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
+pub fn Database::table_rows(Self, String, limit? : Int) -> Array[Row] raise SqliteError
+
+pub(all) struct DatabaseInspection {
+  status : InspectionStatus
+  ownership_complete : Bool
+  ptrmap_checked : Bool
+  diagnostics_truncated : Bool
+  roots_inspected : Int
+  records_decoded : Int
+  payload_bytes : UInt64
+  pages : Array[PageOwnership]
+  unclaimed_pages : Array[Int]
+  issues : Array[DatabaseIssue]
+} derive(@debug.Debug)
+pub fn DatabaseInspection::summarize(Self) -> InspectionSummary
+pub fn DatabaseInspection::to_repr(Self) -> @debug.Repr
+
+pub(all) struct DatabaseInspectionDetails {
+  inspection : DatabaseInspection
+  issues : Array[LocatedDatabaseIssue]
+} derive(@debug.Debug)
+pub fn DatabaseInspectionDetails::to_repr(Self) -> @debug.Repr
+
+pub(all) enum DatabaseIssue {
+  ScanError(Int?, SqliteError)
+  PageConflict(PageOwnership, PageOwnership)
+  UnclaimedPage(Int)
+  UnsupportedFeature(String)
+  PtrmapMismatch(PtrmapEntry, PageOwnership)
+} derive(@debug.Debug)
+pub fn DatabaseIssue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct DiagnosticLocation {
+  phase : DiagnosticPhase
+  page_number : Int?
+  byte_offset : Int?
+  cell_index : Int?
+  page_diagnostic : PageDiagnostic?
+} derive(@debug.Debug)
+pub fn DiagnosticLocation::to_repr(Self) -> @debug.Repr
+
+pub(all) enum DiagnosticPhase {
+  Configuration
+  ReadPage
+  PageLayout
+  TreeTraversal
+  CellPayload
+  OverflowChain
+  RecordDecode
+  SchemaDecode
+  FreelistCheck
+  PtrmapCheck
+  PageOwnershipCheck
+} derive(Eq, @debug.Debug)
+pub fn DiagnosticPhase::equal(Self, Self) -> Bool
+pub fn DiagnosticPhase::not_equal(Self, Self) -> Bool
+pub fn DiagnosticPhase::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Header {
+  page_size : Int
+  usable_size : Int
+  write_version : Int
+  read_version : Int
+  change_counter : UInt
+  declared_pages : UInt
+  freelist_trunk : UInt
+  freelist_pages : UInt
+  schema_cookie : UInt
+  schema_format : Int
+  largest_root_page : UInt
+  incremental_vacuum : Bool
+  text_encoding : Int
+  user_version : UInt
+  application_id : UInt
+  version_valid_for : UInt
+  sqlite_version : UInt
+} derive(Eq, @debug.Debug)
+pub fn Header::equal(Self, Self) -> Bool
+pub fn Header::not_equal(Self, Self) -> Bool
+pub fn Header::to_repr(Self) -> @debug.Repr
+
+pub struct InspectionCursor {
+  // private fields
+}
+pub fn InspectionCursor::location(Self) -> DiagnosticLocation
+pub fn InspectionCursor::next(Self) -> InspectionEvent
+pub fn InspectionCursor::progress(Self) -> ScanProgress
+pub fn InspectionCursor::provide_page(Self, Int, Bytes) -> Unit raise SqliteError
+pub fn InspectionCursor::reject_page(Self, SqliteError) -> Unit raise SqliteError
+pub fn InspectionCursor::stop(Self, reason? : SqliteError) -> DatabaseInspectionDetails
+
+pub(all) enum InspectionEvent {
+  NeedInspectionPage(Int)
+  InspectionProgress(ScanProgress)
+  InspectionFinished(DatabaseInspectionDetails)
+} derive(@debug.Debug)
+pub fn InspectionEvent::to_repr(Self) -> @debug.Repr
+
+pub(all) enum InspectionStatus {
+  Complete
+  Incomplete
+  Failed
+} derive(Eq, @debug.Debug)
+pub fn InspectionStatus::equal(Self, Self) -> Bool
+pub fn InspectionStatus::not_equal(Self, Self) -> Bool
+pub fn InspectionStatus::to_repr(Self) -> @debug.Repr
+
+pub(all) struct InspectionSummary {
+  claimed_pages : Int
+  unclaimed_pages : Int
+  page_kinds : Array[PageKindCount]
+  objects : Array[ObjectPageCount]
+} derive(Eq, @debug.Debug)
+pub fn InspectionSummary::equal(Self, Self) -> Bool
+pub fn InspectionSummary::not_equal(Self, Self) -> Bool
+pub fn InspectionSummary::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Limits {
+  max_rows : Int
+  max_payload_bytes : Int
+  max_pages : Int
+  max_depth : Int
+} derive(@debug.Debug)
+pub fn Limits::default() -> Self
+pub fn Limits::to_repr(Self) -> @debug.Repr
+
+pub(all) struct LocatedDatabaseIssue {
+  issue : DatabaseIssue
+  location : DiagnosticLocation?
+} derive(@debug.Debug)
+pub fn LocatedDatabaseIssue::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ObjectPageCount {
+  root_page : Int
+  object_name : String?
+  btree_pages : Int
+  overflow_pages : Int
+} derive(Eq, @debug.Debug)
+pub fn ObjectPageCount::equal(Self, Self) -> Bool
+pub fn ObjectPageCount::not_equal(Self, Self) -> Bool
+pub fn ObjectPageCount::to_repr(Self) -> @debug.Repr
+
+pub(all) struct Page {
+  number : Int
+  kind : PageType
+  first_freeblock : Int
+  cell_count : Int
+  content_start : Int
+  fragmented_bytes : Int
+  right_child : Int?
+  cell_offsets : Array[Int]
+} derive(@debug.Debug)
+pub fn Page::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageDiagnostic {
+  code : PageDiagnosticCode
+  page_number : Int
+  byte_offset : Int?
+  cell_index : Int?
+  error : SqliteError
+} derive(@debug.Debug)
+pub fn PageDiagnostic::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageDiagnosticCode {
+  PageRead
+  PageTypeTag
+  PageHeader
+  CellPointer
+  CellFormat
+  Freeblock
+  SpaceOverlap
+  UntrackedSpace
+  FragmentCount
+  ChildPointer
+} derive(Eq, @debug.Debug)
+pub fn PageDiagnosticCode::equal(Self, Self) -> Bool
+pub fn PageDiagnosticCode::not_equal(Self, Self) -> Bool
+pub fn PageDiagnosticCode::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageInspection {
+  status : InspectionStatus
+  page : Page?
+  statistics : PageStatistics?
+  diagnostic : PageDiagnostic?
+} derive(@debug.Debug)
+pub fn PageInspection::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageKind {
+  BtreeRoot
+  BtreeChild
+  OverflowFirst
+  OverflowContinuation
+  FreelistTrunk
+  FreelistLeaf
+  PointerMap
+  LockByte
+} derive(Eq, @debug.Debug)
+pub fn PageKind::equal(Self, Self) -> Bool
+pub fn PageKind::not_equal(Self, Self) -> Bool
+pub fn PageKind::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageKindCount {
+  kind : PageKind
+  pages : Int
+} derive(Eq, @debug.Debug)
+pub fn PageKindCount::equal(Self, Self) -> Bool
+pub fn PageKindCount::not_equal(Self, Self) -> Bool
+pub fn PageKindCount::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PageOwnership {
+  page_number : Int
+  kind : PageKind
+  root_page : Int?
+  object_name : String?
+  parent_page : Int?
+} derive(Eq, @debug.Debug)
+pub fn PageOwnership::equal(Self, Self) -> Bool
+pub fn PageOwnership::not_equal(Self, Self) -> Bool
+pub fn PageOwnership::to_repr(Self) -> @debug.Repr
+
+pub struct PageSourceAdapter {
+  source : &PageSource
+}
+pub fn PageSourceAdapter::byte_length64(Self) -> Int64
+pub fn PageSourceAdapter::new(&PageSource) -> Self
+pub fn PageSourceAdapter::read_range64(Self, Int64, Int) -> Bytes raise SourceError
+pub impl RangeSource for PageSourceAdapter
+
+pub(all) struct PageStatistics {
+  database_header_bytes : Int
+  btree_header_bytes : Int
+  pointer_bytes : Int
+  unallocated_bytes : Int
+  cell_bytes : Int
+  freeblock_bytes : Int
+  fragmented_bytes : Int
+  reserved_bytes : Int
+  payload_bytes : UInt64
+  local_payload_bytes : UInt64
+  max_payload_bytes : Int
+  overflow_cells : Int
+} derive(@debug.Debug)
+pub fn PageStatistics::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PageType {
+  TableLeaf
+  TableInterior
+  IndexLeaf
+  IndexInterior
+} derive(Eq, @debug.Debug)
+pub fn PageType::equal(Self, Self) -> Bool
+pub fn PageType::not_equal(Self, Self) -> Bool
+pub fn PageType::to_repr(Self) -> @debug.Repr
+
+pub(all) struct PtrmapEntry {
+  page_number : Int
+  map_page : Int
+  kind : PtrmapType
+  parent_page : Int
+} derive(Eq, @debug.Debug)
+pub fn PtrmapEntry::equal(Self, Self) -> Bool
+pub fn PtrmapEntry::not_equal(Self, Self) -> Bool
+pub fn PtrmapEntry::to_repr(Self) -> @debug.Repr
+
+pub(all) enum PtrmapType {
+  RootPage
+  FreePage
+  FirstOverflow
+  NextOverflow
+  NonRootBtree
+} derive(Eq, @debug.Debug)
+pub fn PtrmapType::equal(Self, Self) -> Bool
+pub fn PtrmapType::not_equal(Self, Self) -> Bool
+pub fn PtrmapType::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RangeWalCommit {
+  frame_index : Int
+  database_pages : UInt
+} derive(Eq, @debug.Debug)
+pub fn RangeWalCommit::equal(Self, Self) -> Bool
+pub fn RangeWalCommit::not_equal(Self, Self) -> Bool
+pub fn RangeWalCommit::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RangeWalFrame {
+  index : Int
+  byte_offset : Int64
+  page_number : UInt
+  database_pages : UInt
+  checksum1 : UInt
+  checksum2 : UInt
+} derive(Eq, @debug.Debug)
+pub fn RangeWalFrame::equal(Self, Self) -> Bool
+pub fn RangeWalFrame::not_equal(Self, Self) -> Bool
+pub fn RangeWalFrame::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RangeWalInspection {
+  header : WalHeader?
+  frames : Array[RangeWalFrame]
+  commits : Array[RangeWalCommit]
+  committed_frames : Int
+  database_pages : UInt?
+  stop_reason : WalStopReason
+  stop_offset : Int64
+  trailing_bytes : Int64
+} derive(@debug.Debug)
+pub fn RangeWalInspection::to_repr(Self) -> @debug.Repr
+
+pub struct RangeWalSource {
+  // private fields
+}
+pub fn RangeWalSource::byte_length64(Self) -> Int64
+pub fn RangeWalSource::from_cursor(&RangeSource, &RangeSource, WalCursor, tail_policy? : WalTailPolicy, max_overlay_pages? : Int) -> Self raise SqliteError
+pub fn RangeWalSource::inspection(Self) -> RangeWalInspection
+pub fn RangeWalSource::new(&RangeSource, &RangeSource, tail_policy? : WalTailPolicy, max_frames? : Int, max_overlay_pages? : Int) -> Self raise SqliteError
+pub fn RangeWalSource::page_count(Self) -> Int
+pub fn RangeWalSource::page_range(Self, Int) -> SnapshotPageRange raise SqliteError
+pub fn RangeWalSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
+pub impl RangeSource for RangeWalSource
+
+pub(all) struct Row {
+  rowid : Int64
+  values : Array[Value]
+  page_number : Int
+} derive(@debug.Debug)
+pub fn Row::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ScanCompletion {
+  Complete
+  RecordLimit
+  VisitorStopped
+} derive(Eq, @debug.Debug)
+pub fn ScanCompletion::equal(Self, Self) -> Bool
+pub fn ScanCompletion::not_equal(Self, Self) -> Bool
+pub fn ScanCompletion::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ScanEvent {
+  NeedPage(Int)
+  RecordReady(BTreeRecord)
+  ScanFinished(ScanSummary)
+} derive(@debug.Debug)
+pub fn ScanEvent::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ScanProgress {
+  records_read : Int
+  pages_read : Int
+  payload_bytes : UInt64
+} derive(Eq, @debug.Debug)
+pub fn ScanProgress::equal(Self, Self) -> Bool
+pub fn ScanProgress::not_equal(Self, Self) -> Bool
+pub fn ScanProgress::to_repr(Self) -> @debug.Repr
+
+pub(all) struct ScanSummary {
+  records_read : Int
+  pages_read : Int
+  payload_bytes : UInt64
+  completion : ScanCompletion
+} derive(@debug.Debug)
+pub fn ScanSummary::to_repr(Self) -> @debug.Repr
+
+pub(all) struct SchemaEntry {
+  object_type : String
+  name : String
+  table_name : String
+  root_page : Int
+  sql : String?
+} derive(@debug.Debug)
+pub fn SchemaEntry::to_repr(Self) -> @debug.Repr
+
+pub(all) enum SnapshotPageRange {
+  MainPage(Int64)
+  WalPage(Int64)
+} derive(Eq, @debug.Debug)
+pub fn SnapshotPageRange::equal(Self, Self) -> Bool
+pub fn SnapshotPageRange::not_equal(Self, Self) -> Bool
+pub fn SnapshotPageRange::to_repr(Self) -> @debug.Repr
+
+pub(all) enum Value {
+  Null
+  Integer(Int64)
+  Real(Double)
+  Text(String)
+  Blob(Bytes)
+} derive(Eq, @debug.Debug)
+pub fn Value::equal(Self, Self) -> Bool
+pub fn Value::not_equal(Self, Self) -> Bool
+pub fn Value::to_repr(Self) -> @debug.Repr
+
+pub(all) enum WalChecksumOrder {
+  LittleEndianChecksum
+  BigEndianChecksum
+} derive(Eq, @debug.Debug)
+pub fn WalChecksumOrder::equal(Self, Self) -> Bool
+pub fn WalChecksumOrder::not_equal(Self, Self) -> Bool
+pub fn WalChecksumOrder::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalCommit {
+  frame_index : Int
+  database_pages : UInt
+} derive(Eq, @debug.Debug)
+pub fn WalCommit::equal(Self, Self) -> Bool
+pub fn WalCommit::not_equal(Self, Self) -> Bool
+pub fn WalCommit::to_repr(Self) -> @debug.Repr
+
+pub struct WalCursor {
+  // private fields
+}
+pub fn WalCursor::close(Self) -> Unit
+pub fn WalCursor::frames_read(Self) -> Int
+pub fn WalCursor::new(Int64, max_frames? : Int) -> Self raise SqliteError
+pub fn WalCursor::next(Self) -> WalReadEvent raise SqliteError
+pub fn WalCursor::provide(Self, Int64, Bytes) -> Unit raise SqliteError
+
+pub(all) struct WalFrame {
+  index : Int
+  byte_offset : Int
+  page_number : UInt
+  database_pages : UInt
+  checksum1 : UInt
+  checksum2 : UInt
+} derive(Eq, @debug.Debug)
+pub fn WalFrame::equal(Self, Self) -> Bool
+pub fn WalFrame::not_equal(Self, Self) -> Bool
+pub fn WalFrame::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalHeader {
+  checksum_order : WalChecksumOrder
+  version : UInt
+  page_size : Int
+  checkpoint_sequence : UInt
+  salt1 : UInt
+  salt2 : UInt
+  checksum1 : UInt
+  checksum2 : UInt
+} derive(Eq, @debug.Debug)
+pub fn WalHeader::equal(Self, Self) -> Bool
+pub fn WalHeader::not_equal(Self, Self) -> Bool
+pub fn WalHeader::to_repr(Self) -> @debug.Repr
+
+pub(all) struct WalInspection {
+  header : WalHeader?
+  frames : Array[WalFrame]
+  commits : Array[WalCommit]
+  committed_frames : Int
+  database_pages : UInt?
+  stop_reason : WalStopReason
+  stop_offset : Int
+  trailing_bytes : Int
+} derive(@debug.Debug)
+pub fn WalInspection::to_repr(Self) -> @debug.Repr
+
+pub(all) enum WalReadEvent {
+  NeedWalRange(Int64, Int)
+  WalReady(RangeWalInspection)
+} derive(@debug.Debug)
+pub fn WalReadEvent::to_repr(Self) -> @debug.Repr
+
+pub struct WalSource {
+  base : &PageSource
+  wal : Bytes
+  page_size : Int
+  page_count : Int
+  base_pages : Int
+  overlay : Map[Int, Int]
+  inspection : WalInspection
+}
+pub fn WalSource::byte_length(Self) -> Int
+pub fn WalSource::inspection(Self) -> WalInspection
+pub fn WalSource::new(&PageSource, Bytes, tail_policy? : WalTailPolicy, max_frames? : Int) -> Self raise SqliteError
+pub fn WalSource::page_count(Self) -> Int
+pub fn WalSource::read_range(Self, Int, Int) -> Bytes raise SqliteError
+pub impl PageSource for WalSource
+
+pub(all) enum WalStopReason {
+  WalEndOfFile
+  WalTruncatedFrame
+  WalSaltMismatch
+  WalChecksumMismatch
+  WalInvalidFrame
+  WalFrameLimit
+} derive(Eq, @debug.Debug)
+pub fn WalStopReason::equal(Self, Self) -> Bool
+pub fn WalStopReason::not_equal(Self, Self) -> Bool
+pub fn WalStopReason::to_repr(Self) -> @debug.Repr
+
+pub(all) enum WalTailPolicy {
+  RejectInvalidTail
+  UseValidPrefix
+} derive(Eq, @debug.Debug)
+pub fn WalTailPolicy::equal(Self, Self) -> Bool
+pub fn WalTailPolicy::not_equal(Self, Self) -> Bool
+pub fn WalTailPolicy::to_repr(Self) -> @debug.Repr
+
+// Type aliases
+
+// Traits
+pub(open) trait PageSource {
+  fn byte_length(Self) -> Int
+  fn read_range(Self, Int, Int) -> Bytes raise SqliteError
+}
+
+pub(open) trait RangeSource {
+  fn byte_length64(Self) -> Int64
+  fn read_range64(Self, Int64, Int) -> Bytes raise SourceError
+}

@@ -1,5 +1,6 @@
 ///|
 /// 按顺序供给完整 WAL header 或帧；不执行宿主 I/O。
+/// WAL 供给协议：NeedWalRange 指定准确 64 位偏移及完整 header/帧长度；WalReady 返回验证报告。
 pub(all) enum WalReadEvent {
   NeedWalRange(Int64, Int)
   WalReady(RangeWalInspection)
@@ -9,6 +10,7 @@ pub(all) enum WalReadEvent {
 pub extend WalReadEvent with @debug.Debug::{to_repr}
 
 ///|
+/// 不执行 I/O 的顺序 WAL 校验游标；供给范围必须符合当前请求。取消或失败的游标不能用于构造覆盖快照。
 pub struct WalCursor {
   priv size : Int64
   priv max_frames : Int
@@ -26,6 +28,7 @@ pub struct WalCursor {
 }
 
 ///|
+/// 创建顺序 WAL 校验游标，不读取数据；size 为非负 Int64，max_frames 默认为 100000 且必须为正，非空短 header 立即拒绝。
 pub fn WalCursor::new(
   size : Int64,
   max_frames? : Int = 100000,
@@ -58,6 +61,7 @@ pub fn WalCursor::new(
 
 ///|
 /// 只接受当前请求，调用者须先分类宿主短读、越界与读取失败。
+/// 只接受当前 NeedWalRange 的准确偏移和长度；错位、短读、重复供给或已关闭抛 Invalid。先由宿主分类读取错误。
 pub fn WalCursor::provide(
   self : WalCursor,
   offset : Int64,
@@ -78,6 +82,7 @@ pub fn WalCursor::provide(
 
 ///|
 /// 取消后释放缓冲和索引；不能把此前的提交当成最新快照返回。
+/// 取消并释放供给缓冲、帧和提交数组；取消后的游标不能构造覆盖快照。
 pub fn WalCursor::close(self : WalCursor) -> Unit {
   self.closed = true
   self.supplied = None
@@ -88,6 +93,7 @@ pub fn WalCursor::close(self : WalCursor) -> Unit {
 }
 
 ///|
+/// 返回已校验有效帧数；未完成时不能当作最新完整 WAL 的边界，close 后计数归零。
 pub fn WalCursor::frames_read(self : WalCursor) -> Int {
   self.frames.length()
 }
@@ -115,6 +121,7 @@ fn WalCursor::finish(self : WalCursor, reason : WalStopReason) -> WalReadEvent {
 
 ///|
 /// 未供给数据时重复同一请求，成功接受一帧后才推进 offset 和 checksum。
+/// 顺序推进至完整 header/帧请求或验证报告；等待供给时重复请求不变，失败后关闭游标。异常尾部记录在停止原因。
 pub fn WalCursor::next(self : WalCursor) -> WalReadEvent raise SqliteError {
   if self.closed {
     raise Invalid("WAL 游标已经关闭")

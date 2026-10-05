@@ -1,5 +1,6 @@
 ///|
 /// SQLite 记录中的原始值，保留整数、浮点数与二进制数据的区别。
+/// SQLite record 的磁盘值类型；Integer 保留 Int64，Text 按数据库编码解码，Blob 保留字节。不是 SQL 引擎计算后的逻辑值。
 pub(all) enum Value {
   Null
   Integer(Int64)
@@ -65,6 +66,7 @@ fn record_text(data : BytesView, encoding : Int) -> String raise SqliteError {
 
 ///|
 /// 解码完整的 SQLite record payload；编码编号与数据库文件头保持一致。
+/// 完整解码 record 的 serial types 与 payload；encoding 为 1/2/3，保留磁盘值顺序，不执行 SQL 转换。截断、非法编码或不支持类型通过 SqliteError 返回。
 pub fn decode_record(
   payload : Bytes,
   encoding : Int,

@@ -25,7 +25,7 @@ def main():
     if actual != expected:
         raise SystemExit('公开接口文件未同步；已生成当前接口，请审查变化并重新验证')
     current = set(declarations(actual))
-    for version in ['0.3.0', '0.4.0', '0.5.0', '0.6.0']:
+    for version in ['0.3.0', '0.4.0', '0.5.0', '0.6.0', '0.7.0']:
         baseline = declarations((ROOT / f'tools/api-v{version}.mbti').read_text(encoding='utf-8'))
         assert baseline, f'公开 API 基线为空：{version}'
         removed = [declaration for declaration in baseline if declaration not in current]

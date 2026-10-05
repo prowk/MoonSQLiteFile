@@ -1,5 +1,6 @@
 ///|
 /// 页内格式错误的分类；PageRead 表示输入或宿主读取失败。
+/// 单页失败的结构化类别；PageRead 仅表示读取失败，不能直接断定格式损坏。
 pub(all) enum PageDiagnosticCode {
   PageRead
   PageTypeTag
@@ -21,6 +22,7 @@ pub extend PageDiagnosticCode with Eq::{equal, not_equal}
 
 ///|
 /// byte_offset 从页面起点计数；cell_index 从零计数。位置指向检查失败的字段或区间。
+/// 单页错误及可定位的页内偏移/cell 下标；error 保留原始类别和具体原因。
 pub(all) struct PageDiagnostic {
   code : PageDiagnosticCode
   page_number : Int
@@ -34,6 +36,7 @@ pub extend PageDiagnostic with @debug.Debug::{to_repr}
 
 ///|
 /// 空间项互不重叠，总和等于页面大小；payload 计数是 cell 声明值，不验证 overflow 链。
+/// 单页空间分项，单位为字节。payload_bytes 是声明总量，local_payload_bytes 是页内部分；仅检查当前页，不验证 overflow 内容或 record 解码。
 pub(all) struct PageStatistics {
   database_header_bytes : Int
   btree_header_bytes : Int
@@ -54,6 +57,7 @@ pub extend PageStatistics with @debug.Debug::{to_repr}
 
 ///|
 /// 仅检查指定 B-tree 页的布局；失败时不返回可能误导的部分统计。
+/// 单页 B-tree 检查结果；读取失败为 Incomplete。失败时 page/statistics 可能缺失，diagnostic 保留已知位置。
 pub(all) struct PageInspection {
   status : InspectionStatus
   page : Page?
@@ -107,6 +111,7 @@ fn page_u16(
 }
 
 ///|
+/// 仅读取指定页并校验 B-tree 布局/空间；读取失败为 Incomplete，格式错误为 Failed，保留可用诊断，不检查 record 或 overflow 链。
 pub fn Database::inspect_page(self : Database, number : Int) -> PageInspection {
   let bytes = self.read_page(number) catch {
     error =>

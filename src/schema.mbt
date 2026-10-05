@@ -1,4 +1,5 @@
 ///|
+/// sqlite_schema 的一条已校验记录。root_page 为 0 表示无独立根页；sql 可为空，不解析 CREATE 语句，也不恢复列名或 SQL 语义。
 pub(all) struct SchemaEntry {
   object_type : String
   name : String
@@ -12,6 +13,7 @@ pub extend SchemaEntry with @debug.Debug::{to_repr}
 
 ///|
 /// 异步适配层校验已解码的 sqlite_schema 记录，语义与同步 schema 一致。
+/// 校验一条已解码 sqlite_schema record 和根页范围；不解析 sql 字符串，page_count 必须是视图的逻辑页数。
 pub fn decode_schema_entry(
   values : Array[Value],
   page_count : Int,
@@ -20,6 +22,7 @@ pub fn decode_schema_entry(
 }
 
 ///|
+/// 完整读取并校验 sqlite_schema；受 Limits.max_rows 预算限制，超出时抛 LimitExceeded，不把 schema 前缀冒充完整对象集合。
 pub fn Database::schema(
   self : Database,
 ) -> Array[SchemaEntry] raise SqliteError {
@@ -63,6 +66,7 @@ fn schema_entry(
 }
 
 ///|
+/// 按 schema 名称读取普通 rowid 表；不执行 SELECT，也不恢复 INTEGER PRIMARY KEY 磁盘 Null 字段，WITHOUT ROWID 请用 table_records。
 pub fn Database::table_rows(
   self : Database,
   name : String,
@@ -84,6 +88,7 @@ pub fn Database::table_rows(
 
 ///|
 /// 返回普通表或 WITHOUT ROWID 表的原始存储记录，不推断 SQL 列顺序。
+/// 按表名读取原始记录，包含 WITHOUT ROWID；values 保留存储顺序，显式 limit 可返回前缀。
 pub fn Database::table_records(
   self : Database,
   name : String,
@@ -104,6 +109,7 @@ pub fn Database::table_records(
 }
 
 ///|
+/// 按索引名读取包含内部 cell 的原始记录；不验证排序、collation 或表/索引内容一致性。
 pub fn Database::index_records(
   self : Database,
   name : String,

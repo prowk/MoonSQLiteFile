@@ -1,5 +1,6 @@
 ///|
 /// 原始存储记录；index B-tree 没有独立 rowid，字段按磁盘顺序保留。
+/// B-tree 原始存储记录。values 按磁盘顺序保留；索引和 WITHOUT ROWID 的 rowid 为 None。page_number 从 1 开始，cell_offset 为页内字节偏移。
 pub(all) struct BTreeRecord {
   rowid : Int64?
   values : Array[Value]
@@ -11,6 +12,7 @@ pub(all) struct BTreeRecord {
 pub extend BTreeRecord with @debug.Debug::{to_repr}
 
 ///|
+/// 扫描终止原因：Complete 为实际遍历结束，RecordLimit 为尚有数据时到达记录前缀上限，VisitorStopped 为消费者停止；不代表 integrity_check。
 pub(all) enum ScanCompletion {
   Complete
   RecordLimit
@@ -24,6 +26,7 @@ pub extend ScanCompletion with @debug.Debug::{to_repr}
 pub extend ScanCompletion with Eq::{equal, not_equal}
 
 ///|
+/// 扫描结果及终止原因。pages_read 包含已认领 B-tree/overflow 页，payload_bytes 是已请求 payload 字节数；不是成功记录字节数或精确内存消耗。
 pub(all) struct ScanSummary {
   records_read : Int
   pages_read : Int
@@ -146,6 +149,7 @@ fn Database::walk_frame_loaded(
 
 ///|
 /// 按 B-tree 顺序逐条回调，返回 false 可停止；无需在库中保存所有结果。
+/// 逐条调用 visit，返回 false 停止；不收集结果数组。默认累计 payload 64 MiB，失败请求也计费；报告区分遍历结束、记录前缀上限和消费者停止。
 pub fn Database::scan_btree(
   self : Database,
   root : Int,
@@ -189,6 +193,7 @@ fn Database::scan_btree_observed(
 }
 
 ///|
+/// 收集任意 B-tree 的原始记录，索引内部 cell 也交付；显式 limit 可返回前缀。单条仍完整解码，集合本身可能占用大量内存。
 pub fn Database::read_btree(
   self : Database,
   root : Int,
@@ -214,6 +219,7 @@ pub fn Database::read_btree(
 }
 
 ///|
+/// 收集 index B-tree/WITHOUT ROWID 的原始记录；普通 rowid 表类型不符合时抛 Invalid，不检查索引排序或 collation。
 pub fn Database::read_index(
   self : Database,
   root : Int,

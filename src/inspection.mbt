@@ -1,5 +1,6 @@
 ///|
 /// 仅描述指定根页的扫描结果，不代表整个数据库的完整性结论。
+/// 结构检查状态。Complete 仅表示声明范围完成；Incomplete 包含预算、宿主失败及不支持；Failed 表示已观察到格式错误或历史旧源 Invalid。
 pub(all) enum InspectionStatus {
   Complete
   Incomplete
@@ -14,6 +15,7 @@ pub extend InspectionStatus with Eq::{equal, not_equal}
 
 ///|
 /// 不保存记录数组；发生错误时仍保留此前成功解码的记录数。
+/// 单树检查报告。root_page 是入口根页，records_decoded 只含成功交付记录；失败时可能没有 summary，error 保存原始 SqliteError。
 pub(all) struct BTreeInspection {
   root_page : Int
   status : InspectionStatus
@@ -46,6 +48,7 @@ fn inspection_failure(
 
 ///|
 /// 检查单棵 B-tree，保留完成状态或原始错误；资源不足不判为格式损坏。
+/// 检查一棵树并保留成功记录数；不收集记录。新范围源宿主失败为 Incomplete，旧源 Invalid 保留 Failed 历史行为，不能仅据状态判定损坏。
 pub fn Database::inspect_btree(
   self : Database,
   root : Int,

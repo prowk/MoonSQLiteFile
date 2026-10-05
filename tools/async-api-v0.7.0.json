@@ -1,0 +1,191 @@
+{
+  "commit": "8a3a4c79ecd54c893604839f9136081289b8f21b",
+  "index": {
+    "BlobSource": {
+      "type": "function",
+      "arity": 1,
+      "prototype": [
+        {
+          "name": "close",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "read",
+          "get": false,
+          "set": false,
+          "arity": 2
+        }
+      ]
+    },
+    "CachedSource": {
+      "type": "function",
+      "arity": 1,
+      "prototype": [
+        {
+          "name": "close",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "read",
+          "get": false,
+          "set": false,
+          "arity": 2
+        }
+      ]
+    },
+    "CancelledError": {
+      "type": "function",
+      "arity": 0,
+      "prototype": []
+    },
+    "Database": {
+      "type": "function",
+      "arity": 4,
+      "prototype": [
+        {
+          "name": "assertOpen",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "call",
+          "get": false,
+          "set": false,
+          "arity": 2
+        },
+        {
+          "name": "close",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "inspectDatabase",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "inspectPage",
+          "get": false,
+          "set": false,
+          "arity": 1
+        },
+        {
+          "name": "readPage",
+          "get": false,
+          "set": false,
+          "arity": 2
+        },
+        {
+          "name": "scan",
+          "get": false,
+          "set": false,
+          "arity": 2
+        },
+        {
+          "name": "scanBtree",
+          "get": false,
+          "set": false,
+          "arity": 2
+        },
+        {
+          "name": "schema",
+          "get": false,
+          "set": false,
+          "arity": 0
+        }
+      ]
+    },
+    "Scan": {
+      "type": "function",
+      "arity": 2,
+      "prototype": [
+        {
+          "name": "advance",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "next",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "release",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "return",
+          "get": false,
+          "set": false,
+          "arity": 0
+        }
+      ]
+    },
+    "SourceError": {
+      "type": "function",
+      "arity": 2,
+      "prototype": []
+    },
+    "SqliteError": {
+      "type": "function",
+      "arity": 2,
+      "prototype": []
+    },
+    "WalSource": {
+      "type": "function",
+      "arity": 5,
+      "prototype": [
+        {
+          "name": "close",
+          "get": false,
+          "set": false,
+          "arity": 0
+        },
+        {
+          "name": "read",
+          "get": false,
+          "set": false,
+          "arity": 2
+        }
+      ]
+    },
+    "checkAbort": {
+      "type": "function",
+      "arity": 1,
+      "prototype": []
+    },
+    "openDatabase": {
+      "type": "function",
+      "arity": 1,
+      "prototype": []
+    },
+    "readExact": {
+      "type": "function",
+      "arity": 4,
+      "prototype": []
+    },
+    "withAbort": {
+      "type": "function",
+      "arity": 2,
+      "prototype": []
+    }
+  },
+  "node": {
+    "openFileSource": {
+      "type": "function",
+      "arity": 1,
+      "prototype": []
+    }
+  }
+}

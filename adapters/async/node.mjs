@@ -3,6 +3,7 @@ import {read as readFileRange} from 'node:fs';
 import {SourceError, checkAbort, withAbort} from './index.mjs';
 
 // 使用带 BigInt position 的回调式范围读取，不依赖 Number 文件位置或共享顺序游标。
+/** Node 只读 BigInt 文件范围源；读取时检测长度/时间戳变化，close 等候在途系统读取，调用者负责不可变副本。 */
 export async function openFileSource(path) {
   const handle = await open(path, 'r');
   try {
