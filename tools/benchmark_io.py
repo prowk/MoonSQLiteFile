@@ -13,8 +13,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def measure(path, args):
-    result = subprocess.run(['node', str(ROOT / 'tools/inspect.cjs'), str(path),
+def measure(path, args, launcher=None):
+    result = subprocess.run(['node', str(launcher or ROOT / 'tools/inspect.cjs'), str(path),
                              '--cache-pages', '64', '--io-stats', *map(str, args)],
                             cwd=ROOT, capture_output=True, text=True, encoding='utf-8', timeout=120)
     if result.returncode:
@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--rows', default='1000,5000,20000')
     parser.add_argument('--wal-updates', default='100,1000,5000')
     parser.add_argument('--output', type=Path, default=ROOT / '_build/io-benchmark.json')
+    parser.add_argument('--compare-cli', type=Path, help='同一静态输入上运行正式旧版 CLI，记录对照成本')
     args = parser.parse_args()
     counts = [int(value) for value in args.rows.split(',')]
     assert all(0 < count <= 40000 for count in counts)
@@ -42,7 +43,8 @@ def main():
     assert updates == sorted(set(updates)) and all(0 < count <= 50000 for count in updates)
     evidence = dict(platform=platform.platform(), python=platform.python_version(), sqlite=sqlite3.sqlite_version,
                     node=subprocess.check_output(['node', '--version'], text=True).strip(),
-                    moon=subprocess.check_output(['moon', 'version', '--all'], text=True, encoding='utf-8').strip(),
+                           moon=subprocess.check_output(['moon', 'version', '--all'], text=True, encoding='utf-8').strip(),
+                    baseline_cli=str(args.compare_cli) if args.compare_cli else None,
                     cache_pages=64, cache_block_bytes=4096, results=[])
     with tempfile.TemporaryDirectory(prefix='io-benchmark-', dir=ROOT / '_build') as temporary:
         directory = Path(temporary)
@@ -65,6 +67,9 @@ def main():
                                           ('wal_open', main, ['--wal', journal, 'header'])]:
                 row = dict(rows=count, database_bytes=path.stat().st_size,
                            wal_bytes=journal.stat().st_size, action=action, **measure(file, command))
+                if args.compare_cli:
+                    row['baseline'] = measure(file, command, args.compare_cli)
+                    assert all(row[key] == row['baseline'][key] for key in ['reads','bytes_read','max_read']), row
                 evidence['results'].append(row)
                 print(json.dumps(row, ensure_ascii=False), flush=True)
         path = directory / 'repeat.db'
@@ -107,6 +112,9 @@ def main():
                 row = dict(action='wal_repeated_updates', updates=count, frames=frames,
                            unique_overlay_pages=len(overlay_pages), database_bytes=main.stat().st_size,
                            wal_bytes=len(data), **statistics)
+                if args.compare_cli:
+                    row['baseline'] = measure(main, ['--wal', journal, 'header'], args.compare_cli)
+                    assert all(row[key] == row['baseline'][key] for key in ['reads','bytes_read','max_read']), row
                 evidence['results'].append(row)
                 print(json.dumps(row, ensure_ascii=False), flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
