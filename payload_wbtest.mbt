@@ -52,3 +52,28 @@ test "overflow links enforce bounds cycles and resource limits" {
   }
   assert_true(failed)
 }
+
+///|
+// 既有白盒样本通过同一个增量 payload 解析器供页，继续验证实际生产逻辑。
+fn Database::cell_payload_tracked(
+  self : Database,
+  bytes : Bytes,
+  offset : Int,
+  size : Int,
+  table : Bool,
+  occupied : Map[Int, PageUse],
+) -> Bytes raise SqliteError {
+  let reader = self.payload_reader(
+    bytes,
+    offset,
+    size,
+    table,
+    occupied,
+    0,
+    quiet_observer(),
+  )
+  while reader.next_page() is Some(number) {
+    reader.provide(self.read_page(number))
+  }
+  reader.bytes()
+}

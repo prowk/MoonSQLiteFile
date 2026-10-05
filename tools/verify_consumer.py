@@ -210,6 +210,31 @@ impl @sqlite.RangeSource for ConsumerFailure with read_range64(_, _, count) {
     let host_error : @sqlite.SourceError = @sqlite.ShortRead("消费项目短读")
     match host_error { @sqlite.ShortRead(_) => (); _ => abort("宿主错误构造失败") }
     println(''')
+        if not args.registry or tuple(map(int, version.split(".")[:2])) >= (0, 7):
+            main_source = main_source.replace('    println(', '''    let cursor = db.scan_cursor(1, table_only=true)
+    match cursor.next() { @sqlite.NeedPage(1) => (); _ => abort("独立游标未请求根页") }
+    cursor.provide_page(1, data)
+    match cursor.next() { @sqlite.ScanFinished(summary) if summary.completion == @sqlite.Complete => (); _ => abort("独立扫描游标失败") }
+    let global = db.inspection_cursor()
+    while true {
+      match global.next() {
+        @sqlite.NeedInspectionPage(1) => global.provide_page(1, data)
+        @sqlite.NeedInspectionPage(_) => abort("空库不应读取其他页")
+        @sqlite.InspectionProgress(_) => ()
+        @sqlite.InspectionFinished(details) => { if details.inspection.status != @sqlite.Complete { abort("全库游标消费失败") }; break }
+      }
+    }
+    let wal_cursor = @sqlite.WalCursor::new(wal.length().to_int64())
+    while true {
+      match wal_cursor.next() {
+        @sqlite.NeedWalRange(offset, count) => { let start = offset.to_int(); wal_cursor.provide(offset, wal[start:start + count].to_owned()) }
+        @sqlite.WalReady(_) => break
+      }
+    }
+    let snapshot_range = @sqlite.RangeWalSource::from_cursor(range, journal, wal_cursor)
+    match snapshot_range.page_range(1) { @sqlite.WalPage(56L) => (); _ => abort("异步覆盖页来源消费失败") }
+    wal_cursor.close()
+    println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:
             run(["moon", "update"], consumer)

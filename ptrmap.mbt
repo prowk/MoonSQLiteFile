@@ -45,69 +45,19 @@ fn Database::visit_ptrmap(
   visit : (PtrmapEntry) -> Bool raise SqliteError,
   trace? : InspectionTrace = InspectionTrace::new(),
 ) -> Bool raise SqliteError {
-  trace.at(PtrmapCheck, Some(1), byte_offset=Some(52))
-  if self.header.largest_root_page == 0U {
-    if self.header.incremental_vacuum {
-      raise Invalid("未启用 auto-vacuum 却设置 incremental-vacuum")
+  let cursor = self.ptrmap_cursor(trace)
+  while true {
+    match cursor.next() {
+      MapPage(number) => {
+        cursor.cached = self.read_page(number)
+        cursor.cached_number = number
+      }
+      MapEntry(entry) => if !visit(entry) { return false }
+      MapFinished => return true
     }
-    return true
+  } nobreak {
+    false
   }
-  if self.header.largest_root_page.to_uint64() > self.page_count.to_uint64() {
-    raise Invalid("largest root page 越界")
-  }
-  if self.page_count > self.limits.max_pages {
-    raise LimitExceeded("Ptrmap 枚举超过页数预算")
-  }
-  let lock_page = 1073741824 / self.header.page_size + 1
-  let mut cached_number = 0
-  let mut cached = b""
-  for index = 1; index < self.page_count; index = index + 1 {
-    let number = index + 1
-    if number == lock_page {
-      continue
-    }
-    let map_page = ptrmap_page_number(
-      number,
-      self.header.usable_size,
-      self.header.page_size,
-    )
-    if number == map_page {
-      continue
-    }
-    if map_page != cached_number {
-      trace.at(ReadPage, Some(map_page))
-      cached = self.read_page(map_page)
-      cached_number = map_page
-    }
-    let offset = (number - map_page - 1) * 5
-    trace.at(PtrmapCheck, Some(map_page), byte_offset=Some(offset))
-    if offset < 0 || offset > self.header.usable_size - 5 {
-      raise Invalid("Ptrmap 条目位置越界")
-    }
-    let kind = match cached[offset].to_int() {
-      1 => RootPage
-      2 => FreePage
-      3 => FirstOverflow
-      4 => NextOverflow
-      5 => NonRootBtree
-      _ => raise Invalid("页 \{number} 的 Ptrmap 类型无效")
-    }
-    trace.at(PtrmapCheck, Some(map_page), byte_offset=Some(offset + 1))
-    let parent = page_number(read_u32(cached, offset + 1))
-    let zero_parent = kind == RootPage || kind == FreePage
-    if (zero_parent && parent != 0) ||
-      (
-        !zero_parent &&
-        (parent < 1 || parent > self.page_count || parent == number)
-      ) {
-      raise Invalid("页 \{number} 的 Ptrmap 父页无效")
-    }
-    trace.at(PtrmapCheck, Some(map_page), byte_offset=Some(offset))
-    if !visit({ page_number: number, map_page, kind, parent_page: parent, }) {
-      return false
-    }
-  }
-  true
 }
 
 ///|
@@ -126,13 +76,10 @@ pub fn Database::ptrmap_entries(
 }
 
 ///|
-fn OwnershipState::check_ptrmap(self : OwnershipState, db : Database) -> Bool {
-  if db.header.largest_root_page == 0U {
-    return true
-  }
-  if !self.coverage {
-    return false
-  }
+fn OwnershipState::check_root_positions(
+  self : OwnershipState,
+  db : Database,
+) -> Unit {
   let largest = db.header.largest_root_page.reinterpret_as_int()
   let mut actual_largest = 1
   for number, owner in self.owners {
@@ -162,55 +109,34 @@ fn OwnershipState::check_ptrmap(self : OwnershipState, db : Database) -> Bool {
       ScanError(None, Invalid("largest root 与 schema 根页集合不一致")),
     )
   }
-  let mut all_claimed = true
-  let checked = db.visit_ptrmap(
-    entry => {
-      if self.issues.length() >= self.max_issues {
-        self.truncated = true
-        return false
-      }
-      if self.owners.get(entry.page_number) is Some(owner) {
-        let expected = match owner.kind {
-          BtreeRoot => RootPage
-          BtreeChild => NonRootBtree
-          OverflowFirst => FirstOverflow
-          OverflowContinuation => NextOverflow
-          FreelistTrunk | FreelistLeaf => FreePage
-          PointerMap | LockByte => {
-            all_claimed = false
-            return true
-          }
-        }
-        let parent = if expected == RootPage || expected == FreePage {
-          0
-        } else {
-          owner.parent_page.unwrap()
-        }
-        if entry.kind != expected || entry.parent_page != parent {
-          self.failed = true
-          self.issue(PtrmapMismatch(entry, owner))
-        }
-      } else {
-        // 尚无归属的页由最终覆盖检查报告，不根据 Ptrmap 推断真实归属。
-        all_claimed = false
-      }
-      true
-    },
-    trace=self.trace,
-  ) catch {
-    Invalid(message) => {
+}
+
+///|
+fn OwnershipState::check_ptrmap_entry(
+  self : OwnershipState,
+  entry : PtrmapEntry,
+) -> Bool {
+  if self.owners.get(entry.page_number) is Some(owner) {
+    let expected = match owner.kind {
+      BtreeRoot => RootPage
+      BtreeChild => NonRootBtree
+      OverflowFirst => FirstOverflow
+      OverflowContinuation => NextOverflow
+      FreelistTrunk | FreelistLeaf => FreePage
+      PointerMap | LockByte => return false
+    }
+    let parent = if expected == RootPage || expected == FreePage {
+      0
+    } else {
+      owner.parent_page.unwrap()
+    }
+    if entry.kind != expected || entry.parent_page != parent {
       self.failed = true
-      self.issue(ScanError(None, Invalid(message)))
-      false
+      self.issue(PtrmapMismatch(entry, owner))
     }
-    Unsupported(message) => {
-      self.issue(ScanError(None, Unsupported(message)))
-      false
-    }
-    LimitExceeded(message) => {
-      self.issue(ScanError(None, LimitExceeded(message)))
-      false
-    }
+  } else {
+    // 尚无归属的页由最终覆盖检查报告，不根据 Ptrmap 推断真实归属。
+    return false
   }
-  checked && all_claimed
+  true
 }

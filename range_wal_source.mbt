@@ -21,10 +21,50 @@ pub fn RangeWalSource::new(
   max_frames? : Int = 100000,
   max_overlay_pages? : Int = 100000,
 ) -> RangeWalSource raise SqliteError {
+  build_range_wal_source(
+    base,
+    wal,
+    inspect_wal_source(wal, max_frames~),
+    tail_policy,
+    max_overlay_pages,
+  )
+}
+
+///|
+/// 使用已经完成的供帧游标创建索引；游标输入必须来自相同的不可变 WAL。
+pub fn RangeWalSource::from_cursor(
+  base : &RangeSource,
+  wal : &RangeSource,
+  cursor : WalCursor,
+  tail_policy? : WalTailPolicy = RejectInvalidTail,
+  max_overlay_pages? : Int = 100000,
+) -> RangeWalSource raise SqliteError {
+  if cursor.closed {
+    raise Invalid("WAL 游标已经关闭")
+  }
+  let report = cursor.finished.unwrap_or_else(() => {
+    raise Invalid("WAL 游标尚未完成")
+  })
+  build_range_wal_source(
+    base,
+    wal,
+    copy_wal_inspection(report),
+    tail_policy,
+    max_overlay_pages,
+  )
+}
+
+///|
+fn build_range_wal_source(
+  base : &RangeSource,
+  wal : &RangeSource,
+  inspection : RangeWalInspection,
+  tail_policy : WalTailPolicy,
+  max_overlay_pages : Int,
+) -> RangeWalSource raise SqliteError {
   if max_overlay_pages < 1 {
     raise Invalid("WAL 覆盖页预算必须为正数")
   }
-  let inspection = inspect_wal_source(wal, max_frames~)
   if inspection.stop_reason == WalFrameLimit {
     raise LimitExceeded(
       "WAL 帧上限不足，不能确定最新已提交快照",
@@ -180,4 +220,31 @@ pub fn open_range_wal_source(
     Some(source.page_count),
     max_report_pages~,
   )
+}
+
+///|
+/// 异步适配器使用同一个核心覆盖索引确定页来源，不重复实现提交或缩小语义。
+pub(all) enum SnapshotPageRange {
+  MainPage(Int64)
+  WalPage(Int64)
+} derive(Debug, Eq)
+
+///|
+pub extend SnapshotPageRange with @debug.Debug::{to_repr}
+
+///|
+pub extend SnapshotPageRange with Eq::{equal, not_equal}
+
+///|
+pub fn RangeWalSource::page_range(
+  self : RangeWalSource,
+  number : Int,
+) -> SnapshotPageRange raise SqliteError {
+  if number < 1 || number > self.page_count {
+    raise Invalid("页号越界：\{number}")
+  }
+  match self.overlay.get(number) {
+    Some(offset) => WalPage(offset)
+    None => MainPage((number - 1).to_int64() * self.page_size.to_int64())
+  }
 }

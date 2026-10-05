@@ -23,3 +23,10 @@ __pycache__/
 
 /tools/verify_range_io.cjs
 /tools/verify_wide_wal.cjs
+
+/tools/api-v0.6.0.mbti
+
+/adapters/
+/cmd/async-bridge/
+/tools/verify_async.mjs
+/tools/verify_browser.cjs

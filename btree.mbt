@@ -78,7 +78,7 @@ priv struct WalkFrame {
 }
 
 ///|
-fn Database::walk_frame(
+fn Database::walk_frame_loaded(
   self : Database,
   number : Int,
   depth : Int,
@@ -88,6 +88,7 @@ fn Database::walk_frame(
   occupied : Map[Int, PageUse],
   parent : Int?,
   observer : ScanObserver,
+  bytes : Bytes,
 ) -> WalkFrame raise SqliteError {
   observer.trace.at(TreeTraversal, Some(number))
   if depth > self.limits.max_depth {
@@ -102,7 +103,6 @@ fn Database::walk_frame(
     raise LimitExceeded("扫描总页数超过限制")
   }
   observer.trace.at(ReadPage, Some(number))
-  let bytes = self.read_page(number)
   observer.trace.at(PageOwnershipCheck, Some(number))
   (observer.claim)(
     number,
@@ -171,194 +171,20 @@ fn Database::scan_btree_observed(
   limit~ : Int,
   max_total_payload_bytes~ : UInt64,
 ) -> ScanSummary raise SqliteError {
-  observer.trace.at(Configuration, None)
-  if limit < 0 || limit > self.limits.max_rows {
-    raise LimitExceeded("记录数请求超出资源限制")
-  }
-  let root_page = self.page_traced(root, observer.trace)
-  let table = root_page.kind == TableLeaf || root_page.kind == TableInterior
-  let occupied : Map[Int, PageUse] = Map([])
-  let stack = [
-    self.walk_frame(root, 1, None, None, table, occupied, None, observer),
-  ]
-  let mut records_read = 0
-  let mut payload_bytes = 0UL
-  let mut last_rowid : Int64? = None
-  let mut leaf_depth : Int? = None
-  while !stack.is_empty() {
-    let frame = stack[stack.length() - 1]
-    let page = frame.page
-    let bytes = frame.bytes
-    let usable = self.header.usable_size
-    let interior = page.kind == TableInterior || page.kind == IndexInterior
-    observer.trace.at(TreeTraversal, Some(page.number))
-    // 空叶页也参与平衡检查，不能因没有记录而在出栈时绕过深度验证。
-    if !interior {
-      if leaf_depth is Some(expected) && expected != frame.depth {
-        raise Invalid("B-tree 叶页深度不一致")
-      }
-      leaf_depth = Some(frame.depth)
+  let cursor = self.scan_cursor_observed(
+    root,
+    observer,
+    limit~,
+    max_total_payload_bytes~,
+  )
+  while true {
+    match cursor.next() {
+      NeedPage(number) => cursor.provide_page(number, self.read_page(number))
+      RecordReady(record) => if !visit(record) { return cursor.stop() }
+      ScanFinished(summary) => return summary
     }
-    if frame.cursor == page.cell_count {
-      if interior && !frame.right_visited {
-        frame.right_visited = true
-        stack.push(
-          self.walk_frame(
-            page.right_child.unwrap(),
-            frame.depth + 1,
-            frame.previous_key,
-            frame.upper,
-            table,
-            occupied,
-            Some(page.number),
-            observer,
-          ),
-        )
-      } else {
-        let _ = stack.pop()
-      }
-      continue
-    }
-    let offset = page.cell_offsets[frame.cursor]
-    observer.trace.at(
-      TreeTraversal,
-      Some(page.number),
-      byte_offset=Some(offset),
-      cell_index=Some(frame.cursor),
-    )
-    if interior && !frame.emit_pending {
-      if offset > usable - 4 {
-        raise Invalid("interior cell 子页指针越界")
-      }
-      let child = page_number(read_u32(bytes, offset))
-      let mut upper = frame.upper
-      if table {
-        let (bits, _) = page_varint(bytes, offset + 4, usable)
-        let key = bits.reinterpret_as_int64()
-        if frame.previous_key is Some(previous) && key <= previous {
-          raise Invalid("interior rowid 未严格递增")
-        }
-        if frame.upper is Some(bound) && key > bound {
-          raise Invalid("interior rowid 越过父页键范围")
-        }
-        upper = Some(key)
-      }
-      let lower = frame.previous_key
-      if table {
-        frame.previous_key = upper
-        frame.cursor = frame.cursor + 1
-      } else {
-        // 索引内部 cell 本身就是记录，必须先访问左子树再返回该记录。
-        frame.emit_pending = true
-      }
-      stack.push(
-        self.walk_frame(
-          child,
-          frame.depth + 1,
-          lower,
-          upper,
-          table,
-          occupied,
-          Some(page.number),
-          observer,
-        ),
-      )
-      continue
-    }
-    if records_read == limit {
-      return {
-        records_read,
-        pages_read: occupied.length(),
-        payload_bytes,
-        completion: RecordLimit,
-      }
-    }
-    let payload_offset = if page.kind == IndexInterior {
-      offset + 4
-    } else {
-      offset
-    }
-    observer.trace.at(
-      CellPayload,
-      Some(page.number),
-      byte_offset=Some(offset),
-      cell_index=Some(frame.cursor),
-    )
-    let (size_bits, size_bytes) = page_varint(bytes, payload_offset, usable)
-    let payload_size = bounded_int(size_bits, "payload size")
-    if payload_size.to_uint64() > max_total_payload_bytes - payload_bytes {
-      raise LimitExceeded("扫描累计 payload 超过字节预算")
-    }
-    // 数据库级预算在分配和解码前计入本次请求，失败也不退还预算。
-    (observer.charge_payload)(payload_size.to_uint64())
-    let (rowid, rowid_bytes) = if table {
-      observer.trace.at(
-        TreeTraversal,
-        Some(page.number),
-        byte_offset=Some(offset),
-        cell_index=Some(frame.cursor),
-      )
-      let (bits, size) = page_varint(bytes, payload_offset + size_bytes, usable)
-      let rowid = bits.reinterpret_as_int64()
-      if frame.lower is Some(bound) && rowid <= bound {
-        raise Invalid("叶页 rowid 低于父页键范围")
-      }
-      if frame.upper is Some(bound) && rowid > bound {
-        raise Invalid("叶页 rowid 高于父页键范围")
-      }
-      if last_rowid is Some(previous) && rowid <= previous {
-        raise Invalid("叶页 rowid 未严格递增")
-      }
-      last_rowid = Some(rowid)
-      (Some(rowid), size)
-    } else {
-      (None, 0)
-    }
-    observer.trace.at(
-      CellPayload,
-      Some(page.number),
-      byte_offset=Some(offset),
-      cell_index=Some(frame.cursor),
-    )
-    let payload = self.cell_payload_tracked(
-      bytes,
-      payload_offset + size_bytes + rowid_bytes,
-      payload_size,
-      table,
-      occupied,
-      owner_page=page.number,
-      observer~,
-    )
-    observer.trace.at(
-      RecordDecode,
-      Some(page.number),
-      byte_offset=Some(offset),
-      cell_index=Some(frame.cursor),
-    )
-    let record = {
-      rowid,
-      values: decode_record(payload, self.header.text_encoding),
-      page_number: page.number,
-      cell_offset: offset,
-    }
-    payload_bytes = payload_bytes + payload_size.to_uint64()
-    records_read = records_read + 1
-    frame.cursor = frame.cursor + 1
-    frame.emit_pending = false
-    if !visit(record) {
-      return {
-        records_read,
-        pages_read: occupied.length(),
-        payload_bytes,
-        completion: VisitorStopped,
-      }
-    }
-  }
-  {
-    records_read,
-    pages_read: occupied.length(),
-    payload_bytes,
-    completion: Complete,
+  } nobreak {
+    abort("同步扫描游标未结束")
   }
 }
 

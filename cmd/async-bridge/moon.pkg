@@ -1,0 +1,10 @@
+import {
+  "prowk/moonsqlitefile" @sqlite,
+  "moonbitlang/core/json",
+}
+
+pkgtype(kind: "executable")
+
+options(
+  supported_targets: "js",
+)

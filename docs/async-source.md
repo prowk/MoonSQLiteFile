@@ -1,0 +1,98 @@
+# 异步范围读取与浏览器适配（v0.7.0）
+
+MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapters/async`，扫描、record/overflow、页归属、freelist、Ptrmap 和 WAL checksum 仍由同一核心状态机完成。同步入口也驱动这些状态机，不在 JavaScript 重写格式解析。
+
+## 本地构建与消费
+
+此版本尚未发布。异步包尚未上传 npm，不能使用不存在的 registry 安装命令。
+
+```sh
+moon build --target js --deny-warn
+python tools/build_async.py
+node adapters/async/example.mjs fixtures/core.sqlite
+```
+
+构建结果在 `_build/async-adapter`，包含 `package.json`、`index.mjs`、`node.mjs` 和编译的 `core.mjs`。可将整个目录作为本地依赖，或使用 `npm pack ./_build/async-adapter` 生成 tarball。包名为 `@prowk/moonsqlitefile-async`，运行时没有第三方依赖；不要只复制 `index.mjs`。
+
+```js
+import {openDatabase} from './_build/async-adapter/index.mjs';
+import {openFileSource} from './_build/async-adapter/node.mjs';
+
+const db = await openDatabase(await openFileSource('copy.sqlite'));
+try {
+  const schema = await db.schema();
+  if (schema.status !== 'complete') throw new Error(schema.reason);
+  const root = schema.entries.find(entry => entry.name === 'samples').root_page;
+  const scan = db.scan(root);
+  for await (const record of scan) {
+    console.log(record.rowid, record.page_number, record.values);
+  }
+  console.log(scan.result);
+} finally {
+  await db.close();
+}
+```
+
+`package.json` 导出包入口及 `/node` 子路径。Node 入口只用于 Node，不在浏览器加载它。
+
+## 数据源和生命周期
+
+第三方异步源提供 `size: bigint`、`read(offset: bigint, count: number, {signal})` 和可选异步 `close()`。长度/偏移必须在非负有符号 64 位范围内，count 必须是非负 Int32；成功时返回长度恰好等于 count 的 `Uint8Array`。源须保持不可变，并负责自己的宿主操作及关闭协议。
+
+`readExact` 在调用前验证范围并在返回后验证短读。`SourceError.kind` 为 `range_out_of_bounds`、`short_read` 或 `host_failure`；未知宿主抛错归为 `host_failure`。`CancelledError.kind` 为 `cancelled`。取消不会被当作文件损坏，也不把 WAL 读取失败当作可用的异常尾部。
+
+`BlobSource` 每次只读取 `blob.slice()` 的范围；`openFileSource` 使用 BigInt 文件位置，检查实际读取时的长度/时间戳，并在关闭时等候自己的在途系统读取结束。它不是在线 SQLite 锁或快照协议。
+
+`CachedSource` 为固定块 FIFO 缓存，默认 4096 字节 × 256 块。返回副本，失败及取消的数据不进入缓存；`statistics` 包含命中/未命中、实际读入字节及驻留块数。可设置 `blockSize`（1–65536）及 `cachePages`（1–1048576）。缓存不会使路径状态、payload、WAL 索引或全库归属报告成为常量内存。
+
+`openDatabase` 默认接管输入源并在失败或 `db.close()` 时关闭。设置 `closeSources: false` 时只释放适配器缓存与核心句柄，原始源由调用者管理。`close()` 会取消当前操作，停止游标并释放核心句柄；调用者始终应使用 `finally`。宿主不响应 signal 的底层操作可能继续完成，但取消后的结果不会再供应给核心。
+
+无效缓存选项或 WAL 源构造失败也会关闭已接管输入。配对关闭会尝试两个宿主；宿主的 close 自身失败时，`db.close()` 拒绝并报告异常，而不是隐藏它。打开失败时清理所有已接管源，并保留最初的打开错误。
+
+## 扫描、背压和部分结果
+
+- `db.scan(root, options)` 是异步迭代器。一次 `next()` 最多返回一条记录；消费者等待时不预读后续记录。同一迭代器不能并发调用 `next()`。`break` 会终止游标，`scan.result` 保存摘要。
+- `db.scanBtree(root, asyncVisitor, options)` 等待 visitor 完成后再继续；visitor 返回 false 提前停止，visitor 的 signal 来自扫描。它返回报告；读取/解析失败保存进度与可用位置，而不是伪造完整结果。visitor 自身异常为未完成报告。
+- `db.schema(options)` 返回 `entries` 和扫描状态；错误或预算不足时 entries 只代表已经解码的前缀。
+- `db.inspectPage(page, {signal})` 与同步页检查使用同一核心，页读取失败保持 incomplete。
+- `db.inspectDatabase(options)` 返回 `{header, inspection, summary, locations}`；格式错误为 failed，读取失败/预算不足为 incomplete。取消额外返回 `reason: 'cancelled'`，保留已观察页、记录和诊断。读取失败后可继续检查独立对象，schema 未完成时无法继续发现全部根页。
+
+扫描支持 `limit`、`max_total_payload_bytes`（BigInt 或十进制文本）、`signal`、`onProgress`；全库检查还支持 `max_issues`。默认累计 payload 为 67108864 字节；打开选项 `max_payload_bytes` 默认单条 16777216，`max_rows`/`max_pages`/`max_report_pages` 默认各 100000，`max_depth` 默认 64。达到记录 limit 的报告为 `record_limit`，手动停止为 `visitor_stopped`。全库 payload 统计为已请求量，失败记录可能已计费；不能把它解释为成功记录的字节总和。
+
+核心调用是同步 CPU 工作：每个供页最多解析一个完整页，每条 record 仍完整解码。适配器定期让出事件循环，并在读取/visitor 等待时响应取消。任意同步 JavaScript visitor 或单次核心调用不能被 AbortSignal 强制抢占。
+
+## db/WAL 静态快照
+
+```js
+const db = await openDatabase(await openFileSource('copy.sqlite'), {
+  wal: await openFileSource('copy.wal'),
+  tailPolicy: 'strict', // 异常尾部默认拒绝；需要时显式改为 valid_prefix
+  max_frames: 100000,
+  max_overlay_pages: 100000,
+});
+```
+
+上例的两项注释应在业务代码中按静态副本责任使用。应用应对打开第二个源前的失败也负责释放已打开的第一个源。库接收到两者后负责其生命周期。WAL 逐帧校验；校验完整后由核心生成覆盖索引，并按最新提交逻辑页数打开快照。未提交尾帧、缩小/增长和异常尾部策略与同步一致。帧数或覆盖页预算不足不会成功返回更旧快照。异步 WAL JSON 的偏移/长度使用十进制文本，避免 JS 精度损失。
+
+取消或打开失败时没有可用的 Database。`onProgress` 可以观察已经校验的帧数；不能把未完成的帧前缀称为最新已提交快照。
+
+## 离线查看器与验收范围
+
+`python tools/build_viewer.py` 将核心、适配器、Worker、界面和示例库嵌入单个 HTML，不包含外部脚本、样式、网络请求或服务依赖。主线程将 File/Blob 传给 Worker，保留一个静态快照；导航只接收当前页字节，不复制整个数据库。
+
+取消可保留部分全库报告；切换文件关闭旧 Worker 快照，拒绝旧任务响应，释放句柄并终止旧 Worker。界面提供可选 WAL、显式有效前缀策略，以及页数、记录数、累计 payload 和时间预算。默认 64 MiB 累计 payload、120 秒；移除原 64 MiB **文件长度**硬限制。输入文件大小与资源预算是不同约束。
+
+真实 Chrome 154.0.8037.93 验收在本机 HTTP 载入后断网运行，验证实际选文件、Blob Worker、导航、WAL、取消、切换、损坏/短文件与预算。72663040 字节的合法库有 1100 条 BLOB 记录，默认累计预算停止于 1024 条（含 schema）；128 MiB 后完成 17740 页、1101 条记录，单次实际读取最多 4096 字节，初次实测约 10.1 秒。这不是任意规模、任意浏览器的时间保证。保留可调整的 120 秒预算，避免长期占用；超时也返回部分结果。
+
+内置浏览器策略拒绝 `file://`，因此直接双击 HTML 的真实打开仍未验收；不能把本机 HTTP 断网测试写成 file:// 成功。打包解析器的无外部依赖与实际报告另由 VM 验证。浏览器结果及截图保存于 `_build/browser-acceptance.json` 与 `_build/browser-acceptance/viewer-large.png`。
+
+| 层 | 当前验证范围 |
+| --- | --- |
+| MoonBit 核心游标及同步库 | Wasm、WasmGC、JS、native |
+| 独立异步 JS 包 | Node 22.14.0；BigInt 文件位置包含 2 GiB 稀疏边界 |
+| Blob/Worker 界面 | Chrome 154 的本机页面及断网运行；内置浏览器的示例、选文件、对象导航和 WAL |
+| 其他浏览器、Wasm 异步宿主 | 未声明已验收 |
+
+公开 MoonBit `BTreeCursor`、`WalCursor`、`InspectionCursor` 自身不执行 I/O。调用者驱动 `next()`，按事件供页/供范围，再消费记录/报告；不要把未完成或取消的 WalCursor 用作最新快照。`RangeWalSource.from_cursor` 的源必须与校验时相同且不可变。其 `page_range` 查询实际页来源，宿主只执行范围读取，不重新实现覆盖规则。
+
+复现命令见 CI。`verify_async.mjs` 核对六组数据库所有根页的记录/位置、摘要、schema、页报告和全库诊断，并测试取消、背压、宿主失败、短读、缓存、预算和释放；`verify_async_wal.py` 在原 SQLite oracle 的 29 组静态快照上核对同一结果。浏览器测试依赖固定的 Playwright 1.62.1，运行时适配包不依赖它。

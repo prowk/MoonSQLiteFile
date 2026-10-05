@@ -108,17 +108,6 @@ fn InspectionTrace::snapshot(self : InspectionTrace) -> DiagnosticLocation {
 }
 
 ///|
-fn Database::page_traced(
-  self : Database,
-  number : Int,
-  trace : InspectionTrace,
-) -> Page raise SqliteError {
-  trace.at(ReadPage, Some(number))
-  let bytes = self.read_page(number)
-  self.page_from_bytes(number, bytes, trace=Some(trace))
-}
-
-///|
 /// 与 inspect_btree 使用相同扫描和状态语义，额外保留失败上下文。
 pub fn Database::inspect_btree_details(
   self : Database,

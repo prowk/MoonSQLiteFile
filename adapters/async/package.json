@@ -1,0 +1,12 @@
+{
+  "name": "@prowk/moonsqlitefile-async",
+  "version": "0.7.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.mjs",
+    "./node": "./node.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "license": "Apache-2.0"
+}

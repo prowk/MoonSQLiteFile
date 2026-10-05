@@ -11,6 +11,15 @@ pub(all) struct SchemaEntry {
 pub extend SchemaEntry with @debug.Debug::{to_repr}
 
 ///|
+/// 异步适配层校验已解码的 sqlite_schema 记录，语义与同步 schema 一致。
+pub fn decode_schema_entry(
+  values : Array[Value],
+  page_count : Int,
+) -> SchemaEntry raise SqliteError {
+  schema_entry(values, page_count)
+}
+
+///|
 pub fn Database::schema(
   self : Database,
 ) -> Array[SchemaEntry] raise SqliteError {

@@ -8,8 +8,6 @@ import {
 // Values
 pub fn decode_record(Bytes, Int) -> Array[Value] raise SqliteError
 
-pub fn decode_schema_entry(Array[Value], Int) -> SchemaEntry raise SqliteError
-
 pub fn decode_varint(Bytes, Int) -> (UInt64, Int) raise SqliteError
 
 pub fn inspect_wal(Bytes, max_frames? : Int) -> WalInspection raise SqliteError
@@ -47,15 +45,6 @@ pub(all) suberror SqliteError {
 pub fn SqliteError::to_repr(Self) -> @debug.Repr
 
 // Types and methods
-pub struct BTreeCursor {
-  // private fields
-}
-pub fn BTreeCursor::location(Self) -> DiagnosticLocation
-pub fn BTreeCursor::next(Self) -> ScanEvent raise SqliteError
-pub fn BTreeCursor::progress(Self) -> ScanProgress
-pub fn BTreeCursor::provide_page(Self, Int, Bytes) -> Unit raise SqliteError
-pub fn BTreeCursor::stop(Self) -> ScanSummary
-
 pub(all) struct BTreeInspection {
   root_page : Int
   status : InspectionStatus
@@ -122,7 +111,6 @@ pub fn Database::inspect_btree_details(Self, Int, limit? : Int, max_total_payloa
 pub fn Database::inspect_database(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspection
 pub fn Database::inspect_database_details(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> DatabaseInspectionDetails
 pub fn Database::inspect_page(Self, Int) -> PageInspection
-pub fn Database::inspection_cursor(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> InspectionCursor
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
 pub fn Database::ptrmap_entries(Self) -> Array[PtrmapEntry] raise SqliteError
@@ -131,7 +119,6 @@ pub fn Database::read_index(Self, Int, limit? : Int) -> Array[BTreeRecord] raise
 pub fn Database::read_page(Self, Int) -> Bytes raise SqliteError
 pub fn Database::read_table(Self, Int, limit? : Int) -> Array[Row] raise SqliteError
 pub fn Database::scan_btree(Self, Int, (BTreeRecord) -> Bool raise SqliteError, limit? : Int, max_total_payload_bytes? : UInt64) -> ScanSummary raise SqliteError
-pub fn Database::scan_cursor(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64, table_only? : Bool) -> BTreeCursor raise SqliteError
 pub fn Database::schema(Self) -> Array[SchemaEntry] raise SqliteError
 pub fn Database::source64(Self) -> &RangeSource
 pub fn Database::table_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
@@ -215,23 +202,6 @@ pub(all) struct Header {
 pub fn Header::equal(Self, Self) -> Bool
 pub fn Header::not_equal(Self, Self) -> Bool
 pub fn Header::to_repr(Self) -> @debug.Repr
-
-pub struct InspectionCursor {
-  // private fields
-}
-pub fn InspectionCursor::location(Self) -> DiagnosticLocation
-pub fn InspectionCursor::next(Self) -> InspectionEvent
-pub fn InspectionCursor::progress(Self) -> ScanProgress
-pub fn InspectionCursor::provide_page(Self, Int, Bytes) -> Unit raise SqliteError
-pub fn InspectionCursor::reject_page(Self, SqliteError) -> Unit raise SqliteError
-pub fn InspectionCursor::stop(Self, reason? : SqliteError) -> DatabaseInspectionDetails
-
-pub(all) enum InspectionEvent {
-  NeedInspectionPage(Int)
-  InspectionProgress(ScanProgress)
-  InspectionFinished(DatabaseInspectionDetails)
-} derive(@debug.Debug)
-pub fn InspectionEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) enum InspectionStatus {
   Complete
@@ -446,11 +416,9 @@ pub struct RangeWalSource {
   // private fields
 }
 pub fn RangeWalSource::byte_length64(Self) -> Int64
-pub fn RangeWalSource::from_cursor(&RangeSource, &RangeSource, WalCursor, tail_policy? : WalTailPolicy, max_overlay_pages? : Int) -> Self raise SqliteError
 pub fn RangeWalSource::inspection(Self) -> RangeWalInspection
 pub fn RangeWalSource::new(&RangeSource, &RangeSource, tail_policy? : WalTailPolicy, max_frames? : Int, max_overlay_pages? : Int) -> Self raise SqliteError
 pub fn RangeWalSource::page_count(Self) -> Int
-pub fn RangeWalSource::page_range(Self, Int) -> SnapshotPageRange raise SqliteError
 pub fn RangeWalSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
 pub impl RangeSource for RangeWalSource
 
@@ -470,22 +438,6 @@ pub fn ScanCompletion::equal(Self, Self) -> Bool
 pub fn ScanCompletion::not_equal(Self, Self) -> Bool
 pub fn ScanCompletion::to_repr(Self) -> @debug.Repr
 
-pub(all) enum ScanEvent {
-  NeedPage(Int)
-  RecordReady(BTreeRecord)
-  ScanFinished(ScanSummary)
-} derive(@debug.Debug)
-pub fn ScanEvent::to_repr(Self) -> @debug.Repr
-
-pub(all) struct ScanProgress {
-  records_read : Int
-  pages_read : Int
-  payload_bytes : UInt64
-} derive(Eq, @debug.Debug)
-pub fn ScanProgress::equal(Self, Self) -> Bool
-pub fn ScanProgress::not_equal(Self, Self) -> Bool
-pub fn ScanProgress::to_repr(Self) -> @debug.Repr
-
 pub(all) struct ScanSummary {
   records_read : Int
   pages_read : Int
@@ -502,14 +454,6 @@ pub(all) struct SchemaEntry {
   sql : String?
 } derive(@debug.Debug)
 pub fn SchemaEntry::to_repr(Self) -> @debug.Repr
-
-pub(all) enum SnapshotPageRange {
-  MainPage(Int64)
-  WalPage(Int64)
-} derive(Eq, @debug.Debug)
-pub fn SnapshotPageRange::equal(Self, Self) -> Bool
-pub fn SnapshotPageRange::not_equal(Self, Self) -> Bool
-pub fn SnapshotPageRange::to_repr(Self) -> @debug.Repr
 
 pub(all) enum Value {
   Null
@@ -537,15 +481,6 @@ pub(all) struct WalCommit {
 pub fn WalCommit::equal(Self, Self) -> Bool
 pub fn WalCommit::not_equal(Self, Self) -> Bool
 pub fn WalCommit::to_repr(Self) -> @debug.Repr
-
-pub struct WalCursor {
-  // private fields
-}
-pub fn WalCursor::close(Self) -> Unit
-pub fn WalCursor::frames_read(Self) -> Int
-pub fn WalCursor::new(Int64, max_frames? : Int) -> Self raise SqliteError
-pub fn WalCursor::next(Self) -> WalReadEvent raise SqliteError
-pub fn WalCursor::provide(Self, Int64, Bytes) -> Unit raise SqliteError
 
 pub(all) struct WalFrame {
   index : Int
@@ -584,12 +519,6 @@ pub(all) struct WalInspection {
   trailing_bytes : Int
 } derive(@debug.Debug)
 pub fn WalInspection::to_repr(Self) -> @debug.Repr
-
-pub(all) enum WalReadEvent {
-  NeedWalRange(Int64, Int)
-  WalReady(RangeWalInspection)
-} derive(@debug.Debug)
-pub fn WalReadEvent::to_repr(Self) -> @debug.Repr
 
 pub struct WalSource {
   base : &PageSource

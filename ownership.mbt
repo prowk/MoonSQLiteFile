@@ -218,213 +218,24 @@ fn Database::inspect_database_traced(
   max_total_payload_bytes~ : UInt64,
   max_issues~ : Int,
 ) -> DatabaseInspection {
-  let state : OwnershipState = {
-    owners: Map([]),
-    issues: [],
+  let cursor = self.inspection_cursor_traced(
     located_issues,
-    trace: InspectionTrace::new(),
-    max_pages: Int::min(self.limits.max_pages, self.report_max_pages),
-    max_issues: if max_issues > 0 {
-      max_issues
-    } else {
-      1
-    },
-    coverage: true,
-    failed: false,
-    truncated: false,
-    roots: 0,
-    records: 0,
-    payload: 0UL,
-  }
-  let vacuum = self.header.largest_root_page != 0U
-  if max_issues < 1 {
-    state.error(None, Invalid("诊断条数上限必须为正数"))
-    return state.finish(0, !vacuum)
-  }
-  if self.page_count > state.max_pages {
-    state.error(
-      None,
-      LimitExceeded("数据库逻辑页数超过全局检查预算"),
-    )
-    return state.finish(self.page_count, false)
-  }
-  if self.header.largest_root_page.to_uint64() > self.page_count.to_uint64() ||
-    (!vacuum && self.header.incremental_vacuum) {
-    state.trace.at(Configuration, Some(1), byte_offset=Some(52))
-    state.error(None, Invalid("auto-vacuum 文件头字段不一致"))
-    return state.finish(self.page_count, false)
-  }
-  let lock_page = 1073741824 / self.header.page_size + 1
-  if lock_page <= self.page_count {
-    // 这些保留页仅按位置认领，不执行 B-tree 解码。
-    state.claim({
-      page_number: lock_page,
-      kind: LockByte,
-      root_page: None,
-      object_name: None,
-      parent_page: None,
-    }) catch {
-      Invalid(message) => state.error(None, Invalid(message))
-      LimitExceeded(message) => state.error(None, LimitExceeded(message))
-      Unsupported(message) => state.error(None, Unsupported(message))
-    }
-  }
-  if vacuum {
-    let step = self.header.usable_size / 5 + 1
-    let mut number = 2
-    while number <= self.page_count {
-      let actual = if number == lock_page { number + 1 } else { number }
-      if actual <= self.page_count {
-        state.claim({
-          page_number: actual,
-          kind: PointerMap,
-          root_page: None,
-          object_name: None,
-          parent_page: None,
-        }) catch {
-          Invalid(message) => state.error(None, Invalid(message))
-          LimitExceeded(message) => state.error(None, LimitExceeded(message))
-          Unsupported(message) => state.error(None, Unsupported(message))
+    max_total_payload_bytes~,
+    max_issues~,
+  )
+  while true {
+    match cursor.next() {
+      NeedInspectionPage(number) =>
+        cursor.provide_page(number, self.read_page(number)) catch {
+          error =>
+            cursor.reject_page(error) catch {
+              _ => abort("全库游标请求状态不一致")
+            }
         }
-      }
-      if self.page_count - number < step {
-        break
-      }
-      number = number + step
+      InspectionProgress(_) => ()
+      InspectionFinished(details) => return details.inspection
     }
+  } nobreak {
+    abort("全库检查循环意外结束")
   }
-  let entries : Array[SchemaEntry] = []
-  state.roots = state.roots + 1
-  let schema_ok = try {
-    let kind = self.page_traced(1, state.trace).kind
-    state.trace.at(SchemaDecode, Some(1), byte_offset=Some(100))
-    if kind != TableLeaf && kind != TableInterior {
-      raise Invalid("sqlite_schema 根页必须是 table B-tree")
-    }
-    let summary = self.scan_btree_observed(
-      1,
-      record => {
-        state.records = state.records + 1
-        state.trace.at(
-          SchemaDecode,
-          Some(record.page_number),
-          byte_offset=Some(record.cell_offset),
-          cell_index=state.trace.cell_index,
-        )
-        entries.push(schema_entry(record.values, self.page_count))
-        true
-      },
-      state.observer(1, "sqlite_schema"),
-      limit=self.limits.max_rows,
-      max_total_payload_bytes~,
-    )
-    if summary.completion != Complete {
-      state.trace.at(SchemaDecode, None)
-      state.error(
-        Some(1),
-        LimitExceeded("schema 未完整读取，无法发现全部根页"),
-      )
-      false
-    } else {
-      true
-    }
-  } catch {
-    Invalid(message) => {
-      state.error(Some(1), Invalid(message))
-      false
-    }
-    Unsupported(message) => {
-      state.error(Some(1), Unsupported(message))
-      false
-    }
-    LimitExceeded(message) => {
-      state.error(Some(1), LimitExceeded(message))
-      false
-    }
-  }
-  if !schema_ok {
-    return state.finish(self.page_count, !vacuum)
-  }
-  for entry in entries {
-    state.trace.at(SchemaDecode, None)
-    if state.issues.length() >= state.max_issues {
-      state.coverage = false
-      state.truncated = true
-      break
-    }
-    if entry.object_type == "view" || entry.object_type == "trigger" {
-      if entry.root_page != 0 {
-        state.error(
-          Some(entry.root_page),
-          Invalid("view 或 trigger 不能拥有根页"),
-        )
-      }
-      continue
-    }
-    if entry.root_page == 0 {
-      if entry.object_type == "index" {
-        state.error(Some(0), Invalid("索引没有根页"))
-      }
-      // 虚拟表定义不占独立 B-tree，shadow 表仍按 schema 独立扫描。
-      continue
-    }
-    state.roots = state.roots + 1
-    try {
-      if entry.object_type == "index" {
-        let kind = self.page_traced(entry.root_page, state.trace).kind
-        state.trace.at(SchemaDecode, Some(entry.root_page))
-        if kind != IndexLeaf && kind != IndexInterior {
-          raise Invalid("schema 索引根页不是 index B-tree")
-        }
-      }
-      let summary = self.scan_btree_observed(
-        entry.root_page,
-        _ => {
-          state.records = state.records + 1
-          true
-        },
-        state.observer(entry.root_page, entry.name),
-        limit=self.limits.max_rows - state.records,
-        max_total_payload_bytes=max_total_payload_bytes - state.payload,
-      )
-      if summary.completion != Complete {
-        state.trace.at(Configuration, Some(entry.root_page))
-        state.error(
-          Some(entry.root_page),
-          LimitExceeded("全局记录数预算已耗尽"),
-        )
-      }
-    } catch {
-      Invalid(message) => state.error(Some(entry.root_page), Invalid(message))
-      Unsupported(message) =>
-        state.error(Some(entry.root_page), Unsupported(message))
-      LimitExceeded(message) =>
-        state.error(Some(entry.root_page), LimitExceeded(message))
-    }
-  }
-  if state.issues.length() < state.max_issues {
-    ignore(
-      self.freelist_observed(
-        (number, kind, parent) => {
-          state.claim({
-            page_number: number,
-            kind,
-            root_page: None,
-            object_name: None,
-            parent_page: parent,
-          })
-        },
-        trace=state.trace,
-      ),
-    ) catch {
-      Invalid(message) => state.error(None, Invalid(message))
-      Unsupported(message) => state.error(None, Unsupported(message))
-      LimitExceeded(message) => state.error(None, LimitExceeded(message))
-    }
-  } else {
-    state.coverage = false
-    state.truncated = true
-  }
-  let ptrmap_checked = state.check_ptrmap(self)
-  state.finish(self.page_count, ptrmap_checked)
 }
