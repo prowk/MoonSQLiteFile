@@ -70,7 +70,7 @@ node tools/inspect.cjs large.sqlite --max-payload-bytes 33554432 --max-total-pay
 
 WAL CLI 保持原 JSON 字段及通常的数值类型；64 位偏移在 JavaScript 精确整数范围内仍为 JSON 数字，超出 9007199254740991 时为十进制字符串。标准 WAL 帧预算下的偏移远小于此边界。
 
-离线 HTML 仍使用内存字节输入、64 MiB 和 30 秒限制；浏览器 Blob 分块、异步宿主及取消能力留到 v0.7.0。
+v0.6.0 的历史离线 HTML 使用内存字节输入、64 MiB 和 30 秒限制。v0.7.0 本地源码改为独立异步适配器与 Blob 分块读取，支持 db/WAL、取消、进度和部分结果，详见[异步契约](async-source.md)。
 
 ## 验收与成本复现
 

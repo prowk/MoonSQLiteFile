@@ -10,7 +10,8 @@
 <body>
 <header><div class="brand"><span class="mark">M</span><div><strong>MoonSQLiteFile</strong><span>离线数据库检查器 · v__VERSION__</span></div></div><span class="local">本地读取 · 无网络请求</span></header>
 <main>
-<section class="intro"><div><p class="eyebrow">SQLITE FILE EXPLORER</p><h1>看见数据库的页面结构</h1><p>选择完整的静态数据库副本，查看对象占页、空间分布和检查诊断。</p></div><div class="actions"><label class="primary" for="file">选择数据库<input id="file" type="file" accept=".db,.sqlite,.sqlite3,application/octet-stream"></label><button id="demo">载入示例库</button><small>演示最多读取 64 MiB；WAL 文件不在本版本范围内。</small></div></section>
+<section class="intro"><div><p class="eyebrow">SQLITE FILE EXPLORER</p><h1>看见数据库的页面结构</h1><p>选择静态数据库及可选 WAL 副本，查看对象占页、空间分布和检查诊断。</p></div><div class="actions"><label class="primary" for="file">选择数据库<input id="file" type="file" accept=".db,.sqlite,.sqlite3,application/octet-stream"></label><label for="wal-file">可选 WAL<input id="wal-file" type="file" accept=".wal,-wal,application/octet-stream"></label><button id="demo">载入示例库</button><button id="start" disabled>重新检查</button><button id="cancel" disabled>取消检查</button><small id="files">按需分块读取；文件切换后关闭旧快照。</small></div></section>
+<details class="panel"><summary>检查预算</summary><div class="budgets"><label>最多页面<input id="max-pages" type="number" min="1" max="1000000" value="100000"></label><label>最多记录<input id="max-rows" type="number" min="1" max="1000000" value="100000"></label><label>累计 payload / MiB<input id="max-payload" type="number" min="1" max="2048" value="64"></label><label>最长检查 / 秒<input id="timeout" type="number" min="1" max="3600" value="120"></label><label><input id="wal-prefix" type="checkbox">使用已校验 WAL 前缀</label></div><p>预算耗尽或取消会显示已观察结果；完整记录仍受 16 MiB 单条上限。请选择来自同一时刻的静态 db/WAL 副本。</p></details>
 <p id="status" role="status" aria-live="polite">等待选择数据库。</p>
 <section id="overview" hidden><div class="metrics" id="metrics"></div><p class="scope" id="scope"></p></section>
 <div class="workspace" id="workspace" hidden>
@@ -21,6 +22,7 @@
 </main>
 <script id="parser-source" type="application/json">__PARSER_SOURCE__</script>
 <script id="demo-bytes" type="application/json">__DEMO_BYTES__</script>
+<script id="worker-source" type="application/json">__WORKER_SOURCE__</script>
 <script>__VIEWER_JS__</script>
 </body>
 </html>

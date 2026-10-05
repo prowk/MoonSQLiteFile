@@ -24,9 +24,9 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 - **有界扫描**：逐条回调、提前停止、完成状态，以及记录数、树深度、页数和 payload 预算。
 - **结构检查**：单树检查和全局页归属报告，检测跨对象重复占页、freelist 冲突、未认领页及 auto-vacuum Ptrmap 不一致。
 - **WAL 快照**：两种 checksum 字节序、salt 与提交边界校验、只读覆盖数据源和最新已提交页版本；CLI 显式接收 db/WAL 一致副本。
-- **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource` / `RangeSource`、空间与位置报告、中文/JSON CLI，以及单文件离线页面导航。
+- **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource` / `RangeSource`、空间与位置报告、中文/JSON CLI，独立异步 JS 范围源、背压与取消，以及单文件 Blob/WAL 页面导航。
 
-当前源码版本为 **v0.6.0（待发布）**：新增同步 64 位范围读取并修复已确认的空间与树结构缺陷。契约及迁移方法见[范围读取](docs/range-source.md)和[升级说明](docs/migration-0.6.md)。上方 Mooncakes 链接及下方安装命令仍指向当前已发布的 v0.5.0。
+当前源码版本为 **v0.7.0（待发布）**：新增独立异步 JS 适配包、无 I/O 的核心游标与 Blob/WAL 浏览器分块检查。契约及迁移方法见[异步范围读取](docs/async-source.md)和[v0.7.0 升级说明](docs/migration-0.7.md)。同步大文件能力见[范围读取](docs/range-source.md)。上方 Mooncakes 链接及下方安装命令仍指向当前已发布的 v0.5.0。
 
 ## 安装
 
@@ -166,7 +166,11 @@ node tools/inspect.cjs snapshot.db --wal snapshot.wal inspect-details
 
 ## 离线页面导航
 
-从 [v0.5.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.5.0) 下载 `moonsqlitefile-viewer.html`，或执行 `python tools/build_viewer.py` 构建单个 HTML。在支持 Blob Worker 的现代浏览器中打开，选择静态数据库副本或载入示例，即可从对象跳到根页、父子页和 overflow，查看空间分布、cell 位置与原始字节。演示仅接收单个静态主文件，不接收 WAL；限制 64 MiB 和单次 30 秒，不加载外部资源。完整使用方法见[离线示例](examples/offline-viewer/README.md)。
+当前源码先执行 `moon build --target js --deny-warn` 和 `python tools/build_viewer.py`，生成 `_build/moonsqlitefile-viewer.html`。界面支持静态 db/WAL、对象/父子/overflow 页导航、空间分布、cell 和原始字节；File/Blob 交给 Worker 按需分块读取，取消或预算耗尽显示部分结果。默认累计 payload 64 MiB、检查时间 120 秒，预算可调整，文件长度不再限制为 64 MiB。单文件没有外部资源，真实 Chrome 验收已覆盖本机页面载入后断网；直接 file:// 打开按本次交付范围保留为未验收项。详见[离线示例](examples/offline-viewer/README.md)。
+
+[v0.5.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.5.0) 中的历史附件仍是单主文件、64 MiB/30 秒版本，不能据此获取新增异步与 WAL 能力。
+
+独立异步包尚未发布 npm；本地执行 `python tools/build_async.py`，使用 `_build/async-adapter`。它提供 Node 22 与 Blob 源、异步迭代器/visitor 背压、取消和详细检查，运行时没有第三方依赖，使用方式见[适配契约](docs/async-source.md)。
 
 ## 支持范围与限制
 
@@ -174,7 +178,7 @@ v0.4.0 补齐所访问 B-tree 页的空间覆盖与碎片计数校验，提供�
 
 MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 SQL 列名、默认值或类型亲和性。普通表的 INTEGER PRIMARY KEY 字段通常存为 `Null`，其真实值位于 `Row.rowid`；WITHOUT ROWID 表按主键优先存储字段，索引记录可能附带 rowid 或主键字段。
 
-当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；旧同步 `PageSource` 使用 `Int` 偏移；v0.6.0 源码新增 `RangeSource`、`CachedSource` 和 `RangeWalSource`，支持 64 位长度/偏移与 db/WAL 按需读取，页号最多为 2147483647。仍未提供异步 I/O；全局报告及 WAL 索引须独立预算，见[范围读取契约](docs/range-source.md)。
+当前版本只读静态数据库文件及最新已提交 WAL 覆盖快照，不执行 SQL、不写数据库、不执行 checkpoint、不获取在线并发快照，也不读取 shm 或提供任意历史事务。尚未验证索引排序与 collation、表与索引记录的一致性，也不提供 SQL 列映射；旧同步 `PageSource` 使用 `Int` 偏移；v0.6.0 源码新增 `RangeSource`、`CachedSource` 和 `RangeWalSource`，支持 64 位长度/偏移与 db/WAL 按需读取，页号最多为 2147483647。v0.7.0 在独立 JS 包提供异步 I/O；全局报告及 WAL 索引仍须独立预算，见[范围读取契约](docs/range-source.md)及[异步契约](docs/async-source.md)。
 
 扫描或检查结果为 `Complete` 只表示其覆盖范围内的工作完成，不等同于 SQLite `integrity_check`。解析错误通过 `SqliteError` 返回，分为 `Invalid`、`Unsupported` 和 `LimitExceeded`；检查 API 将错误保留在报告中。
 
@@ -193,7 +197,7 @@ page_size=512, pages=1
 schema entries=0
 ```
 
-完整验证需要 Python 3.13；SQLite 引擎仅用于样本生成和结果对照：
+完整验证需要 MoonBit release、Node 22、Python 3.13；SQLite 引擎仅用于样本生成和结果对照。真实浏览器测试先按 CI 安装 Playwright 1.62.1 和 Chromium，或用 `MOONSQLITE_PLAYWRIGHT` / `MOONSQLITE_BROWSER` 指向已有包和浏览器。浏览器脚本使用本机临时 HTTP，载入后断网；不将其记为 file:// 验收：
 
 ```sh
 moon check --target all --deny-warn
@@ -209,14 +213,23 @@ python tools/verify_inspection.py
 python tools/verify_wal_oracle.py
 python tools/verify_review.py
 node tools/verify_range_io.cjs
+node tools/verify_wide_wal.cjs
+python tools/verify_large_payload.py
+python tools/benchmark_io.py
 moon run --target js examples/basic
 python tools/verify_consumer.py
 python tools/build_viewer.py
 node tools/verify_viewer.cjs
+python tools/build_async.py
+node tools/verify_async.mjs
+python tools/verify_async_package.py
+python tools/verify_async_wal.py
+python tools/generate_browser_fixtures.py
+node tools/verify_browser.cjs
 node tools/fuzz.cjs --seed 20261003 --iterations 512
 ```
 
-v0.6.0 源码四后端各执行 112 项用例，新增 54 组 SQLite SQL 操作差分、2 GiB 稀疏文件及范围输入对照；新增 29 组 WAL 快照和 5470 条记录的 SQLite 独立恢复对照。原有对照继续覆盖 1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 18 个数据库 2412 页；Linux CI 启用 dbstat。当前代码生成的接口对照 v0.3.0 的 85 项、v0.4.0 的 123 项和 v0.5.0 的 160 项声明，发布包在四后端实际运行。CI 执行 512 次主文件/WAL 混合变更，每日任务执行 5000 次；失败时保存配对主文件。详见[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
+v0.7.0 四后端各 121 项核心回归，v0.3.0 的 85 项、v0.4.0 的 123 项、v0.5.0 的 160 项和 v0.6.0 的 199 项公开声明继续兼容检查；发布包在外部消费目录四后端运行，独立异步包另外通过实际 npm tarball 消费。同步验收继续覆盖 54 组 SQLite SQL 操作、2 GiB 主文件/WAL 范围、超过 64 MiB 的预算、1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 2412 页归属。异步验收比较六组数据库所有根页和详细报告，并核对 29 组 WAL 快照、5470 条恢复记录；真实浏览器覆盖选文件、WAL、Worker、导航、取消、切换、释放和大库预算。Linux CI 要求 dbstat，远程验证以该提交对应的 GitHub CI 为准，不沿用旧提交的结果。CI 运行 512 次主文件/WAL 混合变更，每日任务 5000 次，失败时保存配对输入。详见[异步验收](docs/async-source.md)、[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

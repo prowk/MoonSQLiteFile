@@ -1,5 +1,15 @@
 # 更新记录
 
+## 0.7.0（待发布）
+
+新增无 I/O 的 `BTreeCursor`、`WalCursor` 和 `InspectionCursor`：宿主逐页/逐帧供给，核心仍执行页面、record/overflow、树结构、schema、freelist、Ptrmap 和 WAL checksum 校验。同步入口改为驱动同一状态机。新增 schema 记录校验与已校验 WAL 游标构造覆盖快照、实际页范围查询接口，保留原错误枚举、报告类型与同步公开声明。
+
+新增独立 JS 异步适配包 `@prowk/moonsqlitefile-async`，提供 Blob/Node BigInt 范围源、有界 FIFO 缓存、异步扫描与 visitor 背压、AbortSignal 取消和详细全库报告。读取失败保持 source 细分类别，检查返回未完成及已观察页/记录/诊断；关闭、取消和迭代器 break 释放核心句柄和接管源。核心四后端继续支持，异步宿主当前验证 Node 22 与 Chrome。该包仅本地构建，尚未发布 npm。
+
+离线 HTML 改为 File/Blob Worker 分块读取静态 db/WAL，提供帧/页/记录进度、取消、部分结果、可调整预算及原有对象/页面导航；移除 64 MiB 文件长度限制，累计 payload 默认仍为 64 MiB，默认可调整时间预算改为 120 秒。真实 Chrome 验收在本机页面载入后断网，覆盖 WAL 尾部策略、读取失败、损坏、预算、切换和释放。72663040 字节合法库提高预算后检查 17740 页、1101 条记录，最大读取块 4096 字节。直接 file:// 打开按本轮确认保留为未验收项。
+
+新增 v0.6.0 的 199 项 API 基线、四后端游标回归、六组数据库同步/异步差分、29 组 WAL 快照与 5470 条恢复记录对照，以及独立 npm tarball 消费和真实浏览器持续检查。四后端各 121 项回归；远程验证以该提交对应的 GitHub CI 为准；公开发布未执行。完整契约及迁移见[异步范围读取](docs/async-source.md)和[升级说明](docs/migration-0.7.md)。
+
 ## 0.6.0（待发布）
 
 新增 `RangeSource`、`SourceError`、`open_range_source` 与 `PageSourceAdapter`：文件长度及偏移使用 Int64，页面乘法在 64 位中计算；旧 PageSource、Bytes 和 Database 公开字段保持原类型。页号仍为 Int，超过 2147483647 页显式拒绝。`Database.source64()` 提供完整范围源，新入口的宿主失败统一保留 source 分类并映射为 Incomplete。

@@ -1,39 +1,50 @@
 'use strict';
 // 所有格式解析都在隔离 worker 中调用编译后的 MoonBit；主线程仅展示已有报告。
 const parserSource = JSON.parse(document.getElementById('parser-source').textContent);
-const workerSource = `self.onmessage = function(event) {
-  let exitCode = 0;
-  globalThis.moonsqlitefileHost = {
-    args: event.data.args, bytes: event.data.bytes,
-    exitCode: code => { exitCode = code; },
-    output: text => self.postMessage({ result: JSON.parse(text), exitCode }),
-    error: message => self.postMessage({ error: message })
-  };
-  try { ${parserSource}\n } catch (error) { self.postMessage({ error: String(error) }); }
-};`;
-const workerURL = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
+const workerSource = parserSource + '\n' + JSON.parse(document.getElementById('worker-source').textContent);
+const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
 const el = id => document.getElementById(id);
-const kinds = { btree_root: 'B-tree 根页', btree_child: 'B-tree 子页', overflow_first: '首个 overflow 页', overflow_continuation: '后续 overflow 页', freelist_trunk: 'freelist trunk', freelist_leaf: 'freelist leaf', pointer_map: 'Ptrmap 页', lock_byte: 'lock-byte 页' };
+const kinds = {btree_root: 'B-tree 根页', btree_child: 'B-tree 子页', overflow_first: '首个 overflow 页', overflow_continuation: '后续 overflow 页', freelist_trunk: 'freelist trunk', freelist_leaf: 'freelist leaf', pointer_map: 'Ptrmap 页', lock_byte: 'lock-byte 页'};
 let bytes = null, data = null, selected = 1, rawOffset = 0, generation = 0, pageRequest = 0;
-const jobs = new Set();
-
-function run(args, input) {
+let file = null, walFile = null, worker = null, serial = 0;
+const jobs = new Map();
+function run(message, progress) {
+  const id = ++serial, active = worker;
   return new Promise((resolve, reject) => {
-    const worker = new Worker(workerURL);
-    const job = { worker, cancel: () => { finish(); reject(new Error("已取消旧检查")); } };
-    jobs.add(job);
-    const finish = () => { clearTimeout(timer); worker.terminate(); jobs.delete(job); };
-    const timer = setTimeout(() => { finish(); reject(new Error('检查超过 30 秒，请使用 CLI 检查此文件。')); }, 30000);
-    worker.onmessage = event => { finish(); event.data.error ? reject(new Error(event.data.error)) : resolve(event.data.result); };
-    worker.onerror = event => { finish(); reject(new Error(event.message)); };
-    worker.postMessage({ args: ['local.sqlite', ...args], bytes: input });
+    jobs.set(id, {worker: active, resolve, reject, progress});
+    active.postMessage({...message, id});
   });
 }
-
-function cancelJobs() {
-  for (const job of [...jobs]) job.cancel();
-  jobs.clear();
+function createWorker() {
+  const active = new Worker(workerURL);
+  active.onmessage = ({data: response}) => {
+    const job = jobs.get(response.id);
+    if (!job || job.worker !== active) return;
+    if (response.progress) { job.progress?.(response.progress); return; }
+    jobs.delete(response.id);
+    if (response.error) job.reject(new Error(response.error.message));
+    else job.resolve(response.closed ? response : response.result);
+  };
+  active.onerror = event => {
+    for (const [id, job] of jobs) if (job.worker === active) {
+      jobs.delete(id); job.reject(new Error(event.message));
+    }
+  };
+  return active;
 }
+function closeWorker(active) {
+  if (!active) return;
+  const id = ++serial;
+  let timer;
+  const release = () => { clearTimeout(timer); jobs.delete(id); active.terminate(); };
+  jobs.set(id, {worker: active, resolve: release, reject: release});
+  active.postMessage({op: 'close', id});
+  timer = setTimeout(release, 1000);
+  for (const [pendingId, job] of jobs) if (pendingId !== id && job.worker === active) {
+    jobs.delete(pendingId); job.reject(new Error('已切换文件'));
+  }
+}
+window.addEventListener('pagehide', () => { worker?.terminate(); URL.revokeObjectURL(workerURL); });
 
 function textNode(tag, text, className) {
   const node = document.createElement(tag);
@@ -87,24 +98,44 @@ function renderOverview() {
   el('workspace').hidden = false;
 }
 
-async function loadBytes(input, ticket) {
-  if (ticket !== generation) return;
-  bytes = input;
-  data = await run(['viewer-data'], bytes);
-  if (ticket !== generation) return;
-  renderOverview();
-  el('page-number').max = String(data.header.page_count);
-  await showPage(1);
+function budget(id) {
+  const input = el(id), value = Number(input.value);
+  if (!input.checkValidity() || !Number.isInteger(value)) throw new Error('检查预算必须为范围内的整数');
+  return value;
 }
-
+async function loadFiles() {
+  if (!file) return;
+  const ticket = beginLoad();
+  try {
+    const pages = budget('max-pages'), rows = budget('max-rows');
+    data = await run({op: 'open', file, wal: walFile, timeout: budget('timeout'), options: {
+      max_pages: pages, max_report_pages: pages, max_rows: rows,
+      max_total_payload_bytes: String(BigInt(budget('max-payload')) * 1048576n),
+      tailPolicy: el('wal-prefix').checked ? 'valid_prefix' : 'strict', cachePages: 256,
+    }}, progress => {
+      if (ticket !== generation) return;
+      el('status').textContent = progress.phase === 'wal'
+        ? `正在校验 WAL：${progress.frames_read} 帧…`
+        : `正在检查：${progress.pages_read} 页，${progress.records_read} 条记录，payload ${progress.payload_bytes} 字节…`;
+    });
+    if (ticket !== generation) return;
+    renderOverview();
+    el('scope').textContent += ` 数据库实际读取 ${data.io.db.bytes} 字节 / ${data.io.db.reads} 次（最大块 ${data.io.db.maxRead}）；${data.wal ? `WAL ${data.wal.committed_frames} 已提交帧，实际读取 ${data.io.wal.bytes} 字节。` : '未配对 WAL。'}`;
+    if (data.reason) el('status').textContent += ` · ${data.reason === 'cancelled' ? '已取消或达到时间预算，保留部分结果' : data.reason}`;
+    el('page-number').max = String(data.header.page_count);
+    await showPage(1);
+  } catch (error) { loadError(error, ticket); }
+  finally { if (ticket === generation) el('cancel').disabled = true; }
+}
 function beginLoad() {
   const ticket = ++generation;
   pageRequest++;
-  cancelJobs();
+  closeWorker(worker); worker = createWorker();
   data = null; bytes = null;
   el('overview').hidden = true; el('workspace').hidden = true;
-  el('status').textContent = '正在检查数据库…';
-  el('status').dataset.state = 'loading';
+  el('status').textContent = '正在检查数据库…'; el('status').dataset.state = 'loading';
+  el('cancel').disabled = false; el('start').disabled = !file;
+  el('files').textContent = `${file.name || '示例库'}${walFile ? ` + ${walFile.name}` : ''}`;
   return ticket;
 }
 
@@ -115,11 +146,12 @@ function loadError(error, ticket) {
 }
 
 function renderRaw() {
-  const size = data.header.page_size, start = (selected - 1) * size;
+  if (!bytes) return;
+  const size = data.header.page_size;
   rawOffset = Math.max(0, Math.min(size - 1, rawOffset));
   const end = Math.min(size, rawOffset + 256), lines = [];
   for (let offset = rawOffset; offset < end; offset += 16) {
-    const chunk = bytes.subarray(start + offset, start + Math.min(offset + 16, end));
+    const chunk = bytes.subarray(offset, Math.min(offset + 16, end));
     const hex = [...chunk].map(byte => byte.toString(16).padStart(2, '0')).join(' ').padEnd(47);
     const ascii = [...chunk].map(byte => byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : '.').join('');
     lines.push(`${offset.toString(16).padStart(4, '0')}  ${hex}  ${ascii}`);
@@ -149,7 +181,6 @@ function renderStatistics(report) {
 
 async function showPage(number, offset = 0) {
   if (!data || !Number.isInteger(number) || number < 1 || number > data.header.page_count) return;
-  cancelJobs();
   const request = ++pageRequest, ticket = generation;
   selected = number; rawOffset = offset;
   el('page-title').textContent = `页面 ${number}`; el('page-number').value = String(number);
@@ -160,30 +191,31 @@ async function showPage(number, offset = 0) {
   if (owner?.parent_page != null) el('links').append(pageButton(`父页 ${owner.parent_page}`, owner.parent_page));
   if (owner?.root_page && owner.root_page !== number) el('links').append(pageButton(`根页 ${owner.root_page}`, owner.root_page));
   for (const child of data.inspection.pages.filter(page => page.parent_page === number)) el('links').append(pageButton(`${kinds[child.kind] || child.kind} ${child.page_number}`, child.page_number));
-  renderRaw(); renderStatistics(null);
-  const type = bytes[(number - 1) * data.header.page_size + (number === 1 ? 100 : 0)];
-  if (owner && !['btree_root','btree_child'].includes(owner.kind)) { el('page-status').textContent = '此用途不提供 B-tree 布局统计，可查看原始字节与归属关系。'; return; }
-  if (!owner && ![2,5,10,13].includes(type)) { el('page-status').textContent = '无法按 B-tree 类型解释此页，保留原始字节。'; return; }
-  el('page-status').textContent = '正在检查页内布局…';
+  bytes = null; el('raw').textContent = ''; renderStatistics(null);
+  el('page-status').textContent = '正在读取和检查页内布局…';
   try {
-    const report = await run(['page-inspect', String(number)], bytes);
+    const result = await run({op: 'page', page: number, kind: owner?.kind});
     if (request !== pageRequest || ticket !== generation) return;
-    el('page-status').textContent = report.status === 'complete' ? `页内布局检查完成 · ${report.page.cell_count} 个 cell` : `${report.diagnostic.code}：${report.diagnostic.message}（页内偏移 ${report.diagnostic.byte_offset ?? '未知'}）`;
+    bytes = result.bytes; renderRaw();
+    const report = result.report;
+    el('page-status').textContent = !report ? '此用途不提供 B-tree 布局统计，可查看原始字节与归属关系。'
+      : report.status === 'complete' ? `页内布局检查完成 · ${report.page.cell_count} 个 cell`
+      : `${report.diagnostic.code}：${report.diagnostic.message}（页内偏移 ${report.diagnostic.byte_offset ?? '未知'}）`;
     renderStatistics(report);
   } catch (error) { if (request === pageRequest && ticket === generation) el('page-status').textContent = error.message; }
 }
 
-el('file').onchange = async event => {
-  const file = event.target.files[0]; if (!file) return;
-  const ticket = beginLoad();
-  try { if (file.size > 64 * 1024 * 1024) throw new Error('演示文件上限为 64 MiB，请使用 CLI。'); await loadBytes(new Uint8Array(await file.arrayBuffer()), ticket); }
-  catch (error) { loadError(error, ticket); }
-  event.target.value = '';
+el('file').onchange = event => {
+  const selectedFile = event.target.files[0]; if (!selectedFile) return;
+  file = selectedFile; walFile = null; el('wal-file').value = ''; loadFiles();
 };
-el('demo').onclick = async () => {
-  const ticket = beginLoad();
-  try { const base64 = JSON.parse(el('demo-bytes').textContent); await loadBytes(Uint8Array.from(atob(base64), char => char.charCodeAt(0)), ticket); }
-  catch (error) { loadError(error, ticket); }
+el('wal-file').onchange = event => { walFile = event.target.files[0] || null; if (file) loadFiles(); };
+el('start').onclick = loadFiles;
+el('cancel').onclick = () => { worker?.postMessage({op: 'cancel'}); el('cancel').disabled = true; };
+el('demo').onclick = () => {
+  const base64 = JSON.parse(el('demo-bytes').textContent);
+  file = new File([Uint8Array.from(atob(base64), char => char.charCodeAt(0))], '示例库.sqlite');
+  walFile = null; el('file').value = ''; el('wal-file').value = ''; loadFiles();
 };
 el('objects').onchange = event => { if (event.target.value) showPage(Number(event.target.value)); };
 el('go').onclick = () => showPage(Number(el('page-number').value));

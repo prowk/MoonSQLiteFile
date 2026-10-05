@@ -1,9 +1,20 @@
-# 离线页面检查器
+# 单文件 Blob/WAL 检查器（v0.7.0 本地源码）
 
-执行 `moon build --target js cmd/inspect`，然后运行 `python tools/build_viewer.py`，得到 `_build/moonsqlitefile-viewer.html`。GitHub Release 同时提供构建好的 HTML；将它保存到本地，在支持 Blob Worker 的现代浏览器中打开。无需安装服务器或依赖网络资源。
+```sh
+moon build --target js --deny-warn
+python tools/build_viewer.py
+```
 
-选择完整的静态 SQLite 文件副本，或点击“载入示例库”。对象选择器跳转到根页，页面关系按钮跳转到父页、子页或 overflow 页；页号和前后页按钮可查看其他页面。B-tree 页面显示空间统计和 cell 位置，所有页面都可分段查看原始字节。诊断按钮跳到已知失败页和页内偏移。
+结果为 `_build/moonsqlitefile-viewer.html`，包含同一 MoonBit 核心、异步适配层、Worker、界面及示例库，没有外部资源。格式解析和完整检查仍在核心执行，主线程只展示报告和当前页字节。
 
-解析由编译后的 MoonBit CLI 在 Worker 中执行，界面复用 `viewer-data`、`page-inspect` 报告。文件内容保存在本页面，CSP 禁止网络请求。演示完整读取文件，限制为 64 MiB，每次检查最多运行 30 秒；切换文件或页面会取消旧检查。限额、超时或错误不会被展示为成功。
+选择静态数据库副本后自动检查；可再选择来自同一时刻的 WAL，重新打开最新已提交快照。切换主文件会清除旧 WAL。异常 WAL 默认拒绝，需要时在“检查预算”中显式选择“使用已校验 WAL 前缀”，点击“重新检查”。应用不读取 shm、不加在线锁、不执行 checkpoint。
 
-统计描述已观察到的归属。未完成检查可能缺少对象或页面；页面空间报告不验证 overflow 链和 record 内容。全库检查不验证 SQL 排序或表/索引内容一致性，不等同于 SQLite `integrity_check`。不支持 WAL、实时数据库读取或损坏数据恢复。大文件和批量检查请使用 CLI。
+“检查预算”可以调整最多页、记录、累计 payload 和最长秒数。默认 100000 页/记录、64 MiB 累计 payload、120 秒，单条 payload 为 16 MiB。没有原来的 64 MiB 文件长度硬限制。取消或预算耗尽保留部分全库报告及诊断；初始文件头或 WAL 打开失败时没有可用数据库。文件切换时关闭旧快照并终止旧 Worker，旧响应不覆盖新文件。
+
+概览展示覆盖状态、页用途与对象占页；对象选择跳到根页，关系按钮跳到父/子/overflow 页。页内空间条、cell 下拉框及原始字节导航保持。导航通过已打开的快照按页读取，不重新全库扫描。归属未完成时不根据未认领页推断用途。
+
+真实 Chrome 验收使用本机 HTTP 载入 HTML 后断网，已覆盖选文件、WAL、Worker、页面导航、失败、取消、切换、释放和 72.7 MB 合法数据库的默认/提高预算。当前内置浏览器安全策略拒绝 file://；直接双击 HTML 的真实打开按本轮确认保留为未验收项，不能把断网运行结果视为直接打开已通过。
+
+复现：先执行 `python tools/generate_browser_fixtures.py`，安装 CI 固定的 Playwright 1.62.1 / Chromium，再运行 `node tools/verify_browser.cjs`。也可以用 `MOONSQLITE_PLAYWRIGHT` 指定已有 Playwright 的绝对路径、`MOONSQLITE_BROWSER` 指定 Chrome 可执行文件。结果及截图保存在 `_build/browser-acceptance.json`、`_build/browser-acceptance/viewer-large.png`。
+
+`node tools/verify_viewer.cjs` 单独验证实际 HTML 内嵌代码的无外部依赖、导航数据、报告及释放。完整支持矩阵、生命周期和限制见[异步范围读取](../../docs/async-source.md)。历史 v0.5.0 发布附件仍是单主文件 64 MiB/30 秒版本。

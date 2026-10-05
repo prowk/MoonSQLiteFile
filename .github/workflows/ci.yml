@@ -25,6 +25,10 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - run: moon version --all
+      - name: Install pinned browser acceptance tools
+        run: |
+          npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
+          node _build/browser-tools/node_modules/playwright/cli.js install --with-deps chromium
       - run: moon check --target all --deny-warn
       - run: moon build --target all --deny-warn
       - run: moon test --target all --deny-warn
@@ -61,6 +65,20 @@ jobs:
         run: |
           python tools/build_viewer.py
           node tools/verify_viewer.cjs
+      - name: Build independent asynchronous adapter
+        run: python tools/build_async.py
+      - name: Verify async results, cancellation, backpressure and release
+        run: node tools/verify_async.mjs
+      - name: Verify independent npm tarball consumption
+        run: python tools/verify_async_package.py
+      - name: Compare async WAL snapshots against SQLite recovery
+        run: python tools/verify_async_wal.py
+      - name: Generate large browser and WAL acceptance fixtures
+        run: python tools/generate_browser_fixtures.py
+      - name: Verify actual browser File, Blob, Worker and offline operation
+        env:
+          MOONSQLITE_PLAYWRIGHT: ${{ github.workspace }}/_build/browser-tools/node_modules/playwright
+        run: node tools/verify_browser.cjs
       - name: Run bounded reproducible fuzzing
         run: node tools/fuzz.cjs --seed 20261003 --iterations 512
       - name: Preserve failing fuzz inputs
@@ -81,5 +99,8 @@ jobs:
             _build/large-payload.json
             _build/io-benchmark.json
             _build/inspection-evidence.json
+            _build/browser-acceptance.json
+            _build/browser-acceptance/fixtures.json
+            _build/browser-acceptance/viewer-large.png
           if-no-files-found: ignore
           retention-days: 30
