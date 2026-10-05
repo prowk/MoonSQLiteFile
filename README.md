@@ -26,7 +26,9 @@ MoonSQLiteFile 直接读取 SQLite 3 数据库的磁盘格式，提供文件头�
 - **WAL 快照**：两种 checksum 字节序、salt 与提交边界校验、只读覆盖数据源和最新已提交页版本；CLI 显式接收 db/WAL 一致副本。
 - **宿主集成与展示**：`Bytes` 输入、第三方同步 `PageSource` / `RangeSource`、空间与位置报告、中文/JSON CLI，独立异步 JS 范围源、背压与取消，以及单文件 Blob/WAL 页面导航。
 
-当前版本为 **v0.7.0**，从 v0.5.0 直接升级：包含同步 64 位范围读取、独立异步 JS 适配包、无 I/O 核心游标与 Blob/WAL 浏览器分块检查。v0.6.0 仅作为内部开发里程碑，未单独发布。契约及迁移方法见[范围读取](docs/range-source.md)、[异步范围读取](docs/async-source.md)和[v0.7.0 升级说明](docs/migration-0.7.md)。
+当前源码为 **v0.8.0（待发布）**：源码与测试迁入 `src/`，对外导入路径不变；补齐公开 API 注释、黑盒/CLI 契约、文档示例、固定工具链与同输入性能对照。见[源码组织](docs/source-layout.md)、[v0.8.0 升级说明](docs/migration-0.8.md)、[支持矩阵](docs/support.md)及[贡献指南](CONTRIBUTING.md)。上方安装入口仍为已发布 v0.7.0。
+
+已发布 **v0.7.0** 从 v0.5.0 直接升级：包含同步 64 位范围读取、独立异步 JS 适配包、无 I/O 核心游标与 Blob/WAL 浏览器分块检查。v0.6.0 仅作为内部开发里程碑，未单独发布。契约及迁移方法见[范围读取](docs/range-source.md)、[异步范围读取](docs/async-source.md)和[v0.7.0 升级说明](docs/migration-0.7.md)。
 
 ## 安装
 
@@ -124,7 +126,7 @@ CLI 需要 MoonBit release 工具链和 Node.js 22 或更新版本，无 npm 依
 ```sh
 git clone https://github.com/prowk/MoonSQLiteFile.git
 cd MoonSQLiteFile
-moon build --target js cmd/inspect
+moon build --target js src/cmd/inspect
 node tools/inspect.cjs fixtures/core.sqlite schema
 node tools/inspect.cjs fixtures/core.sqlite rows samples 10
 node tools/inspect.cjs fixtures/btree.sqlite index mixed_index 5
@@ -197,14 +199,17 @@ page_size=512, pages=1
 schema entries=0
 ```
 
-完整验证需要 MoonBit release、Node 22、Python 3.13；SQLite 引擎仅用于样本生成和结果对照。真实浏览器测试先按 CI 安装 Playwright 1.62.1 和 Chromium，或用 `MOONSQLITE_PLAYWRIGHT` / `MOONSQLITE_BROWSER` 指向已有包和浏览器。浏览器脚本使用本机临时 HTTP，载入后断网；不将其记为 file:// 验收：
+完整验证使用 [固定工具链](docs/support.md)（Node 22.14.0、Python 3.13.2），并独立运行 MoonBit latest 通道；SQLite 引擎仅用于样本生成和结果对照。真实浏览器测试先按 CI 安装 Playwright 1.62.1 和 Chromium，或用 `MOONSQLITE_PLAYWRIGHT` / `MOONSQLITE_BROWSER` 指向已有包和浏览器。浏览器脚本使用本机临时 HTTP，载入后断网；不将其记为 file:// 验收：
 
 ```sh
+python tools/verify_toolchain.py
 moon check --target all --deny-warn
 moon build --target all --deny-warn
 moon test --target all --deny-warn
 moon fmt --check
 python tools/verify_api.py
+python tools/verify_layout.py
+python tools/verify_cli_contract.py
 python tools/generate_fixtures.py --check
 python tools/verify_oracle.py
 python tools/generate_btree_fixtures.py --check
@@ -216,20 +221,26 @@ node tools/verify_range_io.cjs
 node tools/verify_wide_wal.cjs
 python tools/verify_large_payload.py
 python tools/benchmark_io.py
+python tools/benchmark_compatibility.py
 moon run --target js src/examples/basic
 python tools/verify_consumer.py
 python tools/build_viewer.py
 node tools/verify_viewer.cjs
 python tools/build_async.py
+node tools/verify_async_api.mjs
+python tools/verify_examples.py
 node tools/verify_async.mjs
 python tools/verify_async_package.py
 python tools/verify_async_wal.py
 python tools/generate_browser_fixtures.py
 node tools/verify_browser.cjs
+python tools/verify_regressions.py
 node tools/fuzz.cjs --seed 20261003 --iterations 512
 ```
 
-v0.7.0 四后端各 121 项核心回归，v0.3.0 的 85 项、v0.4.0 的 123 项、v0.5.0 的 160 项和 v0.6.0 的 199 项公开声明继续兼容检查；发布包在外部消费目录四后端运行，独立异步包另外通过实际 npm tarball 消费。同步验收继续覆盖 54 组 SQLite SQL 操作、2 GiB 主文件/WAL 范围、超过 64 MiB 的预算、1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 2412 页归属。异步验收比较六组数据库所有根页和详细报告，并核对 29 组 WAL 快照、5470 条恢复记录；真实浏览器覆盖选文件、WAL、Worker、导航、取消、切换、释放和大库预算。Linux CI 要求 dbstat，远程验证以该提交对应的 GitHub CI 为准，不沿用旧提交的结果。CI 运行 512 次主文件/WAL 混合变更，每日任务 5000 次，失败时保存配对输入。详见[异步验收](docs/async-source.md)、[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
+v0.8.0 增加六项公开黑盒回归，四后端各 127 项；124 个公开类型/函数契约注释由实际文档生成检查，README 原文示例在实际包的四后端消费项目运行。正式 v0.7.0 的 237 项公开声明及异步导出/原型加入兼容检查；CLI 22 场景覆盖全部 17 个命令，三个历史 fuzz 边界样本持续重放。
+
+v0.7.0 的四后端各 121 项回归保留；v0.3.0 的 85 项、v0.4.0 的 123 项、v0.5.0 的 160 项和 v0.6.0 的 199 项公开声明继续兼容检查；发布包在外部消费目录四后端运行，独立异步包另外通过实际 npm tarball 消费。同步验收继续覆盖 54 组 SQLite SQL 操作、2 GiB 主文件/WAL 范围、超过 64 MiB 的预算、1063 行普通表、4407 条索引/WITHOUT ROWID 记录及 2412 页归属。异步验收比较六组数据库所有根页和详细报告，并核对 29 组 WAL 快照、5470 条恢复记录；真实浏览器覆盖选文件、WAL、Worker、导航、取消、切换、释放和大库预算。Linux CI 要求 dbstat，远程验证以该提交对应的 GitHub CI 为准，不沿用旧提交的结果。CI 运行 512 次主文件/WAL 混合变更，每日任务 5000 次，失败时保存配对输入。详见[异步验收](docs/async-source.md)、[模糊测试与重放](docs/fuzzing.md)、[WAL 对照](docs/wal.md)及[样本说明](fixtures/README.md)。
 
 问题反馈或改进建议请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)。报告解析问题时，请附上复现步骤、错误输出及可公开的最小数据库样本。
 

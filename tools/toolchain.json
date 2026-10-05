@@ -1,0 +1,10 @@
+{
+  "install_version": "0.10.14+7d59c7ec9",
+  "moon": "0.1.20260920",
+  "moon_commit": "914d7da",
+  "moonc": "v0.10.14+7d59c7ec9",
+  "moonrun": "0.1.20260920",
+  "node": "22.14.0",
+  "python": "3.13.2",
+  "playwright": "1.62.1"
+}

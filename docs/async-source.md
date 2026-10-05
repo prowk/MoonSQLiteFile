@@ -2,6 +2,8 @@
 
 MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapters/async`，扫描、record/overflow、页归属、freelist、Ptrmap 和 WAL checksum 仍由同一核心状态机完成。同步入口也驱动这些状态机，不在 JavaScript 重写格式解析。
 
+v0.8.0 待发布源码保留本节的协议，异步包版本同步为 0.8.0；新增导出/原型兼容检查，注释与支持证据见[支持矩阵](support.md)。下述 0.7.0 附件安装属于已发布版本，从当前源码构建的是本地 0.8.0 包。
+
 ## 本地构建与消费
 
 异步包随 v0.7.0 Release 以 `prowk-moonsqlitefile-async-0.7.0.tgz` 附件提供，下载后执行 `npm install ./prowk-moonsqlitefile-async-0.7.0.tgz`，也可按下文从源码构建。该包尚未上传 npm registry。

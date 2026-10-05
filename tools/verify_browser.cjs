@@ -6,7 +6,9 @@ const path = require('node:path');
 const http = require('node:http');
 const {performance} = require('node:perf_hooks');
 const root = path.resolve(__dirname, '..');
-const playwright = require(process.env.MOONSQLITE_PLAYWRIGHT || 'playwright');
+const playwrightPath = process.env.MOONSQLITE_PLAYWRIGHT || 'playwright';
+const playwright = require(playwrightPath);
+assert.equal(require(path.join(playwrightPath, 'package.json')).version, '1.62.1');
 const pagePath = path.join(root, '_build/moonsqlitefile-viewer.html');
 const fixtures = path.join(root, '_build/browser-acceptance');
 async function main() {

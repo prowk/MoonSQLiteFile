@@ -12,19 +12,30 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [pinned, latest]
+    env:
+      MOONSQLITE_TOOLCHAIN_CHANNEL: ${{ matrix.toolchain }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '22.14.0'
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: '3.13.2'
       - name: Install MoonBit
         run: |
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          version=$(python -c "import json; print(json.load(open('tools/toolchain.json'))['install_version'])")
+          if [ "${{ matrix.toolchain }}" = latest ]; then version=latest; fi
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s "$version"
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - run: moon version --all
+      - run: python tools/verify_toolchain.py
       - name: Install pinned browser acceptance tools
         run: |
           npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
@@ -35,6 +46,10 @@ jobs:
       - run: moon fmt --check
       - name: Verify historical public API and generated interface
         run: python tools/verify_api.py
+      - name: Verify source layout and public documentation
+        run: python tools/verify_layout.py
+      - name: Verify CLI JSON contract against released v0.7.0
+        run: python tools/verify_cli_contract.py
       - name: Verify committed fixture bytes
         run: python tools/generate_fixtures.py --check
       - name: Compare CLI against SQLite oracle
@@ -57,6 +72,8 @@ jobs:
         run: python tools/verify_large_payload.py
       - name: Verify repeated-page WAL benchmark and record I/O costs
         run: python tools/benchmark_io.py
+      - name: Compare same-input costs with released v0.7.0
+        run: python tools/benchmark_compatibility.py
       - name: Run library example
         run: moon run --target js src/examples/basic
       - name: Verify packaged library in a separate consumer workspace
@@ -67,6 +84,10 @@ jobs:
           node tools/verify_viewer.cjs
       - name: Build independent asynchronous adapter
         run: python tools/build_async.py
+      - name: Verify released asynchronous API compatibility
+        run: node tools/verify_async_api.mjs
+      - name: Run documentation examples against actual packages
+        run: python tools/verify_examples.py
       - name: Verify async results, cancellation, backpressure and release
         run: node tools/verify_async.mjs
       - name: Verify independent npm tarball consumption
@@ -79,13 +100,15 @@ jobs:
         env:
           MOONSQLITE_PLAYWRIGHT: ${{ github.workspace }}/_build/browser-tools/node_modules/playwright
         run: node tools/verify_browser.cjs
+      - name: Replay historical fuzz boundary regressions
+        run: python tools/verify_regressions.py
       - name: Run bounded reproducible fuzzing
         run: node tools/fuzz.cjs --seed 20261003 --iterations 512
       - name: Preserve failing fuzz inputs
         if: failure()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: fuzz-failures-${{ github.run_id }}
+          name: fuzz-failures-${{ matrix.toolchain }}-${{ github.run_id }}
           path: _build/fuzz-failures/
           if-no-files-found: ignore
           retention-days: 30
@@ -93,11 +116,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: range-acceptance-${{ github.run_id }}
+          name: range-acceptance-${{ matrix.toolchain }}-${{ github.run_id }}
           path: |
+            _build/toolchain-*.json
+            _build/layout-evidence.json
             _build/wide-wal.json
             _build/large-payload.json
             _build/io-benchmark.json
+            _build/compatibility-benchmark.json
             _build/inspection-evidence.json
             _build/browser-acceptance.json
             _build/browser-acceptance/fixtures.json

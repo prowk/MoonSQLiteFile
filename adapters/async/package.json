@@ -1,12 +1,27 @@
 {
   "name": "@prowk/moonsqlitefile-async",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./index.mjs",
     "./node": "./node.mjs"
   },
-  "engines": { "node": ">=22" },
-  "license": "Apache-2.0"
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "Apache-2.0",
+  "description": "Asynchronous range sources for the MoonSQLiteFile read-only SQLite inspector",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/prowk/MoonSQLiteFile.git",
+    "directory": "adapters/async"
+  },
+  "files": [
+    "index.mjs",
+    "node.mjs",
+    "core.mjs",
+    "README.md",
+    "LICENSE"
+  ]
 }
