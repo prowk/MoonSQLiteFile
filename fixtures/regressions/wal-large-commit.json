@@ -1,0 +1,12 @@
+{
+  "kind": "wal",
+  "corpus": "utf16le.sqlite",
+  "seed": 20261003,
+  "iteration": 208,
+  "page": 2,
+  "original_sha256": "65e75be90785f67c8dfd3689b353f59efb4a2da672aebaeeacccc4366e46800d",
+  "original_bytes": 1640,
+  "bytes": 1104,
+  "expected": "wal_invalid",
+  "sha256": "73ba3b01bd441ef83e653b49240aed32ea46a48e5e5455858cdf10203064510f"
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "range-fault-two-pages",
+    "expected": "accepted",
+    "original_bytes": 1024,
+    "bytes": 1024
+  },
+  {
+    "name": "wal-large-commit",
+    "expected": "wal_invalid",
+    "original_bytes": 1640,
+    "bytes": 1104
+  },
+  {
+    "name": "truncated-magic",
+    "expected": "unsupported",
+    "original_bytes": 93,
+    "bytes": 16
+  }
+]

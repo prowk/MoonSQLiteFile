@@ -33,6 +33,7 @@ __pycache__/
 /tools/verify_browser.cjs
 
 /fixtures/cli-contract/
+/fixtures/regressions/
 
 /tools/verify_async_api.mjs
 /tools/async-api-v0.7.0.json

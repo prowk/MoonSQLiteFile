@@ -1,0 +1,12 @@
+{
+  "kind": "db",
+  "corpus": "utf16le.sqlite",
+  "seed": 20261003,
+  "iteration": 26,
+  "page": 1,
+  "original_sha256": "5827093f9ee5c4debbc06343fac0bf6fff289ca7e4d95f171ed0eb4fbae447d0",
+  "original_bytes": 1024,
+  "bytes": 1024,
+  "expected": "accepted",
+  "sha256": "5827093f9ee5c4debbc06343fac0bf6fff289ca7e4d95f171ed0eb4fbae447d0"
+}
