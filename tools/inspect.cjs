@@ -40,7 +40,7 @@ if (args.length < 2) {
     }
     if (args.length < 2 || (walPrefix && walPath === undefined)) throw new Error('WAL 参数缺少文件或检查命令');
     if (!compiled) {
-      throw new Error('请先执行 moon build --target js cmd/inspect');
+      throw new Error('请先执行 moon build --target js src/cmd/inspect');
     }
     const base = openFileSource(args[0]);
     sources.push(base);

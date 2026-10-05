@@ -18,7 +18,7 @@ from generate_fixtures import moonbit_source
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "fixtures" / "btree.sqlite"
 EXPECTED = ROOT / "fixtures" / "btree_expected.json"
-EMBEDDED = ROOT / "btree_fixture_wbtest.mbt"
+EMBEDDED = ROOT / "src/btree_fixture_wbtest.mbt"
 
 
 def quote(name):

@@ -15,7 +15,7 @@ def declarations(source):
 
 
 def main():
-    interface = ROOT / 'pkg.generated.mbti'
+    interface = ROOT / 'src/pkg.generated.mbti'
     expected = interface.read_text(encoding='utf-8')
     # 先从当前代码生成实际接口，不能用未同步的接口文件冒充兼容性证据。
     result = subprocess.run(['moon', 'info'], cwd=ROOT, text=True, encoding='utf-8', capture_output=True)

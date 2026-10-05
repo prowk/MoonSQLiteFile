@@ -49,7 +49,7 @@ Database 的已有方法继续抛出 `SqliteError`，不增加其枚举分支。
 Node CLI 以只读文件描述符、BigInt 文件长度和范围读取运行，退出时关闭主文件及 WAL 句柄。每次实际 I/O 核对长度、mtime/ctime，检测到变化即报告宿主失败；这项检测不构成在线一致性或文件身份保证。页缓存命中不会重新核对宿主，所以输入仍必须是真正不可变的副本。
 
 ```sh
-moon build --target js cmd/inspect
+moon build --target js src/cmd/inspect
 node tools/inspect.cjs large.sqlite --cache-pages 64 --io-stats scan 2
 node tools/inspect.cjs snapshot.db --wal snapshot.wal --max-frames 200000 --max-overlay-pages 100000 header
 node tools/inspect.cjs large.sqlite --max-pages 200000 --max-report-pages 150000 --max-issues 100 inspect-details

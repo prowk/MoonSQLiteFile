@@ -2,6 +2,8 @@ name = "prowk/moonsqlitefile"
 
 version = "0.7.0"
 
+source = "src"
+
 readme = "README.md"
 
 repository = "https://github.com/prowk/MoonSQLiteFile"

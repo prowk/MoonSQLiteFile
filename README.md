@@ -187,7 +187,7 @@ MoonSQLiteFile 返回**磁盘存储值**，字段保留磁盘顺序，不推断 
 检出源码后，运行纯库示例：
 
 ```sh
-moon run --target js examples/basic
+moon run --target js src/examples/basic
 ```
 
 预期输出：
@@ -216,7 +216,7 @@ node tools/verify_range_io.cjs
 node tools/verify_wide_wal.cjs
 python tools/verify_large_payload.py
 python tools/benchmark_io.py
-moon run --target js examples/basic
+moon run --target js src/examples/basic
 python tools/verify_consumer.py
 python tools/build_viewer.py
 node tools/verify_viewer.cjs

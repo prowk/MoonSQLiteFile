@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     source = ROOT / '_build/js/debug/build/cmd/async-bridge/async-bridge.js'
     if not source.exists():
-        raise SystemExit('请先执行 moon build --target js cmd/async-bridge')
+        raise SystemExit('请先执行 moon build --target js src/cmd/async-bridge')
     output = ROOT / '_build/async-adapter'
     output.mkdir(exist_ok=True)
     for path in (ROOT / 'adapters/async').iterdir():

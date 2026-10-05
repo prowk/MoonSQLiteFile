@@ -11,7 +11,7 @@
 __pycache__/
 *.pyc
 
-/cmd/fuzz/
+/src/cmd/fuzz/
 /tools/fuzz.cjs
 /tools/verify_viewer.cjs
 
@@ -27,6 +27,6 @@ __pycache__/
 /tools/api-v0.6.0.mbti
 
 /adapters/
-/cmd/async-bridge/
+/src/cmd/async-bridge/
 /tools/verify_async.mjs
 /tools/verify_browser.cjs

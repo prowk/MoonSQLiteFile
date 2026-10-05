@@ -216,9 +216,9 @@ def main():
         databases, expected = generate()
     artifacts = {FIXTURES / f"{name}.sqlite": data for name, data in databases.items()}
     artifacts[FIXTURES / "expected.json"] = (json.dumps(expected, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-    artifacts[ROOT / "fixture_bytes_wbtest.mbt"] = moonbit_source(databases).encode("utf-8")
+    artifacts[ROOT / "src/fixture_bytes_wbtest.mbt"] = moonbit_source(databases).encode("utf-8")
     if args.check:
-        source_path = ROOT / "fixture_bytes_wbtest.mbt"
+        source_path = ROOT / "src/fixture_bytes_wbtest.mbt"
         mismatches = [str(path.relative_to(ROOT)) for path, data in artifacts.items() if path != source_path and (not path.exists() or path.read_bytes() != data)]
         # MoonBit 格式化只影响布局，检查嵌入数据本身而非源码空白。
         source = source_path.read_text(encoding="utf-8") if source_path.exists() else ""
