@@ -1,6 +1,6 @@
 # @prowk/moonsqlitefile-async
 
-MoonSQLiteFile v0.7.0 的独立异步 JS 宿主适配器，以 v0.7.0 Release tarball 附件提供，尚未发布 npm。下载 `prowk-moonsqlitefile-async-0.7.0.tgz` 后执行 `npm install ./prowk-moonsqlitefile-async-0.7.0.tgz` 即可安装。
+MoonSQLiteFile v0.8.0 的独立异步 JS 宿主适配器，以 v0.8.0 Release tarball 附件提供，尚未发布 npm。下载 `prowk-moonsqlitefile-async-0.8.0.tgz` 后执行 `npm install ./prowk-moonsqlitefile-async-0.8.0.tgz` 即可安装。
 
 从项目根目录执行 `moon build --target js --deny-warn` 和 `python tools/build_async.py`，得到包含编译核心的 `_build/async-adapter`；运行时没有第三方依赖。`index.mjs` 导出 BlobSource、CachedSource、openDatabase、异步扫描与检查，`node.mjs` 导出 Node 22 文件范围源。格式解码、结构检查与 WAL checksum 使用同一 MoonBit 核心。
 
@@ -23,4 +23,4 @@ try {
 
 可选打开参数包括 wal、tailPolicy（strict/valid_prefix）、max_frames、max_overlay_pages，以及页数、记录数、单条/累计 payload、路径深度及报告预算。db/WAL 必须为同一时刻不可变副本，未实现在线锁或 SQL 执行。完整契约和本地验收见仓库 `docs/async-source.md`。
 
-当前源码版本 0.8.0 为待发布开发版，只有本地打包消费证据；正式 v0.7.0 的导出、函数 arity 和原型由持续契约检查保护。源码迁移不改变 Node/Blob 协议或运行时依赖，支持范围见仓库 `docs/support.md`。
+当前版本为 0.8.0，提供 Release 附件与本地构建方式；正式 v0.7.0 的导出、函数 arity 和原型由持续契约检查保护。源码迁移不改变 Node/Blob 协议或运行时依赖，支持范围见仓库 `docs/support.md`。

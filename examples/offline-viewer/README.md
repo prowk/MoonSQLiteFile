@@ -1,6 +1,6 @@
-# 单文件 Blob/WAL 检查器（v0.7.0）
+# 单文件 Blob/WAL 检查器（v0.8.0）
 
-可从 [v0.7.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.7.0) 下载 HTML，或从源码构建：
+可从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载 HTML，或从源码构建：
 
 ```sh
 moon build --target js --deny-warn

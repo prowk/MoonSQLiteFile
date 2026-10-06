@@ -31,4 +31,4 @@
 
 `moon build --target js src/cmd/inspect`、`moon run --target js src/examples/basic` 使用新物理路径。编译产物路径仍为 `_build/js/debug/build/cmd/...`，不额外增加 `src` 层；Node launcher 和离线打包器验证该实际输出。
 
-`verify_consumer.py` 解包真正的 `moon package` 输出，检查 `src/moon.pkg`、接口与示例路径及排除项，然后在独立工作区运行四后端。`verify_examples.py` 使用同一实际包编译运行 README 原文；独立 JS 包另外通过离线 npm tarball 消费。v0.8.0 未公开发布前，只证明本地打包消费，不声称 registry 已安装新版本。
+`verify_consumer.py` 解包真正的 `moon package` 输出，检查 `src/moon.pkg`、接口与示例路径及排除项，然后在独立工作区运行四后端。`verify_examples.py` 使用同一实际包编译运行 README 与使用指南的原文示例；独立 JS 包另外通过离线 npm tarball 消费。本地打包验证与真实 registry 消费分别记录，v0.8.0 发布后的安装验证证据见对应 Release。
