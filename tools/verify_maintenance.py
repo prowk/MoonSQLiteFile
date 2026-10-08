@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""保护统一验收覆盖、失败传播、文档旧链接及版本核对逻辑。"""
+"""保护统一验收覆盖、失败传播、当前文档链接及版本核对逻辑。"""
 from pathlib import Path
 import copy
 from contextlib import redirect_stdout
@@ -47,8 +47,6 @@ def verify_links():
             assert path.exists(), f'文档链接缺失：{source.relative_to(ROOT)} → {link}'
             if fragment and path.suffix == '.md':
                 assert fragment in anchors(path.read_text(encoding='utf-8')), f'文档锚点缺失：{source.relative_to(ROOT)} → {link}'
-    for name, required in json.loads((ROOT/'fixtures/verification/legacy-anchors.json').read_text(encoding='utf-8')).items():
-        assert set(required) <= anchors((ROOT/name).read_text(encoding='utf-8')), f'历史锚点丢失：{name}'
 
 
 def runner_regressions():

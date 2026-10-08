@@ -19,7 +19,6 @@ node _build/browser-tools/node_modules/playwright/cli.js install chromium
 
 Linux CI 安装 Chromium 时另带 `--with-deps` 准备系统依赖。统一入口自动发现上述目录；使用已有安装时以显式环境变量为准。
 
-<a id="完整验证命令"></a>
 
 ## 完整验证
 
