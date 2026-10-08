@@ -38,7 +38,7 @@ import {
 }
 ```
 
-已验证的工具链和宿主版本见[支持矩阵](docs/support.md)。
+已发布安装版本为 v0.8.0；仓库源码 v0.8.2 尚未发布。工具链和宿主版本见[支持说明](docs/support.md)。
 
 ## 快速上手
 
@@ -73,15 +73,16 @@ node tools/inspect.cjs fixtures/core.sqlite summary
 - 只读使用期间不变的静态副本；db/WAL 必须来自同一时刻。不执行 SQL、写入、checkpoint 或在线快照获取。
 - 检查 `Complete` 仅表示声明范围内工作完成，不等同于 SQLite `integrity_check`；不验证索引排序/collation 或表与索引内容一致性。
 - 缓存、页数、记录和 payload 各有预算；大文件寻址不等于常量内存，预算耗尽时须处理未完成状态。
-- 浏览器已验证本机 HTTP 载入后断网使用；直接 `file://` 打开尚未验收。
+
+浏览器启动方式与完整限制见[支持说明](docs/support.md#浏览器启动方式)。
 
 ## 文档与贡献
 
 - **常用 API 与 CLI**：[使用指南](docs/usage.md)、[Mooncakes API](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0)
 - **数据源、异步与 WAL**：[范围读取](docs/range-source.md)、[异步适配](docs/async-source.md)、[WAL 契约](docs/wal.md)
-- **实现与支持范围**：[架构](docs/architecture.md)、[源码组织](docs/source-layout.md)、[支持矩阵](docs/support.md)
-- **开发与验证**：[贡献指南](CONTRIBUTING.md)、[性能基准](docs/io-benchmark.md)、[模糊测试](docs/fuzzing.md)
-- **升级与历史变化**：[v0.8.0 升级说明](docs/migration-0.8.md)、[CHANGELOG](CHANGELOG.md)
+- **实现与支持范围**：[架构](docs/architecture.md)、[支持矩阵](docs/support.md)
+- **开发与验证**：[贡献指南](CONTRIBUTING.md)、[性能基准](docs/io-benchmark.md)
+- **升级与历史变化**：[按版本升级说明](docs/migration.md)、[CHANGELOG](CHANGELOG.md)
 
 问题反馈请提交到 [GitHub Issues](https://github.com/prowk/MoonSQLiteFile/issues)，附复现步骤、错误输出及可公开的最小数据库样本。
 

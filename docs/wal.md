@@ -26,22 +26,11 @@ salt 不匹配可能是 WAL reset 后未覆盖的旧尾部，checksum 或截断�
 
 宿主必须保证 db/WAL 来自同一数据库、同一静态快照，且使用期间不变。WAL salt/checksum 不含主文件身份信息，不能检测所有不匹配副本。直接先后复制仍被写入的文件不构成一致快照；本库不实现文件锁、`-shm`、在线并发读协议、checkpoint 或写事务。
 
-只读取最新已提交快照，不提供任意历史事务视图：checkpoint 可能已把较新页面写回主文件，历史 WAL 边界不能独立恢复旧主文件内容。全库/树/页检查继续复用原有 API 与预算；成功构造 WAL 快照不等同于 SQLite `integrity_check`。大文件 64 位寻址、异步范围读取及取消属于后续版本。
+只读取最新已提交快照，不提供任意历史事务视图：checkpoint 可能已把较新页面写回主文件，历史 WAL 边界不能独立恢复旧主文件内容。全库/树/页检查继续复用原有 API 与预算；成功构造 WAL 快照不等同于 SQLite `integrity_check`。64 位范围源及异步入口分别见[范围契约](range-source.md)与[异步契约](async-source.md)。
 
 ## CLI
 
-```sh
-node tools/inspect.cjs snapshot.wal wal-inspect
-node tools/inspect.cjs snapshot.db --wal snapshot.wal wal-info
-node tools/inspect.cjs snapshot.db --wal snapshot.wal schema
-node tools/inspect.cjs snapshot.db --wal snapshot.wal rows items 10
-node tools/inspect.cjs snapshot.db --wal snapshot.wal inspect-details
-node tools/inspect.cjs snapshot.db --wal snapshot.wal summary
-```
-
-选项放在数据库路径后、命令前；`--wal-prefix` 对应显式 `UseValidPrefix`。`wal-inspect` 直接接收 WAL 文件，不读取主文件；初始化错误写 stderr，能构造帧报告时写 stdout，EOF 为退出码 0、异常尾部为 1、帧限额为 2。有效未提交尾帧不属于异常尾部。`wal-info` 必须提供 `--wal`，显示帧报告、覆盖后的文件头/逻辑页数和采用的尾部策略。
-
-原有查询、页面、检查与摘要命令都可使用 WAL 覆盖视图。严格模式无法构造快照时写 stderr；显式选择前缀后，普通命令沿用自身输出及退出码契约，`wal-info` 仍保留停止原因。没有 `--wal` 的原有调用保持原有含义，CLI 不自动读取相邻的 `-wal` 文件。HTML 离线演示暂只接收静态主文件，不能用它替代 db/WAL 配对读取。
+命令、WAL 输入格式、输出及退出码集中在[使用指南](usage.md#命令行工具)。尾部策略和副本责任仍按本专题定义。
 
 ## 对照验证
 

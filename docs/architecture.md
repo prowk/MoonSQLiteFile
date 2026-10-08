@@ -1,10 +1,39 @@
-# 架构与边界
+<a id="架构与边界"></a>
 
-## v0.8.0 目录与职责
+# 架构与源码组织
 
-核心与同包测试位于 `src/`，对外导入仍为 `prowk/moonsqlitefile`；CLI 和 MoonBit 示例迁入 `src/cmd/`、`src/examples/`，异步 JS 与 HTML 示例的位置不变。内部拆包与嵌入数据评估见[源码组织](source-layout.md)，正常构建排除测试源码。
+<a id="v080-目录与职责"></a>
 
-同步与异步路径共享 `BTreeCursor`、`PayloadReader`、`WalCursor` 和 `InspectionCursor` 状态机；宿主负责范围读取及生命周期，核心负责格式/预算/归属/诊断，不在 JS 重写 SQLite 解析。公开类型归属未改变，CLI JSON 和实际外部构造/穷举消费持续验证。
+## 目录与职责
+
+对外导入为 `prowk/moonsqlitefile`，核心、CLI、异步宿主和验证工具分层。目录迁移历史见[升级说明](migration.md#v080)。
+
+| 路径 | 职责 |
+| --- | --- |
+| `src/*.mbt` | 无宿主 I/O 的核心格式解析、范围源、检查器和游标 |
+| `src/*_wbtest.mbt` | 可访问内部实现的既有解析、损坏和状态机回归 |
+| `src/public_contract_test.mbt` | 通过公开包导入验证字段构造、预算、宿主错误、供页及取消 |
+| `src/cmd/inspect/` | JS CLI 桥接和报告序列化；文件操作位于 `tools/range_io.cjs` |
+| `src/cmd/async-bridge/` | 核心到独立 JS 适配层的桥接；不随核心安装包发布 |
+| `src/cmd/fuzz/` | 相同输入上的旧源、范围源、适配器、缓存及故障报告比较 |
+| `src/examples/basic/`、`src/examples/cursors/` | 四后端可运行示例；保留公开导入路径 |
+| `adapters/async/` | 独立异步 JS 协议、Node/Blob 源与生命周期 |
+| `examples/offline-viewer/` | HTML/CSS/JS/Worker；位置不变 |
+| `fixtures/`、`tools/` | 独立 SQLite oracle、契约与宿主验证；不作为核心运行依赖 |
+
+## 内部拆包评估
+
+当前保持单一核心包。底层 `binary/header/record/page` 依赖公开的 `SqliteError/Header/Value/Page`；扫描与 payload 共用页占用状态、诊断 trace 和 observer；schema、ownership、freelist、Ptrmap 与全库游标共享计费和归属状态。跨文件调用不是现成的单向包依赖：先拆这些文件会要求移动公开类型、增加可见接口或建立反向 facade，单纯减少根目录文件数不足以证明这些代价合理。
+
+CLI、异步桥接和示例原本就是独立下游包，仍只导入核心。后续真正拆内部包须先明确共享类型归属及无环依赖，并通过名义类型、构造/穷举和实际外部消费验证；本版不以内部拆包为由扩张公开 API。
+
+## 嵌入数据评估
+
+两个生成数据文件约 1.14 MB，仍保留为 `*_wbtest.mbt`，按固定 fixture 字节离线复现。正常四后端 `moon build` 的编译计划均排除所有测试文件，包括这两个嵌入文件；`verify_layout.py` 持续检查。发布包保留测试源码，但消费方正常构建不编入它们，且没有 Python、SQLite、文件系统或构建时生成依赖。
+
+将数据放入独立生产包会使 fixture 进入正常依赖或增加测试专用公开接口；构建时生成则给安装消费者引入新的工具或离线风险。现有约束下，继续保留测试专用嵌入源码有更直接的四后端与离线证据。`generate_fixtures.py --check` 和 `generate_btree_fixtures.py --check` 同时检查新路径的字节稳定性。
+
+同步与异步路径共享 `BTreeCursor`、`PayloadReader`、`WalCursor` 和 `InspectionCursor`；宿主负责读取及生命周期，核心负责格式、预算、归属和诊断。
 
 ## 数据流
 
@@ -16,27 +45,7 @@ v0.2 将输入抽象为 `PageSource → Database → 统一 B-tree walker → �
 
 ## API
 
-| API | 用途 |
-| --- | --- |
-| `parse_header(Bytes)` | 验证并读取 100 字节数据库头 |
-| `decode_varint(Bytes, offset)` | 解码 1–9 字节 SQLite varint，返回 UInt64 与消耗字节数 |
-| `decode_record(Bytes, encoding)` | 原始记录解码，支持所有标准 serial types |
-| `open_database(Bytes, limits?)` | 打开完整、只读的内存快照 |
-| `BytesSource.new(Bytes)/open_source(&PageSource, limits?)` | 打开宿主提供的只读静态数据源 |
-| `Database.header()/page_count()` | 元数据与逻辑页数 |
-| `Database.read_page(number)/page(number)` | 原始页或四种 B-tree 页元数据 |
-| `Database.read_table(root, limit?)` | 按 rowid 遍历普通表 |
-| `Database.read_btree(root, limit?, max_total_payload_bytes?)` | 四种 B-tree 的原始记录 |
-| `Database.read_index(root, limit?)` | 原始索引记录，包含内部 cell |
-| `Database.scan_btree(root, visit, limit?, max_total_payload_bytes?)` | 逐条回调并返回扫描完成状态 |
-| `Database.table_records(name)/index_records(name)` | 按名称读取普通表、WITHOUT ROWID 或索引的原始记录 |
-| `Database.schema()/table_rows(name, limit?)` | schema 发现与按名称读取表 |
-| `Database.freelist()` | 校验并列出 trunk/leaf 空闲页 |
-| `Database.inspect_btree(root, limit?, max_total_payload_bytes?)` | 单树检查状态、进度与原始错误 |
-| `Database.inspect_database(max_total_payload_bytes?, max_issues?)` | 全局页归属、冲突、未知页与 Ptrmap 诊断 |
-| `Database.ptrmap_entries()` | 读取 auto-vacuum 反向指针条目 |
-
-失败通过 `SqliteError` 返回：`Invalid` 表示格式损坏、输入错误或越界，`Unsupported` 表示明确不支持的格式，`LimitExceeded` 表示资源请求超过限制。库不退出进程。
+接口细节由源码契约注释和生成 API 文档维护；常用调用与 CLI 见[使用指南](usage.md)，范围源和异步协议分别见[范围读取](range-source.md)与[异步适配](async-source.md)。下文说明报告设计与状态含义。
 
 ## 单棵树检查报告
 
@@ -80,7 +89,7 @@ CLI `inspect` 返回 JSON 报告；退出码 0 为 Complete、1 为 Failed、2 �
 
 v0.4.0 补齐页内空间覆盖：四类 cell 的 varint、子页指针、页内 payload、overflow 指针和最小四字节填充均计入完整区间；与 freeblock 区间一起按物理偏移排序，拒绝重叠和碎片计数不一致。v0.6.0 改为累计全部未覆盖字节后比较碎片总数，兼容 SQLite 正常生成的较长间隙；仍拒绝未登记且不计入碎片的空间。freeblock 链必须递增且相隔至少四字节。校验只检查当前页，不读取 overflow 链或分配完整 payload；每页额外空间与区间数量成正比，排序后线性核对覆盖。
 
-`Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查从 v0.4.0 起生效；原有公开 API 与旧命令 JSON 结构未增加字段，行为变化见[升级说明](migration-0.4.md)。
+`Database.page` 和扫描都会先验证所访问页面的全部 cell 空间，因此 limit 读取前缀也可能因同页其他 cell 的空间损坏而失败；失败页上的记录尚未交给 callback，不计入已解码进度。这些检查从 v0.4.0 起生效；原有公开 API 与旧命令 JSON 结构未增加字段，行为变化见[升级说明](migration.md#v040)。
 
 ## 页分类、对象占页和可读摘要（v0.4.0）
 
@@ -118,12 +127,7 @@ CLI `page-inspect N` 返回上述报告；退出码为 0（Complete）、1（Fai
 
 ## 当前范围
 
-- 支持 SQLite 3 普通 rowid 表、多层 table B-tree、schema、overflow、freelist、UTF-8/UTF-16LE/UTF-16BE、512–65536 字节页。
-- 四种 B-tree 均可遍历记录；索引采用左子树 → 内部 cell → 右子树顺序。WITHOUT ROWID 返回主键列在前的磁盘存储顺序，rowid 为 None。索引返回索引字段与附加 rowid/主键；附加值保留在 values 中，不单独推断。
-- `read_table`/`table_rows` 保持 v0.1 的普通 rowid 表接口；WITHOUT ROWID 请使用 `table_records`。尚不解释 SQL 列映射、collation、DESC 排序或约束，不对这些语义宣称验证通过。
-- 提供 WAL 帧校验和最新已提交只读覆盖源；默认拒绝无效尾部，显式前缀策略只采用此前完整提交。只读快照不写回主文件。
-- 不执行 SQL、不写入数据库、不执行 checkpoint、不处理 hot rollback journal、不恢复删除记录、不解密文件。
-- 输入须为未被其他进程写入的完整静态副本。WAL 模式可先 checkpoint/备份后读取主文件，或提供同一时刻的一致 db/WAL 副本并显式使用 WAL 入口；只读取 `.db` 无法看到未 checkpoint 的事务。salt/checksum 不验证主文件身份，在线锁协议仍由宿主提供。
+工具链、宿主、总体支持与限制集中在[支持说明](support.md)。
 
 ## WAL 快照（v0.5.0）
 
@@ -131,6 +135,8 @@ CLI `page-inspect N` 返回上述报告；退出码为 0（Complete）、1（Fai
 
 接口、异常尾部、空 WAL 与一致副本责任详见 [WAL 契约](wal.md)。这里只读取最新已提交视图，不提供历史事务、在线锁、shm、checkpoint 或写事务。原有静态主文件 API、公开结构和 JSON 不增加字段。
 
-## 后续方向
+<a id="后续方向"></a>
 
-v0.6.0 已新增 `RangeSource`、`CachedSource` 和范围 WAL 源，64 位乘法用于页面寻址；WAL 逐帧读取，帧、覆盖索引、遍历和报告预算分开。新宿主错误统一映射为 Incomplete；旧入口保持原有语义。详见[范围读取契约](range-source.md)。后续依次扩展异步宿主读取、稳定版契约及有限恢复。索引排序与表/索引内容一致性属于独立的语义检查范围。
+## 范围源与宿主
+
+`RangeSource`、缓存和范围 WAL 使用 64 位页面寻址，帧、覆盖索引、遍历和报告预算分开。新宿主错误映射为 Incomplete；旧入口保留历史语义。详见[范围读取契约](range-source.md)。索引排序与表/索引内容一致性属于独立的语义检查范围。

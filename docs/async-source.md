@@ -2,7 +2,7 @@
 
 MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapters/async`，扫描、record/overflow、页归属、freelist、Ptrmap 和 WAL checksum 仍由同一核心状态机完成。同步入口也驱动这些状态机，不在 JavaScript 重写格式解析。
 
-当前源码为未发布的 v0.8.1；已发布的附件仍为 v0.8.0。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
+当前源码为未发布的 v0.8.2；已发布的附件仍为 v0.8.0。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
 
 ## 本地构建与消费
 
@@ -61,7 +61,7 @@ try {
 
 扫描支持 `limit`、`max_total_payload_bytes`（BigInt 或十进制文本）、`signal`、`onProgress`；全库检查还支持 `max_issues`。默认累计 payload 为 67108864 字节；打开选项 `max_payload_bytes` 默认单条 16777216，`max_rows`/`max_pages`/`max_report_pages` 默认各 100000，`max_depth` 默认 64。达到记录 limit 的报告为 `record_limit`，手动停止为 `visitor_stopped`。全库 payload 统计为已请求量，失败记录可能已计费；不能把它解释为成功记录的字节总和。
 
-页号必须为整数 number，范围为 1 到逻辑页数（最多 2147483647）。Int32 预算必须为 1–2147483647 的整数 number，扫描 `limit` 允许 0 且不能超过 `max_rows`；缓存范围另见上文。小数、NaN、Infinity、字符串、BigInt、null 和越界值不会被截断或转换；扫描/预算类型错误抛 TypeError，`inspectPage` 继续以 incomplete 报告非法页号。累计 payload 必须为 0–18446744073709551615 的 BigInt 或纯十进制文本。参数错误发生在创建游标和额外读取之前；打开失败仍按源接管规则清理。既有错误参数的升级影响见[v0.8.1 升级说明](migration-0.8.1.md)。
+页号必须为整数 number，范围为 1 到逻辑页数（最多 2147483647）。Int32 预算必须为 1–2147483647 的整数 number，扫描 `limit` 允许 0 且不能超过 `max_rows`；缓存范围另见上文。小数、NaN、Infinity、字符串、BigInt、null 和越界值不会被截断或转换；扫描/预算类型错误抛 TypeError，`inspectPage` 继续以 incomplete 报告非法页号。累计 payload 必须为 0–18446744073709551615 的 BigInt 或纯十进制文本。参数错误发生在创建游标和额外读取之前；打开失败仍按源接管规则清理。既有错误参数的升级影响见[v0.8.1 升级说明](migration.md#v081)。
 
 核心调用是同步 CPU 工作：每个供页最多解析一个完整页，每条 record 仍完整解码。适配器定期让出事件循环，并在读取/visitor 等待时响应取消。任意同步 JavaScript visitor 或单次核心调用不能被 AbortSignal 强制抢占。
 
@@ -86,17 +86,8 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 
 取消可保留部分全库报告；切换文件关闭旧 Worker 快照，拒绝旧任务响应，释放句柄并终止旧 Worker。界面提供可选 WAL、显式有效前缀策略，以及页数、记录数、累计 payload 和时间预算。默认 64 MiB 累计 payload、120 秒；移除原 64 MiB **文件长度**硬限制。输入文件大小与资源预算是不同约束。
 
-真实 Chrome 154.0.8037.93 验收在本机 HTTP 载入后断网运行，验证实际选文件、Blob Worker、导航、WAL、取消、切换、损坏/短文件与预算。72663040 字节的合法库有 1100 条 BLOB 记录，默认累计预算停止于 1024 条（含 schema）；128 MiB 后完成 17740 页、1101 条记录，单次实际读取最多 4096 字节，初次实测约 10.1 秒。这不是任意规模、任意浏览器的时间保证。保留可调整的 120 秒预算，避免长期占用；超时也返回部分结果。
-
-内置浏览器策略拒绝 `file://`，因此直接双击 HTML 的真实打开仍未验收；不能把本机 HTTP 断网测试写成 file:// 成功。打包解析器的无外部依赖与实际报告另由 VM 验证。浏览器结果及截图保存于 `_build/browser-acceptance.json` 与 `_build/browser-acceptance/viewer-large.png`。
-
-| 层 | 当前验证范围 |
-| --- | --- |
-| MoonBit 核心游标及同步库 | Wasm、WasmGC、JS、native |
-| 独立异步 JS 包 | Node 22.14.0；BigInt 文件位置包含 2 GiB 稀疏边界 |
-| Blob/Worker 界面 | Chrome 154 的本机页面及断网运行；内置浏览器的示例、选文件、对象导航和 WAL |
-| 其他浏览器、Wasm 异步宿主 | 未声明已验收 |
+浏览器启动方式和宿主范围集中在[支持说明](support.md#浏览器启动方式)。历史规模、时间及截图见[v0.8.0 验证记录](validation-v0.8.0.md)；本专题不将历史结果当作未来版本证据。
 
 公开 MoonBit `BTreeCursor`、`WalCursor`、`InspectionCursor` 自身不执行 I/O。调用者驱动 `next()`，按事件供页/供范围，再消费记录/报告；不要把未完成或取消的 WalCursor 用作最新快照。`RangeWalSource.from_cursor` 的源必须与校验时相同且不可变。其 `page_range` 查询实际页来源，宿主只执行范围读取，不重新实现覆盖规则。
 
-复现命令见 CI。`verify_async.mjs` 核对六组数据库所有根页的记录/位置、摘要、schema、页报告和全库诊断，并测试取消、背压、宿主失败、短读、缓存、预算和释放；`verify_async_wal.py` 在原 SQLite oracle 的 29 组静态快照上核对同一结果。浏览器测试依赖固定的 Playwright 1.62.1，运行时适配包不依赖它。
+完整复现使用[统一验证入口](../CONTRIBUTING.md#完整验证)。单项脚本仍可独立运行；参数、取消、背压、WAL、失败路径和释放纳入持续验收。

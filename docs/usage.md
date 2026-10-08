@@ -62,11 +62,11 @@ fn read_committed(db_bytes : Bytes, wal_bytes : Bytes) -> @sqlite.Database raise
 }
 ```
 
-`inspect_wal` 提供帧/提交报告；`WalSource::new` 可包装第三方同步源，再用 `open_wal_source` 打开。默认拒绝异常尾部，显式 `UseValidPrefix` 才读取异常前的完整提交；帧预算不足不能当作最新快照成功。输入必须是同一时刻的一致静态副本，详见 [WAL 契约](wal.md)和[升级说明](migration-0.5.md)。
+`inspect_wal` 提供帧/提交报告；`WalSource::new` 可包装第三方同步源，再用 `open_wal_source` 打开。默认拒绝异常尾部，显式 `UseValidPrefix` 才读取异常前的完整提交；帧预算不足不能当作最新快照成功。输入必须是同一时刻的一致静态副本，详见 [WAL 契约](wal.md)和[升级说明](migration.md#v050)。
 
 ## 命令行工具
 
-CLI 需要 MoonBit release 工具链和 Node.js 22 或更新版本，无 npm 依赖：
+CLI 使用[已验证的工具链与宿主](support.md)，无 npm 运行时依赖：
 
 ```sh
 git clone https://github.com/prowk/MoonSQLiteFile.git
@@ -111,4 +111,30 @@ node tools/inspect.cjs snapshot.db --wal snapshot.wal wal-info
 node tools/inspect.cjs snapshot.db --wal snapshot.wal inspect-details
 ```
 
-完整 CLI 资源选项与 I/O 统计见[范围读取](range-source.md#cli-与静态文件)；异步源和浏览器操作分别见[异步适配](async-source.md)与[离线查看器](../examples/offline-viewer/README.md)。
+异步源和浏览器操作分别见[异步适配](async-source.md)与[离线查看器](../examples/offline-viewer/README.md)。
+
+## 资源选项与输出
+
+Node CLI 以只读文件描述符、BigInt 文件长度和范围读取运行，退出时关闭主文件及 WAL 句柄。每次实际 I/O 核对长度、mtime/ctime，检测到变化即报告宿主失败；这项检测不构成在线一致性或文件身份保证。页缓存命中不会重新核对宿主，所以输入仍必须是真正不可变的副本。
+
+```sh
+moon build --target js src/cmd/inspect
+node tools/inspect.cjs large.sqlite --cache-pages 64 --io-stats scan 2
+node tools/inspect.cjs snapshot.db --wal snapshot.wal --max-frames 200000 --max-overlay-pages 100000 header
+node tools/inspect.cjs large.sqlite --max-pages 200000 --max-report-pages 150000 --max-issues 100 inspect-details
+```
+
+选项放在文件名之后、命令之前；还可设置 `--max-rows`。
+
+`--max-payload-bytes` 控制单条记录，默认 16777216，接受 1–2147483647 的十进制整数。`--max-total-payload-bytes` 控制扫描累计预算，默认 67108864，接受 0–18446744073709551615 的十进制整数；宿主使用 BigInt，桥接到 UInt64，不经 Number 舍入。累计预算传给 `scan`、`tree-inspect`、`inspect`、`inspect-details`、`summary`、`summary-json` 和 `viewer-data`；全局检查包含 schema 消耗。0 是有效预算，用于明确拒绝任何 payload 消耗。
+
+```sh
+node tools/inspect.cjs large.sqlite --max-total-payload-bytes 134217728 scan 2
+node tools/inspect.cjs large.sqlite --max-payload-bytes 33554432 --max-total-payload-bytes 134217728 summary-json
+```
+
+`rows`、`records`、`index` 和 `schema` 使用已有集合 API，仅受记录数、页数及单条 payload 上限控制；上述累计选项不改变集合 API 的契约，也不限制生成的数组或 JSON 总大小。大结果应改用 `scan`，集合命令应显式传入较小的 LIMIT；页数、报告页数和 payload 是相互独立的预算。
+
+`--io-stats` 单独在 stderr 输出读取次数、字节数、最大请求及进程峰值 RSS/耗时，不改变 stdout JSON。RSS 使用 Node `resourceUsage().maxRSS`，包含运行时、加载的代码、缓冲、报告和输出，不是核心独占内存。
+
+WAL CLI 保持原 JSON 字段及通常的数值类型；64 位偏移在 JavaScript 精确整数范围内仍为 JSON 数字，超出 9007199254740991 时为十进制字符串。标准 WAL 帧预算下的偏移远小于此边界。
