@@ -2,7 +2,7 @@
 
 MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapters/async`，扫描、record/overflow、页归属、freelist、Ptrmap 和 WAL checksum 仍由同一核心状态机完成。同步入口也驱动这些状态机，不在 JavaScript 重写格式解析。
 
-v0.8.0 保留原有异步协议，新增导出/原型兼容检查；注释与支持证据见[支持矩阵](support.md)。附件与源码构建的异步包版本均为 0.8.0。
+当前源码为未发布的 v0.8.1；已发布的附件仍为 v0.8.0。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
 
 ## 本地构建与消费
 
@@ -60,6 +60,8 @@ try {
 - `db.inspectDatabase(options)` 返回 `{header, inspection, summary, locations}`；格式错误为 failed，读取失败/预算不足为 incomplete。取消额外返回 `reason: 'cancelled'`，保留已观察页、记录和诊断。读取失败后可继续检查独立对象，schema 未完成时无法继续发现全部根页。
 
 扫描支持 `limit`、`max_total_payload_bytes`（BigInt 或十进制文本）、`signal`、`onProgress`；全库检查还支持 `max_issues`。默认累计 payload 为 67108864 字节；打开选项 `max_payload_bytes` 默认单条 16777216，`max_rows`/`max_pages`/`max_report_pages` 默认各 100000，`max_depth` 默认 64。达到记录 limit 的报告为 `record_limit`，手动停止为 `visitor_stopped`。全库 payload 统计为已请求量，失败记录可能已计费；不能把它解释为成功记录的字节总和。
+
+页号必须为整数 number，范围为 1 到逻辑页数（最多 2147483647）。Int32 预算必须为 1–2147483647 的整数 number，扫描 `limit` 允许 0 且不能超过 `max_rows`；缓存范围另见上文。小数、NaN、Infinity、字符串、BigInt、null 和越界值不会被截断或转换；扫描/预算类型错误抛 TypeError，`inspectPage` 继续以 incomplete 报告非法页号。累计 payload 必须为 0–18446744073709551615 的 BigInt 或纯十进制文本。参数错误发生在创建游标和额外读取之前；打开失败仍按源接管规则清理。既有错误参数的升级影响见[v0.8.1 升级说明](migration-0.8.1.md)。
 
 核心调用是同步 CPU 工作：每个供页最多解析一个完整页，每条 record 仍完整解码。适配器定期让出事件循环，并在读取/visitor 等待时响应取消。任意同步 JavaScript visitor 或单次核心调用不能被 AbortSignal 强制抢占。
 

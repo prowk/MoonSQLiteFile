@@ -189,6 +189,58 @@ async function lifecycle() {
   const virtual = {size: high + 4n, async read(offset, count) { assert.equal(offset, high); return new Uint8Array(count); }};
   assert.equal((await readExact(virtual, high, 4)).length, 4);
 }
+async function parameters() {
+  const bytes = new Uint8Array(fs.readFileSync('fixtures/core.sqlite'));
+  const invalid = [1.9, NaN, Infinity, -Infinity, -1, 2147483648, '1', 1n, null, true, {}];
+  for (const name of ['max_rows', 'max_pages', 'max_payload_bytes', 'max_depth', 'max_report_pages',
+    'max_frames', 'max_overlay_pages', 'blockSize', 'cachePages']) {
+    for (const value of [...invalid, 0]) {
+      const source = memory(bytes), wal = memory(new Uint8Array(0));
+      await assert.rejects(openDatabase(source, {[name]: value, wal}), TypeError, `${name}: ${String(value)}`);
+      assert(source.closed && wal.closed); assert.equal(source.reads.length + wal.reads.length, 0); clean();
+    }
+  }
+  const source = memory(bytes), db = await openDatabase(source);
+  try {
+    const before = core({op: 'stats'}).result;
+    for (const request of [{op: 'scan-new', id: db.id, root: 3.9},
+      {op: 'scan-new', id: db.id, root: 3, limit: 1.9},
+      {op: 'inspection-new', id: db.id, max_issues: 1.9},
+      {op: 'wal-new', size: '0', max_frames: 2147483648}]) {
+      assert.equal(core(request).error.kind, 'invalid');
+      assert.deepEqual(core({op: 'stats'}).result, before);
+    }
+    for (const value of invalid) {
+      assert.throws(() => db.scan(value), TypeError);
+      assert.throws(() => db.scan(3, {limit: value}), TypeError);
+      await assert.rejects(db.scanBtree(3, () => true, {limit: value}), TypeError);
+      await assert.rejects(db.schema({limit: value}), TypeError);
+      await assert.rejects(db.inspectDatabase({max_issues: value}), TypeError);
+      await assert.rejects(db.readPage(value));
+      assert.equal((await db.inspectPage(value)).status, 'incomplete');
+      assert.deepEqual(core({op: 'stats'}).result, before);
+      assert.equal(db.scans.size, 0);
+    }
+    assert.throws(() => db.scan(0), TypeError);
+    assert.throws(() => db.scan(db.header.page_count + 1), error => error.kind === 'invalid');
+    await assert.rejects(db.inspectDatabase({max_issues: 0}), TypeError);
+    for (const value of [1.9, NaN, Infinity, -1n, 18446744073709551616n, '-1', '1.9', '', '18446744073709551616', null]) {
+      assert.throws(() => db.scan(3, {max_total_payload_bytes: value}), TypeError);
+      await assert.rejects(db.inspectDatabase({max_total_payload_bytes: value}), TypeError);
+    }
+    assert.equal(source.reads.length, 1, '参数失败不得触发额外 I/O');
+    assert.equal((await db.scanBtree(3, () => true, {limit: 0})).records_read, 0);
+    for (const payload of [67108864n, '67108864', 18446744073709551615n]) {
+      assert.equal((await db.scanBtree(3, () => true, {limit: 1, max_total_payload_bytes: payload})).records_read, 1);
+    }
+    assert.equal((await db.scanBtree(3, () => true, {max_total_payload_bytes: 0n})).reason, 'limit_exceeded');
+  } finally { await db.close(); }
+  assert(source.closed); clean();
+  const retained = memory(bytes), retainedWal = memory(new Uint8Array(0));
+  await assert.rejects(openDatabase(retained, {wal: retainedWal, max_rows: 1.9, closeSources: false}), TypeError);
+  assert(!retained.closed && !retainedWal.closed); clean();
+  await retained.close(); await retainedWal.close();
+}
 if (process.argv[2] === '--snapshot') {
   const metadata = await compare(process.argv[3], process.argv[4], process.argv[5] === 'prefix');
   await walLifecycle(process.argv[3], process.argv[4], metadata);
@@ -200,5 +252,6 @@ if (process.argv[2] === '--snapshot') {
   const bad = await openDatabase(new BlobSource(new Blob([damaged])));
   assert.equal((await bad.inspectDatabase()).inspection.status, 'failed'); await bad.close(); clean();
   await lifecycle();
+  await parameters();
   console.log(`Verified async/sync equivalence for ${fixtures.length} fixtures, cancellation, backpressure, failures, budgets, cache and release`);
 }

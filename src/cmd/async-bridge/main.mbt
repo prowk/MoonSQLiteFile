@@ -89,9 +89,19 @@ fn request_int(
   name : String,
   fallback : Int,
 ) -> Int raise @sqlite.SqliteError {
-  @json.from_json(request.get(name).unwrap_or(fallback.to_json())) catch {
+  let json = request.get(name).unwrap_or(fallback.to_json())
+  guard json is Number(number, ..) &&
+    number >= -2147483648.0 &&
+    number <= 2147483647.0 else {
+    raise @sqlite.Invalid("参数 \{name} 必须为 Int")
+  }
+  let value : Int = @json.from_json(json) catch {
     _ => raise @sqlite.Invalid("参数 \{name} 必须为 Int")
   }
+  if value.to_double() != number {
+    raise @sqlite.Invalid("参数 \{name} 必须为整数")
+  }
+  value
 }
 
 ///|

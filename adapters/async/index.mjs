@@ -36,6 +36,23 @@ function range(size, offset, count) {
     throw new SourceError('range_out_of_bounds', '范围读取越界或整数类型不符合约定');
   }
 }
+// 在 JSON 桥接前检查整数，避免 MoonBit 的 Int 解码静默截断小数。
+function integer(value, name, minimum = 1, maximum = 2147483647) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new TypeError(`${name} 必须为 ${minimum}–${maximum} 范围内的整数 number`);
+  }
+  return value;
+}
+function integerOptions(options, names) {
+  for (const name of names) if (options[name] !== undefined) integer(options[name], name);
+}
+function payloadBudget(value = 67108864n) {
+  if (!((typeof value === 'bigint' && value >= 0n && value <= 18446744073709551615n) ||
+      (typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 18446744073709551615n))) {
+    throw new TypeError('max_total_payload_bytes 必须为 UInt64 BigInt 或十进制文本');
+  }
+  return String(value);
+}
 /** 检查非负有符号 64 位 BigInt 范围及 Int32 长度，精确读取 Uint8Array；宿主失败与短读分别分类。 */
 export async function readExact(source, offset, count, signal) {
   checkAbort(signal);
@@ -184,11 +201,16 @@ async function openWal(base, wal, options, core) {
 /** 逐条异步迭代器；消费者等待时不预读，不允许并发 next，return/break 释放游标并保存部分结果。 */
 export class Scan {
   constructor(database, root, options = {}) {
-    database.assertOpen(); this.database = database; this.options = options; this.controller = new AbortController();
+    database.assertOpen();
+    integer(root, 'root');
+    if (root > database.header.page_count) throw new SqliteError('invalid', '根页号越界');
+    const limit = integer(options.limit === undefined ? database.options.max_rows ?? 100000 : options.limit, 'limit', 0);
+    const payload = payloadBudget(options.max_total_payload_bytes);
+    this.database = database; this.options = options; this.controller = new AbortController();
     this.signal = AbortSignal.any([this.controller.signal, database.controller.signal, ...(options.signal ? [options.signal] : [])]);
     checkAbort(this.signal);
-    this.id = database.call({op: 'scan-new', root, limit: options.limit ?? database.options.max_rows ?? 100000,
-      schema: options.schema ? 'true' : 'false', max_total_payload_bytes: String(options.max_total_payload_bytes ?? 67108864n)}).id;
+    this.id = database.call({op: 'scan-new', root, limit,
+      schema: options.schema ? 'true' : 'false', max_total_payload_bytes: payload}).id;
     this.progress = {records_read: 0, pages_read: 0, payload_bytes: '0'}; this.result = null; this.pending = null; this.ticks = 0;
     database.scans.add(this);
   }
@@ -282,10 +304,12 @@ export class Database {
   }
   async inspectDatabase(options = {}) {
     this.assertOpen();
+    integerOptions(options, ['max_issues']);
+    const payload = payloadBudget(options.max_total_payload_bytes);
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, this.controller.signal, ...(options.signal ? [options.signal] : [])]);
     const id = this.call({op: 'inspection-new', max_issues: options.max_issues ?? 100,
-      max_total_payload_bytes: String(options.max_total_payload_bytes ?? 67108864n)}).id;
+      max_total_payload_bytes: payload}).id;
     let result, ticks = 0;
     const job = {return: async () => { controller.abort(); await pending; }};
     let resolve;
@@ -334,6 +358,8 @@ export async function openDatabase(source, options = {}) {
   const core = options.core ?? compiledCore;
   let cached, wal;
   try {
+    integerOptions(options, ['max_rows', 'max_pages', 'max_payload_bytes', 'max_depth',
+      'max_report_pages', 'max_frames', 'max_overlay_pages']);
     cached = new CachedSource(source, {blockSize: options.blockSize, cachePages: options.cachePages, closeSource: options.closeSources !== false});
     if (options.wal) {
       wal = new CachedSource(options.wal, {blockSize: options.blockSize, cachePages: options.cachePages, closeSource: options.closeSources !== false});
