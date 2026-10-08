@@ -6,7 +6,7 @@
 
 修改公开 API 时运行 `moon info` 同步 `src/pkg.generated.mbti`，再运行 `python tools/verify_api.py`，不得通过改写历史基线隐藏不兼容。兼容审查覆盖类型归属、结构体构造/字段、枚举穷举、默认值、错误来源、CLI JSON 类型、退出码及部分报告。若需收紧行为，说明用户影响和迁移方式。
 
-固定工具链、可用宿主及验收限制见[支持矩阵](docs/support.md)。完整命令见[下方清单](#完整验证命令)，以 `.github/workflows/ci.yml` 为准；不得只运行部分测试便提交。`verify_layout.py` 同时生成文档并检查注释与正常构建计划，`verify_examples.py` 从 README 与使用指南提取原文，在实际打包库的独立消费项目运行四后端；不能以抄写的另一份示例代替它。
+固定工具链、可用宿主及验收限制见[支持矩阵](docs/support.md)。完整命令见[统一入口](#完整验证命令)，CI 与本地调用同一入口；不得只运行部分测试便提交。`verify_layout.py` 同时生成文档并检查注释与正常构建计划，`verify_examples.py` 从 README 与使用指南提取原文，在实际打包库的独立消费项目运行四后端；不能以抄写的另一份示例代替它。
 
 CLI 契约基线 `fixtures/cli-contract/v0.7.0.json` 来自正式 v0.7.0 tag `8a3a4c79ecd54c893604839f9136081289b8f21b`，覆盖全部 17 个命令的 22 个场景。发现差异时先判定是修复、兼容变化还是 bug，不能重新录制当前输出来制造通过。宿主路径/系统错误单独检查稳定类别，不硬编码平台文字。
 
@@ -18,41 +18,10 @@ CLI 契约基线 `fixtures/cli-contract/v0.7.0.json` 来自正式 v0.7.0 tag `8a
 
 ## 完整验证命令
 
-完整验证使用 [固定工具链](docs/support.md)（Node 22.14.0、Python 3.13.2），并独立运行 MoonBit latest 通道；SQLite 引擎仅用于样本生成和结果对照。真实浏览器测试先按 CI 安装 Playwright 1.62.1 和 Chromium，或用 `MOONSQLITE_PLAYWRIGHT` / `MOONSQLITE_BROWSER` 指向已有包和浏览器。浏览器脚本使用本机临时 HTTP，载入后断网；不将其记为 file:// 验收。提交前依次运行：
+完整验证使用 [固定工具链](docs/support.md)（Node 22.14.0、Python 3.13.2），并独立运行 MoonBit latest 通道；SQLite 引擎仅用于样本生成和结果对照。真实浏览器测试先按 CI 安装 Playwright 1.62.1 和 Chromium，或用 `MOONSQLITE_PLAYWRIGHT` / `MOONSQLITE_BROWSER` 指向已有包和浏览器。浏览器脚本使用本机临时 HTTP，载入后断网；不将其记为 file:// 验收。提交前从仓库根目录运行：
 
 ```sh
-python tools/verify_toolchain.py
-moon check --target all --deny-warn
-moon build --target all --deny-warn
-moon test --target all --deny-warn
-moon fmt --check
-python tools/verify_api.py
-python tools/verify_layout.py
-python tools/verify_cli_contract.py
-python tools/generate_fixtures.py --check
-python tools/verify_oracle.py
-python tools/generate_btree_fixtures.py --check
-python tools/verify_btree_oracle.py
-python tools/verify_inspection.py
-python tools/verify_wal_oracle.py
-python tools/verify_review.py
-node tools/verify_range_io.cjs
-node tools/verify_wide_wal.cjs
-python tools/verify_large_payload.py
-python tools/benchmark_io.py
-python tools/benchmark_compatibility.py
-moon run --target js src/examples/basic
-python tools/verify_consumer.py
-python tools/build_viewer.py
-node tools/verify_viewer.cjs
-python tools/build_async.py
-node tools/verify_async_api.mjs
-python tools/verify_examples.py
-node tools/verify_async.mjs
-python tools/verify_async_package.py
-python tools/verify_async_wal.py
-python tools/generate_browser_fixtures.py
-node tools/verify_browser.cjs
-python tools/verify_regressions.py
-node tools/fuzz.cjs --seed 20261003 --iterations 512
+python tools/verify.py
 ```
+
+原 CI 全部 34 项检查及新增版本、维护契约检查按依赖顺序执行；集合只在 `tools/verify.py` 维护。失败返回非零并停止后续步骤，逐项日志、结果与内容 SHA256 默认保存在 `_build/verification/pinned/` 或 `latest/`。检查期间修改源码会使验收失败；CI 保留相同矩阵、浏览器和产物要求。

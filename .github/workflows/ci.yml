@@ -35,75 +35,14 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s "$version"
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
       - run: moon version --all
-      - run: python tools/verify_toolchain.py
       - name: Install pinned browser acceptance tools
         run: |
           npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
           node _build/browser-tools/node_modules/playwright/cli.js install --with-deps chromium
-      - run: moon check --target all --deny-warn
-      - run: moon build --target all --deny-warn
-      - run: moon test --target all --deny-warn
-      - run: moon fmt --check
-      - name: Verify historical public API and generated interface
-        run: python tools/verify_api.py
-      - name: Verify source layout and public documentation
-        run: python tools/verify_layout.py
-      - name: Verify CLI JSON contract against released v0.7.0
-        run: python tools/verify_cli_contract.py
-      - name: Verify committed fixture bytes
-        run: python tools/generate_fixtures.py --check
-      - name: Compare CLI against SQLite oracle
-        run: python tools/verify_oracle.py
-      - name: Verify index and WITHOUT ROWID fixtures
-        run: python tools/generate_btree_fixtures.py --check
-      - name: Compare complete B-tree records against SQLite
-        run: python tools/verify_btree_oracle.py
-      - name: Verify database ownership reports against SQLite
-        run: python tools/verify_inspection.py
-      - name: Compare WAL committed snapshots against SQLite
-        run: python tools/verify_wal_oracle.py
-      - name: Verify reviewed SQLite regressions
-        run: python tools/verify_review.py
-      - name: Verify bounded file I/O and sparse 2 GiB reads
-        run: node tools/verify_range_io.cjs
-      - name: Verify valid WAL frame offsets beyond 2 GiB
-        run: node tools/verify_wide_wal.cjs
-      - name: Verify large payload budgets and UInt64 CLI options
-        run: python tools/verify_large_payload.py
-      - name: Verify repeated-page WAL benchmark and record I/O costs
-        run: python tools/benchmark_io.py
-      - name: Compare same-input costs with released v0.7.0
-        run: python tools/benchmark_compatibility.py
-      - name: Run library example
-        run: moon run --target js src/examples/basic
-      - name: Verify packaged library in a separate consumer workspace
-        run: python tools/verify_consumer.py
-      - name: Build and verify standalone offline viewer
-        run: |
-          python tools/build_viewer.py
-          node tools/verify_viewer.cjs
-      - name: Build independent asynchronous adapter
-        run: python tools/build_async.py
-      - name: Verify released asynchronous API compatibility
-        run: node tools/verify_async_api.mjs
-      - name: Run documentation examples against actual packages
-        run: python tools/verify_examples.py
-      - name: Verify async results, cancellation, backpressure and release
-        run: node tools/verify_async.mjs
-      - name: Verify independent npm tarball consumption
-        run: python tools/verify_async_package.py
-      - name: Compare async WAL snapshots against SQLite recovery
-        run: python tools/verify_async_wal.py
-      - name: Generate large browser and WAL acceptance fixtures
-        run: python tools/generate_browser_fixtures.py
-      - name: Verify actual browser File, Blob, Worker and offline operation
+      - name: Run complete project verification
         env:
           MOONSQLITE_PLAYWRIGHT: ${{ github.workspace }}/_build/browser-tools/node_modules/playwright
-        run: node tools/verify_browser.cjs
-      - name: Replay historical fuzz boundary regressions
-        run: python tools/verify_regressions.py
-      - name: Run bounded reproducible fuzzing
-        run: node tools/fuzz.cjs --seed 20261003 --iterations 512
+        run: python tools/verify.py
       - name: Preserve failing fuzz inputs
         if: failure()
         uses: actions/upload-artifact@v7.0.1
@@ -118,6 +57,7 @@ jobs:
         with:
           name: range-acceptance-${{ matrix.toolchain }}-${{ github.run_id }}
           path: |
+            _build/verification/
             _build/toolchain-*.json
             _build/layout-evidence.json
             _build/wide-wal.json
