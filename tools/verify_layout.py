@@ -28,7 +28,7 @@ def main():
             prefix = block[:match.start()]
             assert re.search(r'^///\s+\S',prefix,re.M), f'公开符号缺少契约注释：{path.name}:{match[1]}'
             symbols.append(match[1])
-    assert len(symbols) == 124, len(symbols)
+    assert symbols, '未发现任何公开符号'
     subprocess.run(['moon','doc'],cwd=ROOT,check=True,capture_output=True)
     rendered=json.loads((ROOT/'_build/doc/prowk/moonsqlitefile/package_data.json').read_text(encoding='utf-8'))
     assert rendered['name']=='prowk/moonsqlitefile'

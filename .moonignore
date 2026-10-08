@@ -37,3 +37,5 @@ __pycache__/
 
 /tools/verify_async_api.mjs
 /tools/async-api-v0.7.0.json
+/tools/api-v0.8.0.mbti
+/tools/async-api-v0.8.0.json

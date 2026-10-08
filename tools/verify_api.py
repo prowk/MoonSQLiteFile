@@ -14,7 +14,23 @@ def declarations(source):
     return re.findall(r'^pub[^\n{]*(?:\{[^}]*\}[^\n]*|[^\n]*)', source, re.M)
 
 
+def incompatible(actual, baseline):
+    current = set(declarations(actual))
+    return [item for item in declarations(baseline) if item not in current]
+
+
+def regressions():
+    baseline = 'pub fn read(Int) -> Int\npub(all) struct Row {\n  value : Int\n}\npub(all) enum State {\n  Complete\n  Failed\n}\n'
+    assert not incompatible(baseline + 'pub fn added() -> Unit\n', baseline)
+    for changed in [baseline.replace('pub fn read(Int) -> Int\n', ''),
+                    baseline.replace('read(Int)', 'read(String)'),
+                    baseline.replace('value : Int', 'value : String'),
+                    baseline.replace('  Failed\n', '  Failed\n  Cancelled\n')]:
+        assert incompatible(changed, baseline), '不兼容变化漏检'
+
+
 def main():
+    regressions()
     interface = ROOT / 'src/pkg.generated.mbti'
     expected = interface.read_text(encoding='utf-8')
     # 先从当前代码生成实际接口，不能用未同步的接口文件冒充兼容性证据。
@@ -25,7 +41,7 @@ def main():
     if actual != expected:
         raise SystemExit('公开接口文件未同步；已生成当前接口，请审查变化并重新验证')
     current = set(declarations(actual))
-    for version in ['0.3.0', '0.4.0', '0.5.0', '0.6.0', '0.7.0']:
+    for version in ['0.3.0', '0.4.0', '0.5.0', '0.6.0', '0.7.0', '0.8.0']:
         baseline = declarations((ROOT / f'tools/api-v{version}.mbti').read_text(encoding='utf-8'))
         assert baseline, f'公开 API 基线为空：{version}'
         removed = [declaration for declaration in baseline if declaration not in current]
