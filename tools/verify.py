@@ -38,6 +38,7 @@ CHECKS = (
     ('moon', 'run', '--target', 'js', 'src/examples/basic'),
     ('python', 'tools/verify_consumer.py'),
     ('python', 'tools/build_viewer.py'),
+    ('python', 'tools/build_pages.py'),
     ('node', 'tools/verify_viewer.cjs'),
     ('python', 'tools/build_async.py'),
     ('node', 'tools/verify_async_api.mjs'),

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""将已编译 MoonBit 检查器与离线界面打包成无需服务器的单个 HTML。"""
+"""将已编译 MoonBit 检查器与界面打包成无外部依赖的单个 HTML。"""
 import base64
 import json
 from pathlib import Path

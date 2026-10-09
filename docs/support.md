@@ -36,3 +36,5 @@ Node 范围源须提供不可变配对 db/WAL 副本；64 位寻址不等于常�
 ## 浏览器启动方式
 
 发布 HTML 可通过本机 HTTP 使用，例如从文件所在目录运行 `python -m http.server 8000` 后打开对应文件 URL。已验收 HTTP 载入后断网的 File/Blob/Worker 场景；关闭浏览器后离线重新打开不是同一能力。直接 `file://` 双击仍未验收，不承诺无需服务器；其他浏览器未声明通过。操作和构建见[查看器说明](../examples/offline-viewer/README.md)，历史规模与截图记录见[v0.8.0 验证记录](validation-v0.8.0.md)。
+
+源码 v0.9.0 的浏览器流程先读取有界 schema，再由用户选择预览或完整检查；Pages 目录与 HTML 下载版复用核心及 Worker，提供手动部署工作流。当前本地子路径验收不等于已公开部署；部署后须对真实站点执行同一验收。分发仍以本地 tarball/已发布 v0.8.0 附件为准，npm registry 未发布。错误与完成度规则见[错误与报告契约](contracts.md)。

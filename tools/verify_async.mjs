@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {openDatabase, BlobSource, CachedSource, SourceError, readExact, CancelledError} from '../_build/async-adapter/index.mjs';
+import {openDatabase, BlobSource, CachedSource, SourceError, readExact, CancelledError, ParameterError, SqliteError, errorInfo, reportEnvelope} from '../_build/async-adapter/index.mjs';
 import {openFileSource} from '../_build/async-adapter/node.mjs';
 import core from '../_build/async-adapter/core.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -222,7 +222,7 @@ async function parameters() {
       assert.equal(db.scans.size, 0);
     }
     assert.throws(() => db.scan(0), TypeError);
-    assert.throws(() => db.scan(db.header.page_count + 1), error => error.kind === 'invalid');
+    assert.throws(() => db.scan(db.header.page_count + 1), ParameterError);
     await assert.rejects(db.inspectDatabase({max_issues: 0}), TypeError);
     for (const value of [1.9, NaN, Infinity, -1n, 18446744073709551616n, '-1', '1.9', '', '18446744073709551616', null]) {
       assert.throws(() => db.scan(3, {max_total_payload_bytes: value}), TypeError);
@@ -241,6 +241,49 @@ async function parameters() {
   assert(!retained.closed && !retainedWal.closed); clean();
   await retained.close(); await retainedWal.close();
 }
+async function reportContract() {
+  for (const options of [null, false, [], {signal: {}}, {closeSources: 'false'}, {tailPolicy: 'other'}]) {
+    const source = memory(new Uint8Array(fs.readFileSync('fixtures/core.sqlite')));
+    await assert.rejects(openDatabase(source, options), ParameterError);
+    assert(source.closed); assert.equal(source.reads.length, 0); clean();
+  }
+  // 消息故意伪装成旧前缀，类别必须由真实异常类型决定。
+  for (const [error, category] of [[new ParameterError('source/host_failure'), 'argument'],
+    [new SqliteError('invalid', 'source/short_read'), 'corruption'], [new SourceError('host_failure', '损坏'), 'source'],
+    [new CancelledError('预算不足'), 'cancelled'], [new SqliteError('limit_exceeded', '已取消'), 'budget'],
+    [new SqliteError('unsupported', 'source/host_failure'), 'unsupported']]) assert.equal(errorInfo(error).category, category);
+  const bytes = new Uint8Array(fs.readFileSync('fixtures/core.sqlite'));
+  const db = await openDatabase(memory(bytes));
+  try {
+    const original = await db.inspectDatabase();
+    const envelope = reportEnvelope(original, {scope: 'database_structure', budgets: {max_pages: 100000, max_total_payload_bytes: 18446744073709551615n}});
+    assert.equal(envelope.budgets.max_total_payload_bytes, '18446744073709551615');
+    assert.deepEqual(envelope.result, original); assert.equal(envelope.partial, false);
+    original.export = envelope; assert.doesNotThrow(() => JSON.stringify(original));
+    const limited = reportEnvelope(await db.schema({limit: 1}), {scope: 'schema'});
+    assert(limited.partial); assert(limited.diagnostics.some(item => item.category === 'budget'));
+    const signal = AbortSignal.abort();
+    const cancelled = reportEnvelope(await db.inspectDatabase({signal}), {scope: 'database_structure'});
+    assert(cancelled.partial); assert(cancelled.diagnostics.some(item => item.category === 'cancelled'));
+    assert(!cancelled.diagnostics.some(item => item.category === 'unsupported'));
+    const page = reportEnvelope(await db.inspectPage(1.9), {scope: 'page'});
+    assert.equal(page.diagnostics[0].category, 'argument');
+    const callback = await db.scanBtree(2, () => { throw new Error('业务回调失败'); });
+    assert.equal(reportEnvelope(callback, {scope: 'records'}).diagnostics[0].category, 'source');
+    assert.equal(db.scans.size, 0); assert.equal(core({op: 'stats'}).result.scans, 0);
+    const deadline = AbortSignal.abort(new SqliteError('limit_exceeded', '超时'));
+    const timed = reportEnvelope(await db.inspectDatabase({signal: deadline}), {scope: 'database_structure'});
+    assert(timed.diagnostics.some(item => item.category === 'budget')); assert(!timed.diagnostics.some(item => item.category === 'cancelled'));
+  } finally { await db.close(); }
+  const faulty = memory(bytes, offset => { if (offset >= 512n) throw new Error('source/unsupported: 伪装消息'); });
+  const host = await openDatabase(faulty, {blockSize: 100});
+  try {
+    const envelope = reportEnvelope(await host.inspectDatabase(), {scope: 'database_structure'});
+    assert(envelope.partial); assert(envelope.diagnostics.some(item => item.category === 'source' && item.location.page_number >= 1));
+    assert(!envelope.diagnostics.some(item => item.category === 'unsupported'));
+  } finally { await host.close(); }
+  assert(faulty.closed); clean();
+}
 if (process.argv[2] === '--snapshot') {
   const metadata = await compare(process.argv[3], process.argv[4], process.argv[5] === 'prefix');
   await walLifecycle(process.argv[3], process.argv[4], metadata);
@@ -253,5 +296,6 @@ if (process.argv[2] === '--snapshot') {
   assert.equal((await bad.inspectDatabase()).inspection.status, 'failed'); await bad.close(); clean();
   await lifecycle();
   await parameters();
+  await reportContract();
   console.log(`Verified async/sync equivalence for ${fixtures.length} fixtures, cancellation, backpressure, failures, budgets, cache and release`);
 }

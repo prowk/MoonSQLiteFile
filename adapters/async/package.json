@@ -1,11 +1,18 @@
 {
   "name": "@prowk/moonsqlitefile-async",
-  "version": "0.8.2",
-  "private": true,
+  "version": "0.9.0",
+  "private": false,
   "type": "module",
   "exports": {
-    ".": "./index.mjs",
-    "./node": "./node.mjs"
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "default": "./index.mjs"
+    },
+    "./node": {
+      "types": "./node.d.ts",
+      "node": "./node.mjs"
+    }
   },
   "engines": {
     "node": ">=22"
@@ -22,6 +29,11 @@
     "node.mjs",
     "core.mjs",
     "README.md",
-    "LICENSE"
-  ]
+    "LICENSE",
+    "index.d.ts",
+    "node.d.ts",
+    "example-node.mjs",
+    "example-browser.mjs"
+  ],
+  "types": "./index.d.ts"
 }

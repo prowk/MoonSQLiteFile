@@ -9,13 +9,15 @@ const root = path.resolve(__dirname, '..');
 const playwrightPath = process.env.MOONSQLITE_PLAYWRIGHT || 'playwright';
 const playwright = require(playwrightPath);
 assert.equal(require(path.join(playwrightPath, 'package.json')).version, '1.62.1');
-const pagePath = path.join(root, '_build/moonsqlitefile-viewer.html');
+const pagePath = path.join(root, '_build/pages/index.html');
 const fixtures = path.join(root, '_build/browser-acceptance');
 async function main() {
-  const evidence = [], requests = [], errors = [];
+  const evidence = [], requests = [], methods = [], errors = [];
   const server = http.createServer((request, response) => {
-    if (request.url !== '/viewer.html') { response.writeHead(404); response.end(); return; }
-    response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end(fs.readFileSync(pagePath));
+    const name = request.url.slice('/MoonSQLiteFile/'.length);
+    if (request.url !== '/MoonSQLiteFile/' && !/^moonsqlitefile-viewer-\d+\.\d+\.\d+\.html$/.test(name)) { response.writeHead(404); response.end(); return; }
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.end(fs.readFileSync(name ? path.join(root, '_build/pages', name) : pagePath));
   });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   const browser = await playwright.chromium.launch({headless: true,
@@ -24,7 +26,7 @@ async function main() {
     const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
     const page = await context.newPage();
     page.on('pageerror', error => errors.push(error.message));
-    page.on('request', request => requests.push(request.url()));
+    page.on('request', request => { requests.push(request.url()); methods.push({method: request.method(), body_size: request.postDataBuffer()?.length ?? 0}); });
     await page.addInitScript(() => {
       // 只记录公开 Worker 消息与终止，不访问解析器内部状态。
       window.browserEvidence = {created: 0, terminated: 0, closed: [], results: [], progress: []};
@@ -41,14 +43,66 @@ async function main() {
         terminate() { window.browserEvidence.terminated++; return super.terminate(); }
       };
     });
-    await page.goto(`http://127.0.0.1:${server.address().port}/viewer.html`);
+    const viewerURL = process.env.MOONSQLITE_VIEWER_URL || `http://127.0.0.1:${server.address().port}/MoonSQLiteFile/`;
+    await page.goto(viewerURL);
+    const htmlDownload = page.waitForEvent('download'); await page.locator('a[download]').click();
+    const htmlPath = path.join(fixtures, 'downloaded-viewer.html'); await (await htmlDownload).saveAs(htmlPath);
+    assert.deepEqual(fs.readFileSync(htmlPath), fs.readFileSync(path.join(root, '_build/moonsqlitefile-viewer.html')));
     await context.setOffline(true);
     async function done(state, timeout = 180000) {
       await page.waitForFunction(expected => document.querySelector('#status').dataset.state === expected &&
         document.querySelector('#cancel').disabled, state, {timeout});
     }
-    async function choose(selector, file) { await page.locator(selector).setInputFiles(file); }
-    await page.getByRole('button', {name: '载入示例库'}).click(); await done('complete');
+    async function choose(selector, file) {
+      await page.locator(selector).setInputFiles([]);
+      await page.locator(selector).setInputFiles(file);
+      try { await page.waitForFunction(() => ['ready', 'failed'].includes(document.querySelector('#status').dataset.state) && document.querySelector('#cancel').disabled); }
+      catch (error) { console.error(await page.locator('#status').textContent(), file, errors); throw error; }
+      if (await page.locator('#overview').isVisible()) await page.locator('#start').click();
+    }
+    await page.getByRole('button', {name: '载入示例库'}).click(); await done('ready');
+    let opened = await page.evaluate(() => window.browserEvidence.results.at(-1));
+    assert.equal(opened.schema.status, 'complete'); assert.equal(opened.inspection, undefined);
+    assert.equal(opened.io.handles.inspections, 0); assert(opened.io.db.bytes < 16384);
+    await page.getByText('检查预算', {exact: true}).click();
+    await page.locator('#schema-limit').fill('1'); await page.locator('#open').click(); await done('ready');
+    opened = await page.evaluate(() => window.browserEvidence.results.at(-1));
+    assert.equal(opened.schema.status, 'incomplete'); assert.equal(opened.schema.entries.length, 1);
+    assert((await page.locator('#status').textContent()).includes('前缀'));
+    const exported = page.waitForEvent('download'); await page.locator('#export').click();
+    const saved = path.join(fixtures, 'schema-export.json'); await (await exported).saveAs(saved);
+    const envelope = JSON.parse(fs.readFileSync(saved, 'utf8'));
+    assert.equal(envelope.scope, 'schema'); assert(envelope.partial); assert.equal(envelope.tool_version, '0.9.0');
+    assert(envelope.diagnostics.some(item => item.category === 'budget'));
+    await page.locator('#schema-limit').fill('100'); await page.locator('#open').click(); await done('ready');
+    await page.locator('#objects').selectOption('49');
+    await page.locator('#preview-batch').fill('2'); await page.locator('#preview-limit').fill('5');
+    await page.locator('#preview-start').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 2 条'));
+    assert.equal(await page.locator('#records article').count(), 2);
+    const first = await page.locator('#records').textContent();
+    await page.locator('#preview-next').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 4 条'));
+    assert.equal(await page.locator('#records article').count(), 2); assert.notEqual(await page.locator('#records').textContent(), first);
+    await page.locator('#preview-next').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('record_limit'));
+    assert.equal(await page.locator('#records article').count(), 1); assert(await page.locator('#preview-next').isDisabled());
+    // WITHOUT ROWID 的 rowid 为空，展示明确保留磁盘顺序而非 SQL 列名。
+    await page.locator('#objects').selectOption('88');
+    await page.locator('#preview-start').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 2 条'));
+    assert((await page.locator('#records').textContent()).includes('rowid 无'));
+    await page.locator('#objects').selectOption('143'); await page.locator('#value-limit').fill('16');
+    await page.locator('#preview-start').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 2 条'));
+    assert((await page.locator('#records').textContent()).includes('仅展示前 16 字符'));
+    const previewDownload = page.waitForEvent('download'); await page.locator('#preview-export').click();
+    const previewPath = path.join(fixtures, 'preview-export.json'); await (await previewDownload).saveAs(previewPath);
+    const paused = JSON.parse(fs.readFileSync(previewPath, 'utf8'));
+    assert.equal(paused.scope, 'records'); assert(paused.partial); assert.equal(paused.result.reason, 'preview_paused');
+    await page.screenshot({path: path.join(fixtures, 'viewer-preview.png'), fullPage: true});
+    evidence.push({case: 'quick_schema_and_cursor_preview', bytes: opened.io.db.bytes, batch: 2, limit: 5, export_partial: envelope.partial});
+    await page.locator('#start').click(); await done('complete');
     await page.locator('#objects').selectOption('49');
     await page.waitForFunction(() => document.querySelector('#page-title').textContent === '页面 49' &&
       document.querySelector('#page-status').textContent.includes('检查完成'));
@@ -67,7 +121,7 @@ async function main() {
     await choose('#file', path.join(fixtures, '512-reset.db')); await done('complete');
     await choose('#wal-file', path.join(fixtures, '512-reset.wal')); await done('failed');
     assert((await page.locator('#status').textContent()).includes('UseValidPrefix'));
-    await page.getByText('检查预算', {exact: true}).click();
+    if (!await page.locator('#wal-prefix').isVisible()) await page.getByText('检查预算', {exact: true}).click();
     await page.locator('#wal-prefix').check();
     await page.locator('#start').click(); await done('complete');
     assert((await page.locator('#scope').textContent()).includes('1 已提交帧'));
@@ -104,7 +158,8 @@ async function main() {
     await page.screenshot({path: path.join(fixtures, 'viewer-large.png'), fullPage: true});
     await page.locator('#timeout').fill('1'); await page.locator('#start').click(); await done('incomplete');
     data = await page.evaluate(() => window.browserEvidence.results.at(-1));
-    assert.equal(data.reason, 'cancelled');
+    assert.equal(data.reason, 'limit_exceeded');
+    assert(data.export.diagnostics.some(item => item.category === 'budget'));
     assert(data.inspection.issues.some(issue => issue.message?.includes('达到检查时间预算')));
     evidence.push({case: 'time_budget', records: data.inspection.records_decoded, io: data.io});
     await page.locator('#timeout').fill('120'); await page.locator('#max-rows').fill('2');
@@ -121,9 +176,10 @@ async function main() {
     for (const handles of lifecycle.closed) assert(Object.values(handles).every(count => count === 0));
     assert.equal(lifecycle.created - lifecycle.terminated, 1);
     assert.equal(errors.length, 0, JSON.stringify(errors));
-    assert(requests.every(url => url.startsWith(`http://127.0.0.1:${server.address().port}/`) || url.startsWith('blob:')));
-    const report = {browser: browser.version(), origin: 'localhost', offline_after_load: true,
-      direct_file_url: 'unverified', external_requests: requests.filter(url => /^https?:/.test(url) && !url.startsWith('http://127.0.0.1:')).length,
+    assert(methods.every(item => item.method === 'GET' && item.body_size === 0));
+    assert(requests.every(url => url.startsWith(viewerURL) || url.startsWith('blob:')));
+    const report = {browser: browser.version(), origin: viewerURL, deployed: Boolean(process.env.MOONSQLITE_VIEWER_URL), offline_after_load: true,
+      direct_file_url: 'unverified', external_requests: requests.filter(url => /^https?:/.test(url) && !url.startsWith(viewerURL)).length,
       created_workers: lifecycle.created, terminated_workers: lifecycle.terminated, checks: evidence};
     fs.writeFileSync(path.join(root, '_build/browser-acceptance.json'), JSON.stringify(report, null, 2) + '\n', 'utf8');
     console.log(JSON.stringify(report));

@@ -15,6 +15,7 @@
 ```sh
 npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
 node _build/browser-tools/node_modules/playwright/cli.js install chromium
+npm install --prefix _build/type-tools --no-audit --no-fund --ignore-scripts typescript@5.9.3
 ```
 
 Linux CI 安装 Chromium 时另带 `--with-deps` 准备系统依赖。统一入口自动发现上述目录；使用已有安装时以显式环境变量为准。

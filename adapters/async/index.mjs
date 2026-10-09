@@ -1,5 +1,38 @@
 import compiledCore from './core.mjs';
 
+/** 参数错误保留 TypeError 兼容，kind 提供稳定判别。 */
+export class ParameterError extends TypeError {
+  constructor(message) { super(message); this.name = 'ParameterError'; this.kind = 'invalid_argument'; }
+}
+/** 将异常转换为稳定类别；不读取消息前缀，未知回调异常归为宿主失败。 */
+export function errorInfo(error) {
+  const kind = error?.kind ?? 'host_failure';
+  const category = kind === 'invalid_argument' ? 'argument' : kind === 'invalid' ? 'corruption'
+    : kind === 'limit_exceeded' ? 'budget' : kind === 'cancelled' ? 'cancelled'
+    : kind === 'unsupported' ? 'unsupported' : 'source';
+  return {category, kind, message: error?.message ?? String(error)};
+}
+const reportFailures = new WeakMap();
+/** 包装原始报告而不改变已发布 JSON；保留完成度、预算、范围及程序化诊断。 */
+export function reportEnvelope(result, {scope, budgets = {}}) {
+  const report = result.inspection ?? result;
+  const diagnostics = [...(reportFailures.get(result) ?? [])];
+  for (const [index, issue] of (report.issues ?? []).entries()) {
+    const location = result.locations?.[index] ?? {page_number: issue.page_number ?? null};
+    if (!diagnostics.some(item => item.issue_index === index || (issue.error_kind === 'unsupported' && item.category === 'source' && item.location?.page_number === location?.page_number))) {
+      diagnostics.push({...errorInfo({kind: issue.error_kind ?? (issue.code === 'unsupported_feature' ? 'unsupported' : 'invalid'), message: issue.message ?? issue.code}), code: issue.code, location});
+    }
+  }
+  if (report.error) diagnostics.push({...errorInfo(report.error), location: report.location ?? null});
+  else if (report.diagnostic) diagnostics.push({...errorInfo({kind: report.diagnostic.error_kind, message: report.diagnostic.message}),
+    code: report.diagnostic.code, location: {phase: 'page_layout', page_number: report.diagnostic.page_number, byte_offset: report.diagnostic.byte_offset, cell_index: report.diagnostic.cell_index}});
+  if (report.completion === 'record_limit') diagnostics.push(errorInfo(new SqliteError('limit_exceeded', '达到记录数量预算')));
+  if (result.reason === 'cancelled' && !diagnostics.some(item => item.category === 'cancelled')) diagnostics.push(errorInfo(new CancelledError()));
+  return {format: 'moonsqlitefile-report', format_version: 1, tool_version: '0.9.0', scope,
+    budgets: JSON.parse(JSON.stringify(budgets, (_, value) => typeof value === 'bigint' ? String(value) : value)),
+    status: report.status, partial: report.status !== 'complete', diagnostics, result: {...result}};
+}
+
 // 所有异步 I/O 与生命周期留在适配层，格式校验由 MoonBit 核心完成。
 /** 宿主错误；kind 为 range_out_of_bounds、short_read 或 host_failure，不代表 SQLite 损坏。 */
 export class SourceError extends Error {
@@ -15,15 +48,28 @@ export class SqliteError extends Error {
 }
 /** signal 已取消时抛 CancelledError；没有 signal 时不做操作。 */
 export function checkAbort(signal) {
-  if (signal?.aborted) throw new CancelledError(signal.reason?.message || '操作已取消');
+  validateSignal(signal);
+  if (signal?.aborted) throw abortError(signal);
+}
+function validateSignal(signal) {
+  if (signal !== undefined && (!signal || typeof signal.aborted !== 'boolean' || typeof signal.addEventListener !== 'function' || typeof signal.removeEventListener !== 'function')) throw new ParameterError('signal 必须为 AbortSignal');
+}
+function optionsObject(options) {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) throw new ParameterError('options 必须为配置对象');
+  validateSignal(options.signal);
+}
+function abortError(signal) {
+  return signal.reason instanceof SqliteError && signal.reason.kind === 'limit_exceeded'
+    ? signal.reason : new CancelledError(signal.reason?.message || '操作已取消');
 }
 /** 让等待操作响应 signal；不会强制终止底层系统 I/O，晚到结果和异常仍被处理。 */
 export function withAbort(operation, signal) {
   const promise = Promise.resolve(operation);
+  try { validateSignal(signal); } catch (error) { promise.catch(() => {}); return Promise.reject(error); }
   if (!signal) return promise;
-  if (signal.aborted) { promise.catch(() => {}); return Promise.reject(new CancelledError()); }
+  if (signal.aborted) { promise.catch(() => {}); return Promise.reject(abortError(signal)); }
   return new Promise((resolve, reject) => {
-    const abort = () => { cleanup(); reject(new CancelledError(signal.reason?.message)); };
+    const abort = () => { cleanup(); reject(abortError(signal)); };
     const cleanup = () => signal.removeEventListener('abort', abort);
     signal.addEventListener('abort', abort, {once: true});
     promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
@@ -39,7 +85,7 @@ function range(size, offset, count) {
 // 在 JSON 桥接前检查整数，避免 MoonBit 的 Int 解码静默截断小数。
 function integer(value, name, minimum = 1, maximum = 2147483647) {
   if (typeof value !== 'number' || !Number.isInteger(value) || value < minimum || value > maximum) {
-    throw new TypeError(`${name} 必须为 ${minimum}–${maximum} 范围内的整数 number`);
+    throw new ParameterError(`${name} 必须为 ${minimum}–${maximum} 范围内的整数 number`);
   }
   return value;
 }
@@ -49,7 +95,7 @@ function integerOptions(options, names) {
 function payloadBudget(value = 67108864n) {
   if (!((typeof value === 'bigint' && value >= 0n && value <= 18446744073709551615n) ||
       (typeof value === 'string' && /^[0-9]+$/.test(value) && BigInt(value) <= 18446744073709551615n))) {
-    throw new TypeError('max_total_payload_bytes 必须为 UInt64 BigInt 或十进制文本');
+    throw new ParameterError('max_total_payload_bytes 必须为 UInt64 BigInt 或十进制文本');
   }
   return String(value);
 }
@@ -68,14 +114,14 @@ export async function readExact(source, offset, count, signal) {
     }
     return bytes;
   } catch (error) {
-    if (error instanceof CancelledError || error instanceof SourceError) throw error;
+    if (error instanceof CancelledError || error instanceof SourceError || error === signal?.reason && error instanceof SqliteError && error.kind === 'limit_exceeded') throw error;
     throw new SourceError('host_failure', error?.message || String(error));
   }
 }
 /** 不可变 Blob 的分块源；每次只 slice 当前范围，close 释放引用，所有偏移为 BigInt。 */
 export class BlobSource {
   constructor(blob) {
-    if (!blob || !Number.isSafeInteger(blob.size) || typeof blob.slice !== 'function') throw new TypeError('需要有效 Blob');
+    if (!blob || !Number.isSafeInteger(blob.size) || typeof blob.slice !== 'function') throw new ParameterError('需要有效 Blob');
     this.blob = blob; this.size = BigInt(blob.size); this.closed = false;
     this.statistics = {reads: 0, bytes: 0, maxRead: 0};
   }
@@ -94,8 +140,9 @@ export class BlobSource {
 /** 有界 FIFO 块缓存；返回副本，失败/取消不缓存，closeSources 控制是否关闭被包装源。 */
 export class CachedSource {
   constructor(source, {blockSize = 4096, cachePages = 256, closeSource = true} = {}) {
+    if (!source || typeof source.read !== 'function') throw new ParameterError('source 必须实现异步范围读取');
     if (!Number.isInteger(blockSize) || blockSize < 1 || blockSize > 65536 ||
-        !Number.isInteger(cachePages) || cachePages < 1 || cachePages > 1048576) throw new TypeError('缓存预算无效');
+        !Number.isInteger(cachePages) || cachePages < 1 || cachePages > 1048576) throw new ParameterError('缓存预算无效');
     range(source.size, 0n, 0);
     this.source = source; this.size = source.size; this.blockSize = blockSize; this.capacity = cachePages;
     this.blocks = new Map(); this.closed = false; this.closeSource = closeSource;
@@ -202,9 +249,11 @@ async function openWal(base, wal, options, core) {
 export class Scan {
   constructor(database, root, options = {}) {
     database.assertOpen();
+    optionsObject(options);
     integer(root, 'root');
-    if (root > database.header.page_count) throw new SqliteError('invalid', '根页号越界');
+    if (root > database.header.page_count) throw new ParameterError('根页号越界');
     const limit = integer(options.limit === undefined ? database.options.max_rows ?? 100000 : options.limit, 'limit', 0);
+    if (limit > (database.options.max_rows ?? 100000)) throw new ParameterError('limit 不得超过打开时的 max_rows');
     const payload = payloadBudget(options.max_total_payload_bytes);
     this.database = database; this.options = options; this.controller = new AbortController();
     this.signal = AbortSignal.any([this.controller.signal, database.controller.signal, ...(options.signal ? [options.signal] : [])]);
@@ -216,7 +265,7 @@ export class Scan {
   }
   [Symbol.asyncIterator]() { return this; }
   async next() {
-    if (this.pending) throw new Error('同一扫描不可同时调用 next');
+    if (this.pending) throw new ParameterError('同一扫描不可同时调用 next');
     if (this.result) return {done: true, value: this.result};
     this.pending = this.advance();
     try { return await this.pending; } finally { this.pending = null; }
@@ -259,7 +308,7 @@ export class Scan {
       const summary = this.database.call({op: 'scan-close', id: this.id}, undefined, false);
       this.id = null; this.database.scans.delete(this);
       this.result = {status: 'incomplete', reason: 'visitor_stopped', ...summary};
-    }
+    } else this.release();
     return {done: true, value: this.result};
   }
 }
@@ -274,7 +323,8 @@ export class Database {
   async readPage(page, signal) {
     this.assertOpen();
     signal = AbortSignal.any([this.controller.signal, ...(signal ? [signal] : [])]);
-    if (!Number.isInteger(page) || page < 1 || page > this.header.page_count) throw new SqliteError('invalid', '页号越界');
+    integer(page, 'page');
+    if (page > this.header.page_count) throw new ParameterError('页号越界');
     return readExact(this.source, BigInt(page - 1) * BigInt(this.header.page_size), this.header.page_size, signal);
   }
   async inspectPage(page, {signal} = {}) {
@@ -298,12 +348,14 @@ export class Database {
     finally { if (scan.id) await scan.return(); }
   }
   async schema(options = {}) {
+    optionsObject(options);
     const entries = [];
     const report = await this.scanBtree(1, entry => { entries.push(entry); return true; }, {...options, schema: true});
     return {entries, ...report};
   }
   async inspectDatabase(options = {}) {
     this.assertOpen();
+    optionsObject(options);
     integerOptions(options, ['max_issues']);
     const payload = payloadBudget(options.max_total_payload_bytes);
     const controller = new AbortController();
@@ -311,6 +363,7 @@ export class Database {
     const id = this.call({op: 'inspection-new', max_issues: options.max_issues ?? 100,
       max_total_payload_bytes: payload}).id;
     let result, ticks = 0;
+    const failures = [];
     const job = {return: async () => { controller.abort(); await pending; }};
     let resolve;
     const pending = new Promise(done => { resolve = done; });
@@ -326,7 +379,8 @@ export class Database {
             checkAbort(signal);
             this.call({op: 'inspection-supply', id, page: event.page}, bytes, false);
           } catch (error) {
-            if (error instanceof CancelledError) throw error;
+            if (error instanceof CancelledError || error === signal.reason && error instanceof SqliteError && error.kind === 'limit_exceeded') throw error;
+            failures.push({...errorInfo(error), location: {phase: 'read_page', page_number: event.page, byte_offset: null, cell_index: null}});
             this.call({op: 'inspection-reject', id, message: `source/${error.kind || 'host_failure'}: ${error.message}`}, undefined, false);
           }
         } else {
@@ -335,10 +389,13 @@ export class Database {
         // 缓存命中时也定期让出事件循环，使取消不依赖下一次磁盘读取。
         if (++ticks % 64 === 0) await withAbort(new Promise(done => setTimeout(done, 0)), signal);
       }
+      reportFailures.set(result, failures);
       return result;
     } catch (error) {
       result = this.call({op: 'inspection-close', id, message: `${error.kind || 'host_failure'}: ${error.message}`}, undefined, false);
       result.reason = error.kind || 'host_failure';
+      failures.push({...errorInfo(error), location: result.locations.at(-1) ?? null, issue_index: result.inspection.issues.length - 1});
+      reportFailures.set(result, failures);
       return result;
     } finally {
       if (!result?.reason) this.call({op: 'inspection-close', id}, undefined, false);
@@ -355,11 +412,15 @@ export class Database {
 }
 /** 从异步静态源打开库及可选 WAL；默认接管源，失败时清理。closeSources:false 保留原始源，初始化失败没有可用 Database。 */
 export async function openDatabase(source, options = {}) {
-  const core = options.core ?? compiledCore;
+  const core = options?.core ?? compiledCore;
+  const closeSources = options?.closeSources !== false;
   let cached, wal;
   try {
+    optionsObject(options);
+    if (options.closeSources !== undefined && typeof options.closeSources !== 'boolean') throw new ParameterError('closeSources 必须为 boolean');
     integerOptions(options, ['max_rows', 'max_pages', 'max_payload_bytes', 'max_depth',
       'max_report_pages', 'max_frames', 'max_overlay_pages']);
+    if (options.tailPolicy !== undefined && !['strict', 'valid_prefix'].includes(options.tailPolicy)) throw new ParameterError('tailPolicy 必须为 strict 或 valid_prefix');
     cached = new CachedSource(source, {blockSize: options.blockSize, cachePages: options.cachePages, closeSource: options.closeSources !== false});
     if (options.wal) {
       wal = new CachedSource(options.wal, {blockSize: options.blockSize, cachePages: options.cachePages, closeSource: options.closeSources !== false});
@@ -376,8 +437,8 @@ export async function openDatabase(source, options = {}) {
   } catch (error) {
     // 构造缓存之前的参数/源错误也属于打开失败，须释放已接管的原始源。
     await Promise.allSettled([
-      Promise.resolve().then(() => cached ? cached.close() : options.closeSources !== false ? source?.close?.() : undefined),
-      Promise.resolve().then(() => wal ? wal.close() : options.closeSources !== false ? options.wal?.close?.() : undefined),
+      Promise.resolve().then(() => cached ? cached.close() : closeSources ? source?.close?.() : undefined),
+      Promise.resolve().then(() => wal ? wal.close() : closeSources ? options?.wal?.close?.() : undefined),
     ]);
     throw error;
   }

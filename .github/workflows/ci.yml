@@ -39,6 +39,8 @@ jobs:
         run: |
           npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
           node _build/browser-tools/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Install pinned TypeScript acceptance tools
+        run: npm install --prefix _build/type-tools --no-audit --no-fund --ignore-scripts typescript@5.9.3
       - name: Run complete project verification
         env:
           MOONSQLITE_PLAYWRIGHT: ${{ github.workspace }}/_build/browser-tools/node_modules/playwright
@@ -58,6 +60,7 @@ jobs:
           name: range-acceptance-${{ matrix.toolchain }}-${{ github.run_id }}
           path: |
             _build/verification/
+            _build/pages/
             _build/toolchain-*.json
             _build/layout-evidence.json
             _build/wide-wal.json

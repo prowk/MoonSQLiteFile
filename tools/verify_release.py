@@ -64,7 +64,9 @@ def main():
         built = json.loads((ROOT/'_build/async-adapter/package.json').read_text(encoding='utf-8'))
         assert built['version'] == version, '构建的异步包版本未同步'
         html = (ROOT/'_build/moonsqlitefile-viewer.html').read_text(encoding='utf-8')
-        assert f'离线数据库检查器 · v{version}</span>' in html and '__VERSION__' not in html, '构建的 HTML 版本未同步'
+        assert f'数据库检查器 · v{version}</span>' in html and '__VERSION__' not in html, '构建的 HTML 版本未同步'
+        adapter = read('adapters/async/index.mjs')
+        assert f"tool_version: '{version}'" in adapter, '导出报告的工具版本未同步'
     if args.assets:
         verify_assets(args.assets, version)
     if args.ci_evidence:

@@ -14,7 +14,7 @@ def main():
     output = ROOT / '_build/async-adapter'
     output.mkdir(exist_ok=True)
     for path in (ROOT / 'adapters/async').iterdir():
-        if path.is_file() and path.name in ('package.json', 'index.mjs', 'node.mjs', 'README.md'):
+        if path.is_file() and path.name in ('package.json', 'index.mjs', 'node.mjs', 'index.d.ts', 'node.d.ts', 'README.md', 'example-node.mjs', 'example-browser.mjs'):
             shutil.copyfile(path, output / path.name)
     shutil.copyfile(ROOT / 'LICENSE', output / 'LICENSE')
     core = re.sub(r'^//# sourceMappingURL=.*$', '', source.read_text(encoding='utf-8'), flags=re.M)

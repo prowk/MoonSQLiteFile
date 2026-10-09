@@ -2,7 +2,7 @@
 
 MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapters/async`，扫描、record/overflow、页归属、freelist、Ptrmap 和 WAL checksum 仍由同一核心状态机完成。同步入口也驱动这些状态机，不在 JavaScript 重写格式解析。
 
-当前源码为未发布的 v0.8.2；已发布的附件仍为 v0.8.0。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
+当前源码为未发布的 v0.9.0；已发布的附件仍为 v0.8.0。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
 
 ## 本地构建与消费
 
@@ -76,7 +76,7 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 });
 ```
 
-上例的两项注释应在业务代码中按静态副本责任使用。应用应对打开第二个源前的失败也负责释放已打开的第一个源。库接收到两者后负责其生命周期。WAL 逐帧校验；校验完整后由核心生成覆盖索引，并按最新提交逻辑页数打开快照。未提交尾帧、缩小/增长和异常尾部策略与同步一致。帧数或覆盖页预算不足不会成功返回更旧快照。异步 WAL JSON 的偏移/长度使用十进制文本，避免 JS 精度损失。
+上例的两项注释应在业务代码中按静态副本责任使用。应用应对打开第二个源前的失败也负责释放已打开的第一个源。库接收到两者后负责其生命周期。WAL 逐帧校验；校验完整后由核心生成覆盖索引，并按最新提交逻辑页数打开快照。未提交尾帧、缩小/增长和异常尾部策略与同步一致。帧数或覆盖页预算不足不会成功返回更旧快照。WAL 报告偏移在安全整数范围内仍为 number，超出时使用十进制文本；异步范围事件与覆盖索引的偏移始终为文本。详见[64 位契约](contracts.md#64-位值)。
 
 取消或打开失败时没有可用的 Database。`onProgress` 可以观察已经校验的帧数；不能把未完成的帧前缀称为最新已提交快照。
 
@@ -91,3 +91,9 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 公开 MoonBit `BTreeCursor`、`WalCursor`、`InspectionCursor` 自身不执行 I/O。调用者驱动 `next()`，按事件供页/供范围，再消费记录/报告；不要把未完成或取消的 WalCursor 用作最新快照。`RangeWalSource.from_cursor` 的源必须与校验时相同且不可变。其 `page_range` 查询实际页来源，宿主只执行范围读取，不重新实现覆盖规则。
 
 完整复现使用[统一验证入口](../CONTRIBUTING.md#完整验证)。单项脚本仍可独立运行；参数、取消、背压、WAL、失败路径和释放纳入持续验收。
+
+## 类型与结构化报告
+
+本地 tarball 包含 index.d.ts、node.d.ts 及条件导出，支持严格 NodeNext 与 Bundler 消费；Node 子入口不向浏览器暴露。包内 example-node.mjs 与 example-browser.mjs 分别从真实安装包运行静态 db/WAL、源接管、异步迭代和关闭。先 npm pack ./_build/async-adapter，再 npm install 对应本地 tgz；npm registry 尚未发布。
+
+新增 ParameterError 继承 TypeError，kind 为 invalid_argument；errorInfo 提供稳定类别，reportEnvelope 在原始 JSON 外包装范围、实际预算、完成度及诊断。读取报告的宿主失败来源由同次运行捕获，不依赖消息前缀；请在克隆或序列化原报告之前包装。完整规则见[错误与报告契约](contracts.md)，页号越界分类变化见[升级说明](migration.md#v090)。

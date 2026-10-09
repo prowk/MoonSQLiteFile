@@ -38,7 +38,7 @@ import {
 }
 ```
 
-已发布安装版本为 v0.8.0；仓库源码 v0.8.2 尚未发布。工具链和宿主版本见[支持说明](docs/support.md)。
+已发布安装版本为 v0.8.0；仓库源码 v0.9.0 尚未发布。工具链和宿主版本见[支持说明](docs/support.md)。
 
 ## 快速上手
 
@@ -58,8 +58,8 @@ fn read_rows(data : Bytes) -> Array[@sqlite.Row] raise @sqlite.SqliteError {
 ## 工具入口
 
 - **Node.js CLI**：克隆仓库后按下方命令检查样本；[完整命令与输出约定](docs/usage.md#命令行工具)
-- **浏览器查看器**：从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载单文件 HTML；[使用说明](examples/offline-viewer/README.md)
-- **异步 JS 包**：从同一 Release 下载 tarball；[安装、扫描与取消](docs/async-source.md)。尚未发布 npm registry
+- **浏览器查看器**：从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载单文件 HTML；新版[快速浏览、预览与演示准备](examples/offline-viewer/README.md)
+- **异步 JS 包**：从同一 Release 下载 tarball；[类型、安装与取消](docs/async-source.md)、[独立消费项目](examples/async-consumer/README.md)。尚未发布 npm registry
 
 在仓库根目录运行：
 
@@ -78,6 +78,7 @@ node tools/inspect.cjs fixtures/core.sqlite summary
 
 ## 文档与贡献
 
+- **错误与报告契约**：[错误与报告契约](docs/contracts.md)
 - **常用 API 与 CLI**：[使用指南](docs/usage.md)、[Mooncakes API](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0)
 - **数据源、异步与 WAL**：[范围读取](docs/range-source.md)、[异步适配](docs/async-source.md)、[WAL 契约](docs/wal.md)
 - **实现与支持范围**：[架构](docs/architecture.md)、[支持矩阵](docs/support.md)

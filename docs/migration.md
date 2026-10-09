@@ -208,3 +208,17 @@ CLI 继续保留 17 个命令的输出、退出码和错误通道；本版以 v0
 贡献者提交前和 CI 改为调用 `python tools/verify.py`；保留原 34 项检查及固定/latest 通道，新增维护契约检查。单项脚本继续可独立运行，不能代替完整验收。
 
 源码目录职责集中在[架构](architecture.md)，当前范围集中在[支持说明](support.md)，历史迁移集中在本页。仅用于旧链接的导航文档已删除，历史文档可在对应 Release 或 tag 查看；公开接口和报告不因文档移动而改变。安装仍使用已发布的 v0.8.0；本地源码和异步构建版本为 0.8.2。
+
+<a id="v090"></a>
+
+## v0.9.0（未发布）
+
+源码与异步 tarball 构建版本为 0.9.0；Mooncakes 安装仍为已发布的 0.8.0，npm registry 未发布，不执行 Release。新增 JS/TS 声明、条件导出和实际安装包的 Node/浏览器示例；Node 专用子入口不再在浏览器条件下解析。
+
+ParameterError 继承 TypeError，kind 为 invalid_argument。JS 中根页/页号越界、超过 max_rows 的扫描 limit、非法配置对象、信号、源结构、closeSources 或 tailPolicy 现在按参数错误拒绝；旧逻辑部分使用 SqliteError('invalid') 或将未知 tailPolicy 静默视为 strict。按 kind 或 errorInfo().category 处理，不再将这些错误视为损坏。打开失败仍清理接管源，非法 options 也不例外；inspectPage 继续返回 incomplete。
+
+errorInfo 与 reportEnvelope 提供错误与报告契约。包装报告新增独立 format_version=1，不改写原始 CLI 或异步报告字段；源接管及旧 PageSource/RangeSource 的兼容边界保持。[契约说明](contracts.md)明确六类错误、完成度、部分结果及实际 64 位字段类型。用 SqliteError('limit_exceeded') 作为 AbortSignal.reason 的截止预算按 budget 分类，普通 AbortSignal 取消仍为 cancelled；查看器的时间预算因此改为 limit_exceeded。
+
+查看器选文件后只读取有界 schema，完整结构检查改为主动操作；旧自动检查流程需点击“完整结构检查”。schema 前缀不会标成完整对象列表。记录预览复用核心游标继续读取，显示磁盘值和存储顺序；导出的 schema、检查与预览状态包含范围、预算、版本、完成状态及诊断。Pages 构建与下载版共用源码，推送不会自动部署；公开部署与 npm/Release 发布仍各需授权。
+
+提交前继续执行 python tools/verify.py。类型验收增加 tools/toolchain.json 固定的 TypeScript 工具；完整入口增加 Pages 目录构建并扩展实际 tarball 和真实浏览器场景，保留原 34 项检查。[贡献指南](../CONTRIBUTING.md)提供依赖准备方式。

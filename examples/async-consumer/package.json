@@ -1,0 +1,7 @@
+{
+  "name": "moonsqlitefile-static-copy-consumer",
+  "private": true,
+  "type": "module",
+  "scripts": {"inspect": "node main.mjs"},
+  "dependencies": {"@prowk/moonsqlitefile-async": "file:../../_build/prowk-moonsqlitefile-async-0.9.0.tgz"}
+}
