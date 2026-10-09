@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
+const {createHash} = require('node:crypto');
 const {performance} = require('node:perf_hooks');
 const root = path.resolve(__dirname, '..');
 const playwrightPath = process.env.MOONSQLITE_PLAYWRIGHT || 'playwright';
@@ -47,7 +48,9 @@ async function main() {
     await page.goto(viewerURL);
     const htmlDownload = page.waitForEvent('download'); await page.locator('a[download]').click();
     const htmlPath = path.join(fixtures, 'downloaded-viewer.html'); await (await htmlDownload).saveAs(htmlPath);
-    assert.deepEqual(fs.readFileSync(htmlPath), fs.readFileSync(path.join(root, '_build/moonsqlitefile-viewer.html')));
+    // 跨平台部署使用该运行的独立 CI 产物作基准，仍逐字节比较下载文件。
+    const expectedHTML = fs.readFileSync(process.env.MOONSQLITE_VIEWER_HTML || path.join(root, '_build/moonsqlitefile-viewer.html'));
+    assert.deepEqual(fs.readFileSync(htmlPath), expectedHTML);
     await context.setOffline(true);
     async function done(state, timeout = 180000) {
       await page.waitForFunction(expected => document.querySelector('#status').dataset.state === expected &&
@@ -179,6 +182,7 @@ async function main() {
     assert(methods.every(item => item.method === 'GET' && item.body_size === 0));
     assert(requests.every(url => url.startsWith(viewerURL) || url.startsWith('blob:')));
     const report = {browser: browser.version(), origin: viewerURL, deployed: Boolean(process.env.MOONSQLITE_VIEWER_URL), offline_after_load: true,
+      download_sha256: createHash('sha256').update(expectedHTML).digest('hex'),
       direct_file_url: 'unverified', external_requests: requests.filter(url => /^https?:/.test(url) && !url.startsWith(viewerURL)).length,
       created_workers: lifecycle.created, terminated_workers: lifecycle.terminated, checks: evidence};
     fs.writeFileSync(path.join(root, '_build/browser-acceptance.json'), JSON.stringify(report, null, 2) + '\n', 'utf8');

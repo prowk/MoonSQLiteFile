@@ -8,7 +8,7 @@
 
 **纯 MoonBit 的 SQLite 文件解析与检查库**
 
-[API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0) · [使用指南](docs/usage.md) · [下载工具](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0)
+[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) · [API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0) · [使用指南](docs/usage.md) · [下载工具](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0)
 
 </div>
 
@@ -58,7 +58,7 @@ fn read_rows(data : Bytes) -> Array[@sqlite.Row] raise @sqlite.SqliteError {
 ## 工具入口
 
 - **Node.js CLI**：克隆仓库后按下方命令检查样本；[完整命令与输出约定](docs/usage.md#命令行工具)
-- **浏览器查看器**：从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载单文件 HTML；新版[快速浏览、预览与演示准备](examples/offline-viewer/README.md)
+- **浏览器查看器**：[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 使用尚未发布包的 v0.9.0，可下载同版 HTML；[本地构建、快速浏览与记录预览](examples/offline-viewer/README.md)。已发布 HTML 仍从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载
 - **异步 JS 包**：从同一 Release 下载 tarball；[类型、安装与取消](docs/async-source.md)、[独立消费项目](examples/async-consumer/README.md)。尚未发布 npm registry
 
 在仓库根目录运行：

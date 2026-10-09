@@ -8,7 +8,7 @@ CI 的 pinned 与 latest MoonBit 通道完整运行同一入口；固定配置�
 | --- | --- | --- |
 | 核心与供页游标 | Windows x64 与 Linux x64 的 Wasm、WasmGC、JS、native | 无宿主 I/O，仅标准库；其他系统/架构未宣称已验证 |
 | 同步文件 CLI | Node 22.14.0 | 只读静态文件；BigInt 范围定位、读取时变化检测，不获取在线锁 |
-| 独立异步包 | Node 22.14.0，Chrome/Chromium 的 Blob/Worker | 私有本地包和发布附件，尚未 npm 发布；第三方源须管理自身在途 I/O |
+| 独立异步包 | Node 22.14.0，Chrome/Chromium 的 Blob/Worker | 离线 tarball 和发布附件，尚未 npm 发布；第三方源须管理自身在途 I/O |
 | 浏览器查看器 | Chrome 154 与 CI 固定 Playwright 所装 Chromium | 实际选文件、WAL、导航、取消、切换与 HTTP 载入后断网；直接 file:// 不宣称通过 |
 | Python oracle | Python 3.13.2 / SQLite 版本写入日志 | Linux 必须支持 dbstat；本机不支持时明确记录，不将它当 Linux 页统计证据 |
 
@@ -37,4 +37,4 @@ Node 范围源须提供不可变配对 db/WAL 副本；64 位寻址不等于常�
 
 发布 HTML 可通过本机 HTTP 使用，例如从文件所在目录运行 `python -m http.server 8000` 后打开对应文件 URL。已验收 HTTP 载入后断网的 File/Blob/Worker 场景；关闭浏览器后离线重新打开不是同一能力。直接 `file://` 双击仍未验收，不承诺无需服务器；其他浏览器未声明通过。操作和构建见[查看器说明](../examples/offline-viewer/README.md)，历史规模与截图记录见[v0.8.0 验证记录](validation-v0.8.0.md)。
 
-源码 v0.9.0 的浏览器流程先读取有界 schema，再由用户选择预览或完整检查；Pages 目录与 HTML 下载版复用核心及 Worker，提供手动部署工作流。当前本地子路径验收不等于已公开部署；部署后须对真实站点执行同一验收。分发仍以本地 tarball/已发布 v0.8.0 附件为准，npm registry 未发布。错误与完成度规则见[错误与报告契约](contracts.md)。
+源码 v0.9.0 的浏览器流程先读取有界 schema，再由用户选择预览或完整检查；[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 与 HTML 下载版复用核心及 Worker，由获授权的手动工作流部署。[查看器说明](../examples/offline-viewer/README.md#pages-演示)记录部署与真实站点验收证据。分发仍以本地 tarball/已发布 v0.8.0 附件为准，npm registry 未发布。错误与完成度规则见[错误与报告契约](contracts.md)。
