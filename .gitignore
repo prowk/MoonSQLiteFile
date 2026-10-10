@@ -7,3 +7,5 @@
 /docs/roadmap.md
 __pycache__/
 *.pyc
+/docs/provenance.md
+/todo.md

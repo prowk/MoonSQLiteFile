@@ -75,4 +75,4 @@ node tools/fuzz.cjs --replay _build/fuzz-failures/SHA256.sqlite
 
 当前说明按用途集中在使用、架构、支持和专题契约中；历史行为放在[升级说明](docs/migration.md)与 CHANGELOG，具体统计与长期证据放在对应版本记录（例如 [v0.8.0](docs/validation-v0.8.0.md)）。CI 产物可辅助排查，但长期证据不能只依赖会过期的日志。
 
-公开发布需要单独授权。版本、tag、附件、校验值和精简 Release 正文规则集中在[发布材料规范](docs/releases.md)；本地 `moon package` / `npm pack` 属于消费验证，不表示已发布。比赛记录只作[项目背景](docs/competition.md)，来源与许可独立见[来源说明](docs/provenance.md)。
+公开发布需要单独授权。版本、tag、附件、校验值和精简 Release 正文规则集中在[发布材料规范](docs/releases.md)；本地 `moon package` / `npm pack` 属于消费验证，不表示已发布。比赛记录只作[项目背景](docs/competition.md)，许可见 [LICENSE](LICENSE)。

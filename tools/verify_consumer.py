@@ -44,7 +44,7 @@ def main():
                     assert 'source = "src"' in packaged_manifest
                 for relative in names:
                     normalized = relative.replace("\\", "/")
-                    assert normalized not in {"AGENTS.md", "docs/roadmap.md", "docs/proposal.md", "tools/github_publish.py"}, f"发布包包含本地文件：{relative}"
+                    assert normalized not in {"AGENTS.md", "todo.md", "docs/roadmap.md", "docs/proposal.md", "docs/provenance.md", "tools/github_publish.py"}, f"发布包包含本地文件：{relative}"
                     # 解包路径必须留在为本次检查创建的临时目录中。
                     assert (library / normalized).resolve().is_relative_to(library.resolve())
                 package.extractall(library)

@@ -59,12 +59,17 @@ def main():
         version = version_of(read('moon.mod'))
     assert version_of(read('moon.mod')) == version
     assert json.loads(read('adapters/async/package.json'))['version'] == version
-    assert re.search(r'^## '+re.escape(version)+r'(?:\s|$)', read('CHANGELOG.md'), re.M), '缺少对应 CHANGELOG'
+    if not args.tag and version.endswith('-dev'):
+        assert re.search(r'^## 未发布$', read('CHANGELOG.md'), re.M), '开发主线必须归入未发布记录'
+    else:
+        assert re.search(r'^## '+re.escape(version)+r'(?:\s|$)', read('CHANGELOG.md'), re.M), '缺少对应 CHANGELOG'
     if not args.tag:
         built = json.loads((ROOT/'_build/async-adapter/package.json').read_text(encoding='utf-8'))
         assert built['version'] == version, '构建的异步包版本未同步'
         html = (ROOT/'_build/moonsqlitefile-viewer.html').read_text(encoding='utf-8')
-        assert f'数据库检查器 · v{version}</span>' in html and '__VERSION__' not in html, '构建的 HTML 版本未同步'
+        label = '开发预览' if '-' in version else f'v{version}'
+        assert f'<meta name="moonsqlitefile-version" content="{version}">' in html, 'HTML 构建元数据未同步'
+        assert f'数据库检查器 · {label}</span>' in html and '__VERSION__' not in html and '__BUILD_LABEL__' not in html, '构建的 HTML 标识未同步'
         adapter = read('adapters/async/index.mjs')
         assert f"tool_version: '{version}'" in adapter, '导出报告的工具版本未同步'
     if args.assets:

@@ -38,7 +38,7 @@ import {
 }
 ```
 
-已发布安装版本为 v0.8.0；仓库源码 v0.9.0 尚未发布。工具链和宿主版本见[支持说明](docs/support.md)。
+已发布安装版本为 v0.8.0；仓库主线用于 v0.8.1 开发，尚未发布。工具链和宿主版本见[支持说明](docs/support.md)。
 
 ## 快速上手
 
@@ -58,7 +58,7 @@ fn read_rows(data : Bytes) -> Array[@sqlite.Row] raise @sqlite.SqliteError {
 ## 工具入口
 
 - **Node.js CLI**：克隆仓库后按下方命令检查样本；[完整命令与输出约定](docs/usage.md#命令行工具)
-- **浏览器查看器**：[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 使用尚未发布包的 v0.9.0，可下载同版 HTML；[本地构建、快速浏览与记录预览](examples/offline-viewer/README.md)。已发布 HTML 仍从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载
+- **浏览器查看器**：[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 提供当前开发预览及对应 HTML 下载；[本地构建、快速浏览与记录预览](examples/offline-viewer/README.md)。已发布 HTML 仍从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载
 - **异步 JS 包**：从同一 Release 下载 tarball；[类型、安装与取消](docs/async-source.md)、[独立消费项目](examples/async-consumer/README.md)。尚未发布 npm registry
 
 在仓库根目录运行：
@@ -89,4 +89,4 @@ node tools/inspect.cjs fixtures/core.sqlite summary
 
 ## 许可证
 
-[Apache-2.0](LICENSE)。依据 [SQLite 官方磁盘格式](https://sqlite.org/fileformat.html) 实现；第三方来源与实现边界见[来源说明](docs/provenance.md)。
+[Apache-2.0](LICENSE)。依据 [SQLite 官方磁盘格式](https://sqlite.org/fileformat.html) 实现。

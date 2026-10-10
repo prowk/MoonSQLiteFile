@@ -1,6 +1,6 @@
 # @prowk/moonsqlitefile-async
 
-MoonSQLiteFile 的独立异步 JS 宿主适配器。当前源码 v0.9.0 尚未发布；已发布附件仍为 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 的 `prowk-moonsqlitefile-async-0.8.0.tgz`，下载后执行 `npm install ./prowk-moonsqlitefile-async-0.8.0.tgz`。尚未发布 npm registry。
+MoonSQLiteFile 的独立异步 JS 宿主适配器。当前源码用于 v0.8.1 开发，尚未发布；已发布附件仍为 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 的 `prowk-moonsqlitefile-async-0.8.0.tgz`，下载后执行 `npm install ./prowk-moonsqlitefile-async-0.8.0.tgz`。尚未发布 npm registry。
 
 从项目根目录执行 `moon build --target js --deny-warn` 和 `python tools/build_async.py`，得到包含编译核心的 `_build/async-adapter`；运行时没有第三方依赖。`index.mjs` 导出 BlobSource、CachedSource、openDatabase、异步扫描与检查，`node.mjs` 导出 Node 22 文件范围源。格式解码、结构检查与 WAL checksum 使用同一 MoonBit 核心。
 

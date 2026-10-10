@@ -1,6 +1,6 @@
 # Blob/WAL 浏览器检查器
 
-当前源码 v0.9.0 尚未发布包；[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 提供同版页面及 HTML 下载。已发布 HTML 仍从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载；以下命令用于本地构建和使用新版流程。
+当前源码用于 v0.8.1 开发，尚未发布包；[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 提供开发预览及 HTML 下载；线上构建可能落后于本地源码，以部署记录为准。已发布 HTML 仍从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载；以下命令用于本地构建和使用新版流程。
 
 ```sh
 moon build --target js --deny-warn
@@ -31,7 +31,7 @@ rowid 单独显示，磁盘整数保留十进制文本，blob 为十六进制。
 
 `.github/workflows/pages.yml` 为仅手动运行的部署工作流，指定已审查提交或 tag，完整验收后才上传与部署 `_build/pages`。日常推送只运行 CI 并保存构建目录，不自动上线。Pages 设置使用 GitHub Actions 来源；公开部署须单独授权，开发演示不代表已发布包或 Release。
 
-当前演示对应源码 `7422bd5`，[固定/latest CI](https://github.com/prowk/MoonSQLiteFile/actions/runs/37925804911) 与[部署工作流](https://github.com/prowk/MoonSQLiteFile/actions/runs/37926485439) 均通过。2026-10-09 使用 Playwright 1.62.1 / Chrome 154 对真实仓库子路径完成示例、静态 db/WAL、页面导航、记录续读、预算、取消、错误、切换与 JSON 导出验收；在线下载与该部署的 CI 产物字节一致。验收中网络仅有站点 GET 请求且无请求体，无外部请求；载入后断网处理通过。
+此前已验收的演示对应源码 `7422bd5`，[固定/latest CI](https://github.com/prowk/MoonSQLiteFile/actions/runs/37925804911) 与[部署工作流](https://github.com/prowk/MoonSQLiteFile/actions/runs/37926485439) 均通过。2026-10-09 使用 Playwright 1.62.1 / Chrome 154 对真实仓库子路径完成示例、静态 db/WAL、页面导航、记录续读、预算、取消、错误、切换与 JSON 导出验收；在线下载与该部署的 CI 产物字节一致。验收中网络仅有站点 GET 请求且无请求体，无外部请求；载入后断网处理通过。
 
 页面从站点加载，数据库仅在本地 File/Blob 中分块读取并由 Worker 处理，不上传数据库。部署后用 `MOONSQLITE_VIEWER_URL` 指向真实仓库子路径，运行同一 `node tools/verify_browser.cjs`，覆盖示例、db/WAL、导航、取消、错误、预览、导出和网络请求边界。
 

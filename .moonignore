@@ -41,3 +41,5 @@ __pycache__/
 /tools/async-api-v0.8.0.json
 
 /fixtures/verification/
+/docs/provenance.md
+/todo.md

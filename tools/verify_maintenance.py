@@ -34,7 +34,7 @@ def anchors(text):
 def verify_links():
     # 本地规划和申报草稿不属于公共使用文档。
     paths = [ROOT/'README.md', ROOT/'CONTRIBUTING.md', ROOT/'CHANGELOG.md']
-    paths += [path for path in (ROOT/'docs').glob('*.md') if path.name not in {'roadmap.md', 'proposal.md'}]
+    paths += [path for path in (ROOT/'docs').glob('*.md') if path.name not in {'roadmap.md', 'proposal.md', 'provenance.md'}]
     paths += list((ROOT/'adapters').rglob('README.md')) + list((ROOT/'examples').rglob('README.md'))
     for source in paths:
         text = source.read_text(encoding='utf-8')

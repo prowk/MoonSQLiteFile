@@ -1,6 +1,6 @@
 # 错误、报告与兼容承诺
 
-v0.9.0 确定下列错误与报告契约，作为 V1 的冻结目标；本版源码尚未发布，V1 冻结仍以实际接入验收为准。核心、同步源与异步宿主继续分层，不从消息字符串猜测错误类别或诊断位置。
+下列错误与报告契约是 v0.8.1 的验收目标；当前开发源码尚未发布，最终冻结以实际接入验收为准。核心、同步源与异步宿主继续分层，不从消息字符串猜测错误类别或诊断位置。
 
 ## 程序化错误
 
@@ -17,7 +17,7 @@ v0.9.0 确定下列错误与报告契约，作为 V1 的冻结目标；本版源
 
 未知外部异常归为 source；应用自身的业务错误仍应由应用处理。关闭失败会拒绝 Promise，WAL 配对关闭失败可能为 AggregateError；不能将其解释为文件损坏。打开失败没有 Database 报告，默认释放接管源；`closeSources: false` 时应用负责释放。
 
-同步核心保留公开 `SqliteError` 的 Invalid、Unsupported、LimitExceeded 分支，以及 `SourceError` 的 HostFailure、ShortRead、RangeOutOfBounds 分支。旧 `PageSource` 保留 Int 寻址及原错误映射；宿主抛 Invalid 的历史行为无法单凭枚举判断损坏。V1 继续保留旧入口，不替换枚举或删除接口。新接入使用 `RangeSource` 或 `PageSourceAdapter`，在源边界直接匹配 SourceError；诊断通过 `DiagnosticPhase` 和 `DiagnosticLocation` 匹配实际阶段。范围源进入旧报告时仍保留历史 Unsupported 映射；[范围源说明](range-source.md)记录该兼容边界。不要从 `source/` 文本推断程序行为。
+同步核心保留公开 `SqliteError` 的 Invalid、Unsupported、LimitExceeded 分支，以及 `SourceError` 的 HostFailure、ShortRead、RangeOutOfBounds 分支。旧 `PageSource` 保留 Int 寻址及原错误映射；宿主抛 Invalid 的历史行为无法单凭枚举判断损坏。v0.8.1 继续保留旧入口，不替换枚举或删除接口。新接入使用 `RangeSource` 或 `PageSourceAdapter`，在源边界直接匹配 SourceError；诊断通过 `DiagnosticPhase` 和 `DiagnosticLocation` 匹配实际阶段。范围源进入旧报告时仍保留历史 Unsupported 映射；[范围源说明](range-source.md)记录该兼容边界。不要从 `source/` 文本推断程序行为。
 
 ## 完成度与导出
 

@@ -16,7 +16,7 @@ async function main() {
   const evidence = [], requests = [], methods = [], errors = [];
   const server = http.createServer((request, response) => {
     const name = request.url.slice('/MoonSQLiteFile/'.length);
-    if (request.url !== '/MoonSQLiteFile/' && !/^moonsqlitefile-viewer-\d+\.\d+\.\d+\.html$/.test(name)) { response.writeHead(404); response.end(); return; }
+    if (request.url !== '/MoonSQLiteFile/' && !/^moonsqlitefile-viewer-\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?\.html$/.test(name)) { response.writeHead(404); response.end(); return; }
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.end(fs.readFileSync(name ? path.join(root, '_build/pages', name) : pagePath));
   });
@@ -46,6 +46,13 @@ async function main() {
     });
     const viewerURL = process.env.MOONSQLITE_VIEWER_URL || `http://127.0.0.1:${server.address().port}/MoonSQLiteFile/`;
     await page.goto(viewerURL);
+    // 开发预览不在页头或下载入口展示未发布的版本号。
+    const sourceVersion = /^version = "([^"]+)"/m.exec(fs.readFileSync(path.join(root, 'moon.mod'), 'utf8'))[1];
+    if (sourceVersion.includes('-')) {
+      assert((await page.locator('header').textContent()).includes('开发预览'));
+      assert(!/v\d+\.\d+/.test(await page.locator('header').textContent()));
+      assert(!/v\d+\.\d+/.test(await page.locator('a[download]').textContent()));
+    }
     const htmlDownload = page.waitForEvent('download'); await page.locator('a[download]').click();
     const htmlPath = path.join(fixtures, 'downloaded-viewer.html'); await (await htmlDownload).saveAs(htmlPath);
     // 跨平台部署使用该运行的独立 CI 产物作基准，仍逐字节比较下载文件。
@@ -75,7 +82,7 @@ async function main() {
     const exported = page.waitForEvent('download'); await page.locator('#export').click();
     const saved = path.join(fixtures, 'schema-export.json'); await (await exported).saveAs(saved);
     const envelope = JSON.parse(fs.readFileSync(saved, 'utf8'));
-    assert.equal(envelope.scope, 'schema'); assert(envelope.partial); assert.equal(envelope.tool_version, '0.9.0');
+    assert.equal(envelope.scope, 'schema'); assert(envelope.partial); assert.equal(envelope.tool_version, sourceVersion);
     assert(envelope.diagnostics.some(item => item.category === 'budget'));
     await page.locator('#schema-limit').fill('100'); await page.locator('#open').click(); await done('ready');
     await page.locator('#objects').selectOption('49');

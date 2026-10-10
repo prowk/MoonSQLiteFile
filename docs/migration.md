@@ -1,6 +1,6 @@
 # 历史升级说明
 
-本页保留各版本当时的升级要求；当前使用范围见[支持说明](support.md)，当前用法见[使用指南](usage.md)。v0.8.1、v0.8.2 为本地源码交付，尚未发布包或 Release。
+本页保留各版本当时的升级要求；当前使用范围见[支持说明](support.md)，当前用法见[使用指南](usage.md)。待发布变化按开发主线归并，不作为独立的历史版本。
 
 <a id="v040"></a>
 
@@ -189,36 +189,22 @@ CLI 继续保留 17 个命令的输出、退出码和错误通道；本版以 v0
 
 本版不新增 SQL 执行、写入、在线锁/快照协议或恢复，不改变 `Complete` 的结构检查范围。单条 payload 完整解码，全库归属、遍历和 WAL 索引分别需要预算。直接 file:// 打开仍受浏览器验收能力限制，不能将 HTTP 载入后断网替代为直接打开成功。
 
-<a id="v081"></a>
+<a id="unreleased"></a>
 
-## v0.8.1：整数参数修复
+## 从已发布版本升级到开发主线
 
-此版本已在源码中实现，尚未发布包或 Release。已发布安装版本仍为 v0.8.0。
+以下变化面向下一次 v0.8.1 发布，当前只在源码和本地构建中提供。Mooncakes 安装仍使用已发布的 v0.8.0；npm registry 未发布。开发包使用 `0.8.0-dev` 构建标识，不表示已发布预发行版本。
 
-异步页号和整数预算不再静默截断小数：`db.scan(3.9)`、`{limit: 1.9}` 现在抛 TypeError。调用方应传入符合[异步契约](async-source.md#扫描背压和部分结果)的整数；不要自动向下取整来隐藏上游参数错误。整数预算只接受 number；累计 payload 只接受 UInt64 BigInt 或十进制文本。无效类型、无效数值和越界值也明确拒绝。
+### 参数、错误与报告
 
-`scan` 构造和预算入口的错误直接抛出或拒绝 Promise；它们发生在游标创建前，没有可用的部分扫描报告。`inspectPage` 保留非法页号的 incomplete 报告。打开失败默认关闭接管的主文件及 WAL，`closeSources: false` 时原始源仍由调用者释放。合法整数、扫描 limit 为 0、源接管、取消及已发布输出约定保持。
+异步页号和整数预算不再静默截断小数：`db.scan(3.9)`、`{limit: 1.9}` 现在抛 ParameterError（继承 TypeError，kind 为 invalid_argument）。整数预算只接受符合范围的 number；累计 payload 只接受 UInt64 BigInt 或十进制文本。非法配置、越界根页、超过 max_rows 的 limit 和未知 tailPolicy 按参数错误拒绝，不当作损坏。调用者应修正上游参数，不用自动取整隐藏错误。
 
-核心及异步公开声明继续兼容正式 v0.8.0，CLI 同时核对正式 v0.7.0、v0.8.0 的全部命令契约。兼容新增不再因符号数量或导出集合严格相等被误拒，历史基线保留；结构字段和枚举分支变化仍需评估兼容性。
+扫描构造和预算错误发生在创建游标和额外读取之前，没有部分扫描报告；inspectPage 保留非法页号的 incomplete 报告。打开失败默认清理接管源，closeSources: false 时由调用者释放。合法调用、零条扫描和历史 CLI 输出保持；公开 API 与 CLI 继续对照正式版本基线。
 
-<a id="v082"></a>
+errorInfo 与 reportEnvelope 提供六类错误及独立 format_version=1 包装，不改写历史 JSON。截止预算使用 limit_exceeded，普通取消使用 cancelled；原始存储值和 WAL 字段的 64 位表示、旧 PageSource/RangeSource 兼容边界见[契约说明](contracts.md)。类型声明与 Node/浏览器条件导出已补齐，Node 专用入口不在浏览器中解析。
 
-## v0.8.2（未发布）
+### 查看器与贡献流程
 
-贡献者提交前和 CI 改为调用 `python tools/verify.py`；保留原 34 项检查及固定/latest 通道，新增维护契约检查。单项脚本继续可独立运行，不能代替完整验收。
+选文件后先读取有界 schema，完整检查需主动点击；未完成对象列表明确标记前缀。记录预览复用核心游标，按磁盘存储顺序展示；导出报告包含范围、预算、版本、完成度及诊断。网站和 HTML 下载版共用源码，开发预览不表示正式发布。
 
-源码目录职责集中在[架构](architecture.md)，当前范围集中在[支持说明](support.md)，历史迁移集中在本页。仅用于旧链接的导航文档已删除，历史文档可在对应 Release 或 tag 查看；公开接口和报告不因文档移动而改变。安装仍使用已发布的 v0.8.0；本地源码和异步构建版本为 0.8.2。
-
-<a id="v090"></a>
-
-## v0.9.0（未发布）
-
-源码与异步 tarball 构建版本为 0.9.0；Mooncakes 安装仍为已发布的 0.8.0，npm registry 未发布，不执行 Release。新增 JS/TS 声明、条件导出和实际安装包的 Node/浏览器示例；Node 专用子入口不再在浏览器条件下解析。
-
-ParameterError 继承 TypeError，kind 为 invalid_argument。JS 中根页/页号越界、超过 max_rows 的扫描 limit、非法配置对象、信号、源结构、closeSources 或 tailPolicy 现在按参数错误拒绝；旧逻辑部分使用 SqliteError('invalid') 或将未知 tailPolicy 静默视为 strict。按 kind 或 errorInfo().category 处理，不再将这些错误视为损坏。打开失败仍清理接管源，非法 options 也不例外；inspectPage 继续返回 incomplete。
-
-errorInfo 与 reportEnvelope 提供错误与报告契约。包装报告新增独立 format_version=1，不改写原始 CLI 或异步报告字段；源接管及旧 PageSource/RangeSource 的兼容边界保持。[契约说明](contracts.md)明确六类错误、完成度、部分结果及实际 64 位字段类型。用 SqliteError('limit_exceeded') 作为 AbortSignal.reason 的截止预算按 budget 分类，普通 AbortSignal 取消仍为 cancelled；查看器的时间预算因此改为 limit_exceeded。
-
-查看器选文件后只读取有界 schema，完整结构检查改为主动操作；旧自动检查流程需点击“完整结构检查”。schema 前缀不会标成完整对象列表。记录预览复用核心游标继续读取，显示磁盘值和存储顺序；导出的 schema、检查与预览状态包含范围、预算、版本、完成状态及诊断。Pages 构建与下载版共用源码，推送不会自动部署；公开部署与 npm/Release 发布仍各需授权。
-
-提交前继续执行 python tools/verify.py。类型验收增加 tools/toolchain.json 固定的 TypeScript 工具；完整入口增加 Pages 目录构建并扩展实际 tarball 和真实浏览器场景，保留原 34 项检查。[贡献指南](../CONTRIBUTING.md)提供依赖准备方式。
+提交前与 CI 使用 `python tools/verify.py`，保留原完整检查并增加维护、类型和浏览器场景。环境准备见[贡献指南](../CONTRIBUTING.md)，当前目录与职责见[架构](architecture.md)，支持范围见[支持说明](support.md)。已发布版本文档仍可从对应 tag 查看。

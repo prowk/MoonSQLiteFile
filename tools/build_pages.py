@@ -12,13 +12,18 @@ def main():
     version = re.search(r'^version = "([^"]+)"', (ROOT/'moon.mod').read_text(encoding='utf-8'), re.M)[1]
     source = ROOT/'_build/moonsqlitefile-viewer.html'
     document = source.read_text(encoding='utf-8')
-    assert f'v{version}' in document
+    assert f'<meta name="moonsqlitefile-version" content="{version}">' in document
     output = ROOT/'_build/pages'
     output.mkdir(exist_ok=True)
     name = f'moonsqlitefile-viewer-{version}.html'
+    # 构建目录只保留当前下载，防止已取消的开发版本附件随部署再次公开。
+    for previous in output.glob('moonsqlitefile-viewer-*.html'):
+        if previous.name != name:
+            previous.unlink()
     # 下载文件与单文件构建逐字节相同；首页仅增加同目录下载入口。
     (output/name).write_bytes(source.read_bytes())
-    link = f'<p><a download href="./{name}">下载本页对应的单文件 HTML（v{version}）</a> · 当前源码版本尚未发布包</p>'
+    label = '开发预览，尚未正式发布' if '-' in version else f'v{version}'
+    link = f'<p><a download href="./{name}">下载本页对应的单文件 HTML</a> · {label}</p>'
     (output/'index.html').write_text(document.replace('<footer>', link+'<footer>'), encoding='utf-8')
     (output/'.nojekyll').write_text('', encoding='utf-8')
     assert (output/name).read_bytes() == source.read_bytes()

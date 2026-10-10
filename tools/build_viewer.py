@@ -28,6 +28,7 @@ def main():
         '__VIEWER_JS__': (source / 'viewer.js').read_text(encoding='utf-8'),
         '__VIEWER_CSS__': (source / 'viewer.css').read_text(encoding='utf-8'),
         '__VERSION__': version,
+        '__BUILD_LABEL__': '开发预览' if '-' in version else f'v{version}',
     }
     document = (source / 'viewer.html').read_text(encoding='utf-8')
     for key, value in replacements.items():
