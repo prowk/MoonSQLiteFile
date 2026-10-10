@@ -1,0 +1,49 @@
+name: Prepare acceptance tools
+description: Read fixed tool versions from tools/toolchain.json
+inputs:
+  channel:
+    description: MoonBit pinned or official latest
+    default: pinned
+runs:
+  using: composite
+  steps:
+    - id: versions
+      shell: bash
+      run: |
+        python - <<'PY'
+        import json, os
+        with open('tools/toolchain.json', encoding='utf-8') as source:
+            versions = json.load(source)
+        with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+            for key, value in versions.items():
+                output.write(f'{key}={value}\n')
+        PY
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ steps.versions.outputs.node }}
+    - uses: actions/setup-python@v6
+      with:
+        python-version: ${{ steps.versions.outputs.python }}
+    - name: Install MoonBit
+      shell: bash
+      env:
+        ACCEPTANCE_CHANNEL: ${{ inputs.channel }}
+        ACCEPTANCE_VERSION: ${{ steps.versions.outputs.install_version }}
+      run: |
+        case "$ACCEPTANCE_CHANNEL" in
+          pinned) version="$ACCEPTANCE_VERSION" ;;
+          latest) version=latest ;;
+          *) exit 1 ;;
+        esac
+        curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s "$version"
+        echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+    - name: Install browser and TypeScript acceptance tools
+      shell: bash
+      env:
+        ACCEPTANCE_PLAYWRIGHT: ${{ steps.versions.outputs.playwright }}
+        ACCEPTANCE_TYPESCRIPT: ${{ steps.versions.outputs.typescript }}
+      run: |
+        npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts "playwright@$ACCEPTANCE_PLAYWRIGHT"
+        node _build/browser-tools/node_modules/playwright/cli.js install --with-deps chromium
+        npm install --prefix _build/type-tools --no-audit --no-fund --ignore-scripts "typescript@$ACCEPTANCE_TYPESCRIPT"
+        echo "MOONSQLITE_PLAYWRIGHT=$GITHUB_WORKSPACE/_build/browser-tools/node_modules/playwright" >> "$GITHUB_ENV"

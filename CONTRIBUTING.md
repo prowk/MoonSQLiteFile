@@ -13,12 +13,10 @@
 使用当前固定浏览器配置时，从仓库根目录准备：
 
 ```sh
-npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
-node _build/browser-tools/node_modules/playwright/cli.js install chromium
-npm install --prefix _build/type-tools --no-audit --no-fund --ignore-scripts typescript@5.9.3
+python tools/prepare_acceptance.py
 ```
 
-Linux CI 安装 Chromium 时另带 `--with-deps` 准备系统依赖。统一入口自动发现上述目录；使用已有安装时以显式环境变量为准。
+Linux 安装可另带 `--with-deps` 准备系统依赖。脚本与 CI 共用 `tools/toolchain.json` 的版本；统一入口自动发现上述目录，使用已有安装时以显式环境变量为准。
 
 
 ## 完整验证

@@ -32,7 +32,7 @@ def anchors(text):
 
 
 def verify_links():
-    # 本地规划和申报草稿不属于公共使用文档。
+    # 本地规划、申报草稿及来源记录不属于公共使用文档。
     paths = [ROOT/'README.md', ROOT/'CONTRIBUTING.md', ROOT/'CHANGELOG.md']
     paths += [path for path in (ROOT/'docs').glob('*.md') if path.name not in {'roadmap.md', 'proposal.md', 'provenance.md'}]
     paths += list((ROOT/'adapters').rglob('README.md')) + list((ROOT/'examples').rglob('README.md'))
@@ -57,7 +57,18 @@ def runner_regressions():
     assert [check for check in CHECKS if check in old] == old, '原 34 项检查缺失或顺序变化'
     ci = (ROOT/'.github/workflows/ci.yml').read_text(encoding='utf-8')
     assert ci.count('run: python tools/verify.py') == 1
-    assert 'toolchain: [pinned, latest]' in ci and 'playwright@1.62.1' in ci
+    assert 'toolchain: [pinned, latest]' in ci
+    setup = (ROOT/'.github/actions/setup-acceptance/action.yml').read_text(encoding='utf-8')
+    pages = (ROOT/'.github/workflows/pages.yml').read_text(encoding='utf-8')
+    assert ci.count('uses: ./.github/actions/setup-acceptance') == 1
+    assert pages.count('uses: ./.github/actions/setup-acceptance') == 1
+    assert 'channel: ${{ matrix.toolchain }}' in ci and 'latest) version=latest' in setup
+    assert "with open('tools/toolchain.json', encoding='utf-8')" in setup
+    for field in ['node', 'python', 'install_version', 'playwright', 'typescript']:
+        assert f'${{{{ steps.versions.outputs.{field} }}}}' in setup
+    for field in ['node', 'python', 'playwright', 'typescript']:
+        version = json.loads((ROOT/'tools/toolchain.json').read_text(encoding='utf-8'))[field]
+        assert version not in ci and version not in pages and version not in setup, '工作流又重复固定版本'
     for command in old:
         assert ' '.join(command) not in ci, 'CI 又维护了第二份检查命令'
     with tempfile.TemporaryDirectory(prefix='runner-regression-', dir=ROOT/'_build') as temporary:

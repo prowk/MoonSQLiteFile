@@ -24,23 +24,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22.14.0'
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13.2'
-      - name: Install fixed acceptance environment
-        run: |
-          version=$(python -c "import json; print(json.load(open('tools/toolchain.json'))['install_version'])")
-          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash -s "$version"
-          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
-          npm install --prefix _build/browser-tools --no-audit --no-fund --ignore-scripts playwright@1.62.1
-          node _build/browser-tools/node_modules/playwright/cli.js install --with-deps chromium
-          npm install --prefix _build/type-tools --no-audit --no-fund --ignore-scripts typescript@5.9.3
+      - uses: ./.github/actions/setup-acceptance
       - name: Verify exact deployment content
-        env:
-          MOONSQLITE_PLAYWRIGHT: ${{ github.workspace }}/_build/browser-tools/node_modules/playwright
         run: python tools/verify.py
       - uses: actions/upload-pages-artifact@v3
         with:
