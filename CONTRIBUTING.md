@@ -10,6 +10,8 @@
 
 真实浏览器准备与 CI 一致的 Playwright/Chromium，或者设置 `MOONSQLITE_PLAYWRIGHT` 为该版本包的绝对路径、`MOONSQLITE_BROWSER` 为符合验收要求的已有浏览器路径。浏览器启动边界见[支持说明](docs/support.md#浏览器启动方式)。CI 负责安装依赖、固定/latest 矩阵及保存产物，项目检查统一在下文入口执行。
 
+历史恢复验收默认使用固定 Playwright 分发中完整 Chromium 的新 headless 模式，需要保留完整 Chromium 下载；仅安装 Headless Shell 不能覆盖真实 BFCache 恢复。
+
 使用当前固定浏览器配置时，从仓库根目录准备：
 
 ```sh

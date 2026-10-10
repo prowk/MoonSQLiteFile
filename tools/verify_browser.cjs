@@ -22,7 +22,8 @@ async function main() {
   });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   const browser = await playwright.chromium.launch({headless: true, ignoreDefaultArgs: ['--disable-back-forward-cache'],
-    ...(process.env.MOONSQLITE_BROWSER ? {executablePath: process.env.MOONSQLITE_BROWSER} : {})});
+    // 完整 Chromium 的新 headless 模式支持真实历史恢复，默认 Headless Shell 不覆盖这一能力。
+    ...(process.env.MOONSQLITE_BROWSER ? {executablePath: process.env.MOONSQLITE_BROWSER} : {channel: 'chromium'})});
   try {
     const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
     const page = await context.newPage();
