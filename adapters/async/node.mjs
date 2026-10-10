@@ -9,7 +9,7 @@ export async function openFileSource(path) {
   const handle = await open(path, 'r');
   try {
     const original = await handle.stat({bigint: true}), pending = new Set();
-    let closed = false;
+    let closed = false, closePromise;
     const source = {
       get closed() { return closed; },
       size: original.size, statistics: {reads: 0, bytes: 0, maxRead: 0},
@@ -41,11 +41,15 @@ export async function openFileSource(path) {
         operation.finally(() => pending.delete(operation)).catch(() => {});
         return withAbort(operation, signal);
       },
-      async close() {
-        if (closed) return;
-        closed = true;
-        await Promise.allSettled([...pending]);
-        await handle.close();
+      close() {
+        if (!closePromise) {
+          closed = true;
+          closePromise = Promise.resolve().then(async () => {
+            await Promise.allSettled([...pending]);
+            await handle.close();
+          });
+        }
+        return closePromise;
       },
     };
     return source;

@@ -56,6 +56,18 @@ async function walLifecycle(file, wal, metadata) {
     const opened = await openDatabase(failedClose, {wal: other, tailPolicy: 'valid_prefix'});
     await assert.rejects(opened.close(), AggregateError);
     assert(failedClose.closed && other.closed); clean();
+    const throwing = memory(baseBytes), waiting = memory(walBytes), entered = Promise.withResolvers(), gate = Promise.withResolvers();
+    let baseCloses = 0, walCloses = 0;
+    throwing.close = function() { baseCloses++; this.closed = true; throw new Error('同步关闭失败'); };
+    waiting.close = async function() { walCloses++; entered.resolve(); await gate.promise; this.closed = true; };
+    const paired = await openDatabase(throwing, {wal: waiting, tailPolicy: 'valid_prefix'});
+    const first = paired.close(), second = paired.close(); assert.equal(first, second);
+    const joined = Promise.allSettled([first, second]);
+    await entered.promise; assert(!waiting.closed); assert.equal(baseCloses, 1); assert.equal(walCloses, 1);
+    gate.resolve(); const closed = await joined;
+    assert(closed.every(item => item.status === 'rejected' && item.reason instanceof AggregateError));
+    assert(waiting.closed); await assert.rejects(paired.close(), AggregateError);
+    assert.equal(baseCloses, 1); assert.equal(walCloses, 1); clean();
   }
 }
 async function compare(file, wal, prefix = false) {
@@ -359,6 +371,33 @@ async function transportedReports() {
   }
   clean();
 }
+async function sharedClose() {
+  const bytes = new Uint8Array(fs.readFileSync('fixtures/core.sqlite'));
+  for (const fails of [false, true]) {
+    const source = memory(bytes), gate = Promise.withResolvers(), entered = Promise.withResolvers();
+    const expected = new Error('关闭失败必须在后续重复关闭中保持');
+    let calls = 0;
+    source.close = async function() { calls++; entered.resolve(); await gate.promise; this.closed = true; if (fails) throw expected; };
+    const db = await openDatabase(source);
+    const first = db.close(), second = db.close(); assert.equal(first, second);
+    let settled = false;
+    const joined = Promise.allSettled([first, second]).then(result => { settled = true; return result; });
+    await entered.promise; await sleep(10); assert(!settled); assert.equal(calls, 1);
+    assert.throws(() => db.scan(2), SourceError);
+    gate.resolve(); const result = await joined;
+    assert(result.every(item => fails ? item.status === 'rejected' && item.reason === expected : item.status === 'fulfilled'));
+    assert.equal(db.close(), first);
+    if (fails) await assert.rejects(db.close(), error => error === expected); else await db.close();
+    assert.equal(calls, 1); clean();
+  }
+  const source = memory(bytes), gate = Promise.withResolvers();
+  source.close = async function() { await gate.promise; this.closed = true; };
+  const cached = new CachedSource(source), first = cached.close();
+  assert.equal(cached.close(), first); gate.resolve(); await first; assert(source.closed);
+  const node = await openFileSource('fixtures/core.sqlite');
+  const read = node.read(0n, bytes.length), closed = node.close();
+  assert.equal(node.close(), closed); await read; await closed; assert(node.closed);
+}
 if (process.argv[2] === '--snapshot') {
   const metadata = await compare(process.argv[3], process.argv[4], process.argv[5] === 'prefix');
   await walLifecycle(process.argv[3], process.argv[4], metadata);
@@ -372,6 +411,7 @@ if (process.argv[2] === '--snapshot') {
   await lifecycle();
   await parameters();
   await reportContract();
+  await sharedClose();
   await transportedReports();
   await callbackOrigins();
   console.log(`Verified async/sync equivalence for ${fixtures.length} fixtures, cancellation, backpressure, failures, budgets, cache and release`);

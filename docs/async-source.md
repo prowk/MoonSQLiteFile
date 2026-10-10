@@ -100,3 +100,5 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 
 
 summary、页面结果、issue 和 WAL 声明提供常用命名字段及可判别联合；WAL 报告偏移仍为 number 或十进制文本。低层 Database/WalSource 构造器仅支持真实核心桥接和其生成句柄，常规接入使用 openDatabase。类型收紧可能暴露原消费代码的错误访问，见迁移说明。
+
+Database、CachedSource、WalSource 和 Node 文件源的重复 `close()` 共享同一个 Promise，全部调用者等待同一次资源释放。关闭开始后拒绝新数据库操作；关闭失败后重复调用仍拒绝同一个错误，不自动重试。WAL 两个宿主均会尝试关闭，同步抛错不会阻止另一方清理。

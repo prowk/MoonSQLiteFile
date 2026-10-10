@@ -182,10 +182,12 @@ export class CachedSource {
     }
     return output;
   }
-  async close() {
-    if (this.closed) return;
-    this.closed = true; this.blocks.clear(); this.statistics.residentPages = 0;
-    if (this.closeSource) await this.source.close?.();
+  close() {
+    if (!this.closePromise) {
+      this.closed = true; this.blocks.clear(); this.statistics.residentPages = 0;
+      this.closePromise = Promise.resolve().then(() => this.closeSource ? this.source.close?.() : undefined);
+    }
+    return this.closePromise;
   }
 }
 function bridge(core, request, bytes) {
@@ -220,12 +222,20 @@ export class WalSource {
     }
     return output;
   }
-  async close() {
-    if (this.closed) return;
-    this.closed = true; bridge(this.core, {op: 'index-close', id: this.index});
-    const closed = await Promise.allSettled([this.base.close?.(), this.wal.close?.()]);
-    const errors = closed.filter(result => result.status === 'rejected').map(result => result.reason);
-    if (errors.length) throw new AggregateError(errors, '一个或多个 WAL 配对宿主源关闭失败');
+  close() {
+    if (!this.closePromise) {
+      this.closed = true;
+      this.closePromise = Promise.resolve().then(async () => {
+        const closed = await Promise.allSettled([
+          Promise.resolve().then(() => bridge(this.core, {op: 'index-close', id: this.index})),
+          Promise.resolve().then(() => this.base.close?.()),
+          Promise.resolve().then(() => this.wal.close?.()),
+        ]);
+        const errors = closed.filter(result => result.status === 'rejected').map(result => result.reason);
+        if (errors.length) throw new AggregateError(errors, '一个或多个 WAL 配对宿主源关闭失败');
+      });
+    }
+    return this.closePromise;
   }
 }
 async function openWal(base, wal, options, core) {
@@ -327,8 +337,12 @@ export class Database {
     this.core = core; this.id = handle.id; this.header = handle.header; this.source = source; this.options = options;
     this.closed = false; this.controller = new AbortController(); this.scans = new Set();
   }
-  assertOpen() { if (this.closed) throw new SourceError('host_failure', '数据库已关闭'); }
-  call(request, bytes, context = true) { this.assertOpen(); return bridge(this.core, {...request, ...(context ? {id: this.id} : {})}, bytes); }
+  assertOpen() { if (this.closed || this.closePromise) throw new SourceError('host_failure', '数据库已关闭或正在关闭'); }
+  call(request, bytes, context = true) {
+    // 关闭中的内部游标仍须提交取消和释放，新的公开操作由 assertOpen 拒绝。
+    if (this.closed) throw new SourceError('host_failure', '数据库已关闭');
+    return bridge(this.core, {...request, ...(context ? {id: this.id} : {})}, bytes);
+  }
   async readPage(page, signal) {
     this.assertOpen();
     signal = AbortSignal.any([this.controller.signal, ...(signal ? [signal] : [])]);
@@ -418,12 +432,21 @@ export class Database {
       this.scans.delete(job); resolve();
     }
   }
-  async close() {
-    if (this.closed) return;
-    this.controller.abort();
-    await Promise.allSettled([...this.scans].map(scan => scan.return()));
-    bridge(this.core, {op: 'close', id: this.id}); this.closed = true;
-    await this.source.close?.();
+  close() {
+    if (!this.closePromise) {
+      // 同步登记共享 Promise；所有调用者都等待同一次关闭，包括同一次失败。
+      this.closePromise = Promise.resolve().then(async () => {
+        await Promise.allSettled([...this.scans].map(scan => scan.return()));
+        const errors = [];
+        try { bridge(this.core, {op: 'close', id: this.id}); } catch (error) { errors.push(error); }
+        this.closed = true;
+        try { await this.source.close?.(); } catch (error) { errors.push(error); }
+        if (errors.length === 1) throw errors[0];
+        if (errors.length > 1) throw new AggregateError(errors, '数据库及宿主源关闭失败');
+      });
+      this.controller.abort();
+    }
+    return this.closePromise;
   }
 }
 /** 从异步静态源打开库及可选 WAL；默认接管源，失败时清理。closeSources:false 保留原始源，初始化失败没有可用 Database。 */
