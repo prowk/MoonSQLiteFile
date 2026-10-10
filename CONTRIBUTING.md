@@ -8,6 +8,8 @@
 
 固定验收版本及宿主范围由[支持说明](docs/support.md)和 [tools/toolchain.json](tools/toolchain.json)维护。使用对应 MoonBit、Node 和 Python；本机已有安装先运行 `python tools/verify_toolchain.py` 核对，避免覆盖全局环境。latest 通道须安装官方 latest 或核实安装与官方当前分发完全一致，不能只改环境变量冒充新工具链。
 
+全目标构建中的 native 后端还需要可用的 C 编译和链接驱动，以及对应平台的头文件与库。准备 MoonBit 支持的 `cc`、`gcc` 或 `clang`；若驱动不在 PATH，可通过 `MOON_CC` 指定。出现 `no system C compiler found` 时先补齐这项环境依赖，再重新执行完整验证。
+
 真实浏览器准备与 CI 一致的 Playwright/Chromium，或者设置 `MOONSQLITE_PLAYWRIGHT` 为该版本包的绝对路径、`MOONSQLITE_BROWSER` 为符合验收要求的已有浏览器路径。浏览器启动边界见[支持说明](docs/support.md#浏览器启动方式)。CI 负责安装依赖、固定/latest 矩阵及保存产物，项目检查统一在下文入口执行。
 
 历史恢复验收默认使用固定 Playwright 分发中完整 Chromium 的新 headless 模式，需要保留完整 Chromium 下载；仅安装 Headless Shell 不能覆盖真实 BFCache 恢复。
