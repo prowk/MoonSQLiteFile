@@ -42,3 +42,5 @@ WAL 检查报告中的 frames[].byte_offset、stop_offset、trailing_bytes 在�
 visitor/进度回调异常的来源由调用边界确定，自带 kind 不改变宿主分类；cause 保留原异常。`errorInfo` 单独转换已知错误或可信描述，不足以鉴别任意外部对象的真实来源。数据库及接管源重复关闭共享 Promise，包括同一次失败。
 
 先 reportEnvelope，再 JSON.stringify、structuredClone 或 Worker.postMessage；包装后的 diagnostics 随结果传输，不依赖 WeakMap。诊断截断时仍保留捕获的停止来源，不覆盖此前损坏；多个来源失败可同时存在，partial 与 failed 可同时成立。
+
+查看器在创建游标时冻结实际数量、累计 payload 和时间预算；续读预算变化必须重新预览。schema/预览数量不超过打开时 max_rows，报告同时保留请求上限与实际上限。展示字段/字符和大值批次限制在 Worker 传输前执行，库返回值保持完整；具体界限见[查看器说明](../examples/offline-viewer/README.md#记录预览与导出)。
