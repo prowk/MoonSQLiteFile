@@ -13,7 +13,9 @@ export async function openFileSource(path) {
     const source = {
       get closed() { return closed; },
       size: original.size, statistics: {reads: 0, bytes: 0, maxRead: 0},
-      async read(offset, count, {signal} = {}) {
+      async read(offset, count, options = {}) {
+        if (!options || typeof options !== 'object' || Array.isArray(options)) throw new ParameterError('options 必须为配置对象');
+        const {signal} = options;
         checkAbort(signal);
         if (closed) throw new SourceError('host_failure', '文件源已关闭');
         if (typeof offset !== 'bigint' || !Number.isInteger(count) || count < 0 || count > 2147483647 ||

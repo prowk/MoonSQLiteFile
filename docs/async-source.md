@@ -102,3 +102,5 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 summary、页面结果、issue 和 WAL 声明提供常用命名字段及可判别联合；WAL 报告偏移仍为 number 或十进制文本。低层 Database/WalSource 构造器仅支持真实核心桥接和其生成句柄，常规接入使用 openDatabase。类型收紧可能暴露原消费代码的错误访问，见迁移说明。
 
 Database、CachedSource、WalSource 和 Node 文件源的重复 `close()` 共享同一个 Promise，全部调用者等待同一次资源释放。关闭开始后拒绝新数据库操作；关闭失败后重复调用仍拒绝同一个错误，不自动重试。WAL 两个宿主均会尝试关闭，同步抛错不会阻止另一方清理。
+
+取消参数只接受真实 AbortSignal 或省略；null、0、普通对象及仿造 signal 均按 ParameterError 拒绝，无效参数不增加 I/O。`inspectPage` 保留 incomplete 返回协议，错误信息中的 kind 为 invalid_argument。visitor 和进度回调异常在宿主边界转换为 SourceError(host_failure)，原异常保存在 cause；即使它自带 invalid、unsupported 或 cancelled 等 kind，也不代表核心损坏、能力边界或实际取消。

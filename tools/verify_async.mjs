@@ -398,6 +398,37 @@ async function sharedClose() {
   const read = node.read(0n, bytes.length), closed = node.close();
   assert.equal(node.close(), closed); await read; await closed; assert(node.closed);
 }
+async function signalContract() {
+  const bytes = new Uint8Array(fs.readFileSync('fixtures/core.sqlite'));
+  const source = memory(bytes), db = await openDatabase(source, {blockSize: 100});
+  const fake = {aborted: false, addEventListener() {}, removeEventListener() {}};
+  try {
+    const reads = source.reads.length;
+    for (const signal of [null, 0, false, {}, fake]) {
+      await assert.rejects(db.readPage(1, signal), ParameterError);
+      const result = await db.inspectPage(1, {signal});
+      assert.equal(result.status, 'incomplete'); assert.equal(result.error.kind, 'invalid_argument');
+      assert.equal(reportEnvelope(result, {scope: 'page'}).diagnostics[0].category, 'argument');
+      assert.throws(() => db.scan(1, {signal}), ParameterError);
+      await assert.rejects(db.schema({signal}), ParameterError);
+      await assert.rejects(db.inspectDatabase({signal}), ParameterError);
+      await assert.rejects(readExact(source, 0n, 1, signal), ParameterError);
+    }
+    assert.equal(source.reads.length, reads, '无效信号不得增加 I/O');
+    for (const options of [null, false, []]) {
+      assert.equal((await db.inspectPage(1, options)).error.kind, 'invalid_argument');
+      for (const wrapped of [new BlobSource(new Blob([bytes])), new CachedSource(memory(bytes))]) {
+        await assert.rejects(wrapped.read(0n, 1, options), ParameterError); await wrapped.close();
+      }
+    }
+    const cancelled = AbortSignal.abort();
+    await assert.rejects(db.readPage(1, cancelled), CancelledError);
+    const deadline = AbortSignal.abort(new SqliteError('limit_exceeded', '预算截止'));
+    await assert.rejects(db.readPage(1, deadline), error => error.kind === 'limit_exceeded');
+    assert.equal(source.reads.length, reads);
+  } finally { await db.close(); }
+  clean();
+}
 if (process.argv[2] === '--snapshot') {
   const metadata = await compare(process.argv[3], process.argv[4], process.argv[5] === 'prefix');
   await walLifecycle(process.argv[3], process.argv[4], metadata);
@@ -411,6 +442,7 @@ if (process.argv[2] === '--snapshot') {
   await lifecycle();
   await parameters();
   await reportContract();
+  await signalContract();
   await sharedClose();
   await transportedReports();
   await callbackOrigins();

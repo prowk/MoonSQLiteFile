@@ -53,6 +53,10 @@ export function checkAbort(signal) {
 }
 function validateSignal(signal) {
   if (signal !== undefined && (!signal || typeof signal.aborted !== 'boolean' || typeof signal.addEventListener !== 'function' || typeof signal.removeEventListener !== 'function')) throw new ParameterError('signal 必须为 AbortSignal');
+  if (signal !== undefined) {
+    try { Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted').get.call(signal); }
+    catch { throw new ParameterError('signal 必须为 AbortSignal'); }
+  }
 }
 function optionsObject(options) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new ParameterError('options 必须为配置对象');
@@ -134,7 +138,8 @@ export class BlobSource {
     this.blob = blob; this.size = BigInt(blob.size); this.closed = false;
     this.statistics = {reads: 0, bytes: 0, maxRead: 0};
   }
-  async read(offset, count, {signal} = {}) {
+  async read(offset, count, options = {}) {
+    optionsObject(options); const {signal} = options;
     checkAbort(signal); range(this.size, offset, count);
     if (this.closed) throw new SourceError('host_failure', 'Blob 源已关闭');
     const bytes = new Uint8Array(await withAbort(this.blob.slice(Number(offset), Number(offset) + count).arrayBuffer(), signal));
@@ -148,7 +153,10 @@ export class BlobSource {
 }
 /** 有界 FIFO 块缓存；返回副本，失败/取消不缓存，closeSources 控制是否关闭被包装源。 */
 export class CachedSource {
-  constructor(source, {blockSize = 4096, cachePages = 256, closeSource = true} = {}) {
+  constructor(source, options = {}) {
+    optionsObject(options);
+    const {blockSize = 4096, cachePages = 256, closeSource = true} = options;
+    if (typeof closeSource !== 'boolean') throw new ParameterError('closeSource 必须为 boolean');
     if (!source || typeof source.read !== 'function') throw new ParameterError('source 必须实现异步范围读取');
     if (!Number.isInteger(blockSize) || blockSize < 1 || blockSize > 65536 ||
         !Number.isInteger(cachePages) || cachePages < 1 || cachePages > 1048576) throw new ParameterError('缓存预算无效');
@@ -157,7 +165,8 @@ export class CachedSource {
     this.blocks = new Map(); this.closed = false; this.closeSource = closeSource;
     this.statistics = {hits: 0, misses: 0, bytes: 0, residentPages: 0};
   }
-  async read(offset, count, {signal} = {}) {
+  async read(offset, count, options = {}) {
+    optionsObject(options); const {signal} = options;
     checkAbort(signal); range(this.size, offset, count);
     if (this.closed) throw new SourceError('host_failure', '缓存源已关闭');
     const output = new Uint8Array(count);
@@ -207,7 +216,8 @@ export class WalSource {
     this.size = BigInt(index.size); this.pageSize = index.page_size; this.pageCount = index.page_count;
     this.inspection = report; this.closed = false;
   }
-  async read(offset, count, {signal} = {}) {
+  async read(offset, count, options = {}) {
+    optionsObject(options); const {signal} = options;
     checkAbort(signal); range(this.size, offset, count);
     if (this.closed) throw new SourceError('host_failure', 'WAL 快照已关闭');
     const output = new Uint8Array(count);
@@ -345,13 +355,14 @@ export class Database {
   }
   async readPage(page, signal) {
     this.assertOpen();
-    signal = AbortSignal.any([this.controller.signal, ...(signal ? [signal] : [])]);
+    validateSignal(signal);
     integer(page, 'page');
     if (page > this.header.page_count) throw new ParameterError('页号越界');
+    signal = AbortSignal.any([this.controller.signal, ...(signal === undefined ? [] : [signal])]);
     return readExact(this.source, BigInt(page - 1) * BigInt(this.header.page_size), this.header.page_size, signal);
   }
-  async inspectPage(page, {signal} = {}) {
-    try { return this.call({op: 'page-inspect', page}, await this.readPage(page, signal)); }
+  async inspectPage(page, options = {}) {
+    try { optionsObject(options); return this.call({op: 'page-inspect', page}, await this.readPage(page, options.signal)); }
     catch (error) { return {...failure(error), status: 'incomplete', page: null, statistics: null,
       diagnostic: {code: 'page_read', page_number: page, byte_offset: null, cell_index: null,
         error_kind: error instanceof SqliteError ? error.kind : 'unsupported', message: error.message}}; }
