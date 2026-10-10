@@ -1,6 +1,22 @@
 // 每个 Worker 拥有一个静态快照；主线程切换文件时关闭旧快照并释放资源。
 let database = null, operation = null, preview = null, previewController = null, previewBudgets = null, databaseBudgets = null;
 let dbSource, walSource;
+const DISPLAY_CHARACTERS = 262144, DISPLAY_FIELDS = 128, BATCH_PAYLOAD = 4194304n;
+function displayRecord(record, valueLimit, budget) {
+  const values = [];
+  for (const value of record.values.slice(0, DISPLAY_FIELDS)) {
+    const text = String(value.value), remaining = DISPLAY_CHARACTERS - budget.used;
+    const canTruncate = value.type === 'text' || value.type === 'blob';
+    if (remaining <= 0 || !canTruncate && remaining < text.length) { budget.exhausted = true; break; }
+    const count = canTruncate ? Math.min(text.length, valueLimit, remaining) : text.length;
+    // split/join 复制前缀，避免短子串继续持有完整大值的底层字符串。
+    values.push({...value, value: count < text.length ? text.slice(0, count).split('').join('') : value.value,
+      original_characters: text.length, truncated: count < text.length});
+    budget.used += count;
+  }
+  if (budget.used === DISPLAY_CHARACTERS) budget.exhausted = true;
+  return {...record, values, total_fields: record.values.length};
+}
 function statistics(dbSource, walSource) {
   return {db: dbSource.statistics, wal: walSource?.statistics ?? null,
     handles: compiledCore({op: 'stats'}).result};
@@ -54,6 +70,9 @@ self.onmessage = async ({data: message}) => {
       self.postMessage({id: message.id, result: {stopped: true}});
     } else if (message.op === 'preview') {
       if (!database) throw new ParameterError('尚未打开数据库');
+      const valueLimit = message.valueLimit ?? 256;
+      if (!Number.isInteger(message.batch) || message.batch < 1 || message.batch > 100 ||
+        !Number.isInteger(valueLimit) || valueLimit < 16 || valueLimit > 4096) throw new ParameterError('预览批次或显示字符预算无效');
       if (!message.reset && preview && (message.limit !== previewBudgets.requested_limit ||
         message.root !== previewBudgets.root || String(message.payload) !== previewBudgets.max_total_payload_bytes || message.timeout !== previewBudgets.timeout_seconds)) {
         throw new ParameterError('预览预算已更改，请重新预览；继续读取只使用创建游标时的预算');
@@ -72,21 +91,31 @@ self.onmessage = async ({data: message}) => {
             max_total_payload_bytes: previewBudgets.max_total_payload_bytes, signal: controller.signal});
         }
         // 每批只拉取请求条数；保留原始记录和游标，不为继续读取重新扫描前缀。
-        const records = [];
+        const records = [], display = {used: 0, exhausted: false};
+        const initialPayload = BigInt(preview.progress.payload_bytes);
+        let payloadPaused = false;
         let error;
         try {
           for (let index = 0; index < message.batch; index++) {
             checkAbort(controller.signal);
             const event = await preview.next();
             if (event.done) break;
-            records.push(event.value);
+            records.push(displayRecord(event.value, valueLimit, display));
+            // 大值每批至多跨过一次 4 MiB 门槛；一条记录仍按打开时的单条预算完整解码。
+            payloadPaused = BigInt(preview.progress.payload_bytes)-initialPayload >= BATCH_PAYLOAD;
+            if (display.exhausted || payloadPaused) break;
           }
           // 已知累计记录预算用尽时只取停止摘要，不预读下一条记录。
           if (!preview.result && preview.progress.records_read >= previewBudgets.limit) await preview.next();
         } catch (failure) { error = errorInfo(failure); await preview.return(); }
-        const result = {records, progress: preview.progress, result: preview.result, more: !preview.result, error};
+        const result = {records, progress: preview.progress, result: preview.result, more: !preview.result, error,
+          display: {characters: display.used, max_characters: DISPLAY_CHARACTERS, max_fields: DISPLAY_FIELDS,
+            value_characters: valueLimit, paused_at_display_budget: display.exhausted,
+            batch_payload_threshold: String(BATCH_PAYLOAD), paused_at_payload_threshold: payloadPaused}};
         result.export = reportEnvelope(preview.result ?? {...preview.progress, status: 'incomplete', reason: 'preview_paused'},
-          {scope: 'records', budgets: {...previewBudgets, batch_records: message.batch}});
+          {scope: 'records', budgets: {...previewBudgets, batch_records: message.batch,
+            display_value_characters: valueLimit, display_max_fields: DISPLAY_FIELDS, display_max_characters: DISPLAY_CHARACTERS,
+            display_batch_payload_threshold: String(BATCH_PAYLOAD)}});
         self.postMessage({id: message.id, result});
       } finally { clearTimeout(timer); if (operation === controller) operation = null; }
     } else if (message.op === 'page') {

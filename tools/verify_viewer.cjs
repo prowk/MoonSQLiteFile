@@ -76,6 +76,14 @@ function cli(command) {
   assert.equal(continued.export.budgets.limit, 3); assert.equal(continued.export.budgets.max_total_payload_bytes, '67108864');
   assert.equal(continued.export.budgets.timeout_seconds, 120); assert.equal(continued.export.budgets.max_payload_bytes, 16777216);
   assert.deepEqual(JSON.parse(JSON.stringify(continued.export)), continued.export);
+  const bounded = (await send({...request, root: 143, valueLimit: 16})).result;
+  assert.equal(bounded.records[0].values[0].value.length, 16);
+  assert(bounded.records[0].values[0].truncated); assert(bounded.records[0].values[0].original_characters > 16);
+  assert.equal(bounded.export.budgets.display_value_characters, 16);
+  const original = await api.openDatabase(new api.BlobSource(new Blob([demo])));
+  const originalScan = original.scan(143);
+  assert((await originalScan.next()).value.values[0].value.length > 16, '库的原始记录不得被展示截断改变');
+  await originalScan.return(); await original.close();
   await send({op: 'close'});
   const restricted = (await open(2)).result;
   assert.equal(restricted.export.budgets.limit, 2); assert.equal(restricted.export.budgets.requested_limit, 100);

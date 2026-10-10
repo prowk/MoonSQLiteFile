@@ -9,7 +9,7 @@ const {performance} = require('node:perf_hooks');
 const root = path.resolve(__dirname, '..');
 const playwrightPath = process.env.MOONSQLITE_PLAYWRIGHT || 'playwright';
 const playwright = require(playwrightPath);
-assert.equal(require(path.join(playwrightPath, 'package.json')).version, '1.62.1');
+assert.equal(require(path.join(playwrightPath, 'package.json')).version, JSON.parse(fs.readFileSync(path.join(root, 'tools/toolchain.json'), 'utf8')).playwright);
 const pagePath = path.join(root, '_build/pages/index.html');
 const fixtures = path.join(root, '_build/browser-acceptance');
 async function main() {
@@ -21,7 +21,7 @@ async function main() {
     response.end(fs.readFileSync(name ? path.join(root, '_build/pages', name) : pagePath));
   });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
-  const browser = await playwright.chromium.launch({headless: true,
+  const browser = await playwright.chromium.launch({headless: true, ignoreDefaultArgs: ['--disable-back-forward-cache'],
     ...(process.env.MOONSQLITE_BROWSER ? {executablePath: process.env.MOONSQLITE_BROWSER} : {})});
   try {
     const context = await browser.newContext({viewport: {width: 1440, height: 1000}});
@@ -31,6 +31,8 @@ async function main() {
     await page.addInitScript(() => {
       // 只记录公开 Worker 消息与终止，不访问解析器内部状态。
       window.browserEvidence = {created: 0, terminated: 0, closed: [], results: [], progress: []};
+      window.historyRestorations = [];
+      window.addEventListener('pageshow', event => window.historyRestorations.push(event.persisted));
       const WorkerClass = window.Worker;
       window.Worker = class extends WorkerClass {
         constructor(...args) {
@@ -82,7 +84,7 @@ async function main() {
     const exported = page.waitForEvent('download'); await page.locator('#export').click();
     const saved = path.join(fixtures, 'schema-export.json'); await (await exported).saveAs(saved);
     const envelope = JSON.parse(fs.readFileSync(saved, 'utf8'));
-    assert.equal(envelope.scope, 'schema'); assert(envelope.partial); assert.equal(envelope.tool_version, sourceVersion);
+    assert.equal(envelope.scope, 'schema'); assert(envelope.partial); assert.equal(envelope.tool_version, /^version = "([^"]+)"/m.exec(fs.readFileSync(path.join(root, 'moon.mod'), 'utf8'))[1]);
     assert(envelope.diagnostics.some(item => item.category === 'budget'));
     await page.locator('#schema-limit').fill('100'); await page.locator('#open').click(); await done('ready');
     await page.locator('#objects').selectOption('49');
@@ -95,7 +97,7 @@ async function main() {
     await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 4 条'));
     assert.equal(await page.locator('#records article').count(), 2); assert.notEqual(await page.locator('#records').textContent(), first);
     await page.locator('#preview-next').click();
-    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('record_limit'));
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('达到累计记录上限'));
     assert.equal(await page.locator('#records article').count(), 1); assert(await page.locator('#preview-next').isDisabled());
     // WITHOUT ROWID 的 rowid 为空，展示明确保留磁盘顺序而非 SQL 列名。
     await page.locator('#objects').selectOption('88');
@@ -181,6 +183,57 @@ async function main() {
     await page.locator('#max-pages').fill('1'); await page.locator('#start').click(); await done('incomplete');
     data = await page.evaluate(() => window.browserEvidence.results.at(-1));
     assert.equal(data.inspection.pages.length, 0); assert.equal(data.inspection.records_decoded, 0);
+    // 无根页对象可查看定义，但不提供记录操作；长名称和窄屏不得撑开文档。
+    await page.locator('#max-pages').fill('100000'); await page.locator('#max-rows').fill('100000');
+    await page.locator('#timeout').fill('120'); await page.locator('#max-payload').fill('64');
+    await choose('#file', path.join(fixtures, 'objects.sqlite')); await done('complete');
+    for (const name of ['event_view', 'event_trigger', 'event_search']) {
+      const value = await page.locator('#objects option').filter({hasText: name}).first().getAttribute('value');
+      await page.locator('#objects').selectOption(value);
+      assert(await page.locator('#preview-start').isDisabled());
+      assert((await page.locator('#object-info').textContent()).includes('没有 B-tree 根页'));
+      assert(await page.locator('#object-definition').isVisible());
+    }
+    await page.locator('#objects').selectOption('2');
+    await page.locator('#preview-limit').fill('5'); await page.locator('#preview-batch').fill('2');
+    await page.locator('#preview-start').focus(); await page.keyboard.press('Space');
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 2 条'));
+    await page.locator('#preview-limit').fill('3'); assert(await page.locator('#preview-next').isDisabled());
+    const priorDownload = page.waitForEvent('download'); await page.locator('#preview-export').click();
+    const priorPath = path.join(fixtures, 'prior-budget-export.json'); await (await priorDownload).saveAs(priorPath);
+    assert.equal(JSON.parse(fs.readFileSync(priorPath, 'utf8')).budgets.limit, 5);
+    await page.locator('#preview-start').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 2 条') && !document.querySelector('#preview-start').disabled);
+    await page.locator('#preview-next').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('达到累计记录上限'));
+    for (const width of [1440, 1024, 390]) {
+      await page.setViewportSize({width, height: 1000});
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth+1));
+      await page.screenshot({path: path.join(fixtures, `viewer-responsive-${width}.png`), fullPage: true});
+    }
+    await page.locator('#page-number').fill('1'); await page.locator('#page-number').focus();
+    await page.keyboard.press('Enter'); await page.waitForFunction(() => document.querySelector('#page-title').textContent === '页面 1');
+    await page.locator('#demo').focus(); await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'open');
+    assert.equal(await page.locator('#open').evaluate(element => getComputedStyle(element).outlineWidth), '3px');
+    await page.locator('#max-rows').fill('2'); assert(await page.locator('#preview-start').isDisabled());
+    await page.locator('#open').click(); await done('ready');
+    let restricted = await page.evaluate(() => window.browserEvidence.results.at(-1));
+    assert.equal(restricted.export.budgets.limit, 2); assert.equal(restricted.export.budgets.requested_limit, 100);
+    await page.locator('#objects').selectOption('2'); await page.locator('#preview-start').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('实际累计上限 2'));
+    assert(await page.locator('#preview-next').isDisabled());
+    // 真正的历史恢复必须触发 persisted，而不是用合成事件替代 bfcache。
+    await page.goto('about:blank'); await page.goBack({waitUntil: 'commit'}); await done('ready');
+    assert(await page.evaluate(() => window.historyRestorations.at(-1) === true));
+    assert((await page.locator('#files').textContent()).includes('objects.sqlite'));
+    await page.goForward(); assert.equal(page.url(), 'about:blank');
+    await page.goBack({waitUntil: 'commit'}); await done('ready');
+    assert(await page.evaluate(() => window.historyRestorations.at(-1) === true));
+    await page.locator('#objects').selectOption('2'); await page.locator('#preview-start').click();
+    await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('实际累计上限 2'));
+    evidence.push({case: 'rootless_objects_keyboard_responsive_and_history', widths: [1440, 1024, 390], persisted_restorations: 2,
+      schema_limit: restricted.export.budgets.limit, previous_preview_budget_preserved: true});
     const lifecycle = await page.evaluate(() => window.browserEvidence);
     assert(lifecycle.closed.length > 0);
     for (const handles of lifecycle.closed) assert(Object.values(handles).every(count => count === 0));

@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta name="moonsqlitefile-version" content="__VERSION__">
 <meta charset="utf-8">
+<meta name="moonsqlitefile-version" content="__VERSION__">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; worker-src blob:; img-src data:; connect-src 'none'">
 <title>MoonSQLiteFile · 离线检查器</title>
@@ -16,10 +16,10 @@
 <p id="status" role="status" aria-live="polite">等待选择数据库。</p>
 <section id="overview" hidden><div class="metrics" id="metrics"></div><p class="scope" id="scope"></p></section>
 <div class="workspace" id="workspace" hidden>
-<aside class="panel"><h2>对象与诊断</h2><label for="objects">跳到对象根页</label><select id="objects" aria-label="跳到对象根页"></select><div id="kinds" class="kind-list"></div><h3>检查诊断</h3><div id="issues"></div></aside>
+<aside class="panel"><h2>对象与诊断</h2><label for="objects">选择对象</label><select id="objects" aria-label="选择对象"></select><p id="object-info" class="scope"></p><details id="object-definition" hidden><summary>原始 SQL 定义</summary><pre id="object-sql"></pre></details><div id="kinds" class="kind-list"></div><h3>检查诊断</h3><div id="issues"></div></aside>
 <section class="panel page-panel"><div class="page-heading"><h2 id="page-title">页面</h2><div class="pager"><button id="previous" aria-label="上一页">←</button><label for="page-number">页号</label><input id="page-number" type="number" min="1" value="1"><button id="go">跳转</button><button id="next" aria-label="下一页">→</button></div></div><p id="owner"></p><nav id="links" aria-label="页面关系"></nav><p id="page-status" role="status"></p><div id="space" class="space"></div><div id="statistics"></div><div class="raw-heading"><h3>原始字节</h3><div><label for="cells">定位 cell</label><select id="cells"></select><button id="raw-previous">上一段</button><button id="raw-next">下一段</button></div></div><pre id="raw" aria-label="页面原始字节"></pre></section>
 </div>
-<section id="preview-panel" class="panel" hidden><h2>原始记录预览</h2><p>按当前对象的磁盘存储顺序展示，值以字段序号标记；WITHOUT ROWID 与索引记录不是 SQL 列顺序。rowid 单独显示，不执行 SQL 或解析完整 DDL。</p><div class="budgets"><label>每批记录<input id="preview-batch" type="number" min="1" max="100" value="20"></label><label>累计记录上限<input id="preview-limit" type="number" min="1" max="10000" value="200"></label><label>每个值最多显示字符<input id="value-limit" type="number" min="16" max="4096" value="256"></label></div><button id="preview-start">预览所选对象</button><button id="preview-next" disabled>继续读取</button><button id="preview-export" disabled>导出预览状态</button><p id="preview-status" role="status"></p><div id="records"></div></section>
+<section id="preview-panel" class="panel" hidden><h2>原始记录预览</h2><p>值按磁盘存储顺序显示，rowid 单独列出。WITHOUT ROWID 和索引记录不等于 SQL 列顺序。</p><div class="budgets"><label>每批记录<input id="preview-batch" type="number" min="1" max="100" value="20"></label><label>累计记录上限<input id="preview-limit" type="number" min="1" max="10000" value="200"></label><label>每个值最多显示字符<input id="value-limit" type="number" min="16" max="4096" value="256"></label></div><div class="preview-actions"><button id="preview-start" disabled>预览所选对象</button><button id="preview-next" disabled>继续读取</button><button id="preview-export" disabled>导出预览状态</button></div><p id="preview-status" role="status" aria-live="polite"></p><p class="scope">每条最多展示 128 个字段，每批最多展示 262144 字符；到达展示上限时可继续读取。更改累计预算后重新预览；字段显示截断不改变库的原始记录。</p><div id="records"></div></section>
 <footer>完成状态仅表示当前结构检查范围完成，不等同于 SQLite integrity_check。文件内容不会离开本页面。</footer>
 </main>
 <script id="parser-source" type="application/json">__PARSER_SOURCE__</script>

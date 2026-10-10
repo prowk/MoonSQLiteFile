@@ -4,3 +4,13 @@
 
 /* 长文本仅在当前记录批次内换行，不撑开页面导航。 */
 #preview-panel{margin-top:20px}.record{padding:14px 0;border-top:1px solid #dbe5eb;overflow-wrap:anywhere}.record ol{padding-left:28px}.record li{font:12px/1.8 Consolas,"Microsoft YaHei",monospace}a{color:#167a79}
+
+/* 提高常用信息的可读性；窄屏仍保留本地处理说明和全部操作。 */
+:root{font-size:15px;line-height:1.65}main{padding-top:30px}h2{font-size:19px}h3{font-size:15px}.panel{padding:24px}
+.scope,aside label,.empty,.actions small,.payload,#owner,#page-status,.issue{font-size:13px}.brand span:not(.mark),.local{font-size:13px}
+button,.primary{min-height:42px}.actions{max-width:420px}.actions>label:not(.primary){flex-basis:100%;display:flex;align-items:center;gap:12px;min-width:0}
+.actions input[type=file]{min-width:0;max-width:310px;flex:1}.actions small{overflow-wrap:anywhere}.primary{display:flex;align-items:center;justify-content:center}
+details summary{cursor:pointer;font-weight:600}#object-info{overflow-wrap:anywhere}#object-sql{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:280px}
+.preview-actions{display:flex;flex-wrap:wrap;gap:10px}#preview-start:not(:disabled){background:#167a79;color:white;border-color:#167a79}
+.record li{font-size:13px}pre{font-size:13px}.budgets{gap:14px 20px}.budgets label{font-size:14px}
+@media(max-width:600px){header{flex-wrap:wrap;gap:12px}.local{display:block;font-size:12px}main{padding:24px 16px}.panel{padding:18px}.actions{max-width:none;width:100%}.actions>button{flex:1 1 135px}.actions>.primary{width:100%}.actions input[type=file]{max-width:100%;width:180px}.budgets label{width:100%;justify-content:space-between}.budgets input[type=number]{width:110px}.preview-actions>button{flex:1 1 130px}.page-heading{align-items:flex-start}.raw-heading select{width:125px}.raw-heading button{padding:7px 8px}.metrics{gap:10px}.metric{padding:14px}.metric strong{font-size:22px}}

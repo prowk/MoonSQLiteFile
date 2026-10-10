@@ -2,12 +2,18 @@
 // 所有格式解析都在隔离 worker 中调用编译后的 MoonBit；主线程仅展示已有报告。
 const parserSource = JSON.parse(document.getElementById('parser-source').textContent);
 const workerSource = parserSource + '\n' + JSON.parse(document.getElementById('worker-source').textContent);
-const workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
+let workerURL = null;
 const el = id => document.getElementById(id);
 const kinds = {btree_root: 'B-tree 根页', btree_child: 'B-tree 子页', overflow_first: '首个 overflow 页', overflow_continuation: '后续 overflow 页', freelist_trunk: 'freelist trunk', freelist_leaf: 'freelist leaf', pointer_map: 'Ptrmap 页', lock_byte: 'lock-byte 页'};
+const reasons = {complete: '已读完当前范围', record_limit: '达到累计记录上限', visitor_stopped: '读取已停止',
+  preview_paused: '游标已暂停，可继续读取', limit_exceeded: '资源预算已用尽', cancelled: '操作已取消',
+  host_failure: '宿主读取或回调失败', short_read: '文件读取不完整', range_out_of_bounds: '读取范围越界',
+  invalid: '发现格式或结构损坏', unsupported: '当前范围暂不支持'};
+const objectTypes = {table: '表', index: '索引', view: '视图', trigger: '触发器'};
 let bytes = null, data = null, selected = 1, rawOffset = 0, generation = 0, pageRequest = 0;
 let file = null, walFile = null, worker = null, serial = 0;
 let owners = new Map(), children = new Map(), previewReport = null, previewRoot = null, previewRequest = 0;
+let objectChoices = new Map(), openingBudgetChanged = false;
 const jobs = new Map();
 function run(message, progress) {
   const id = ++serial, active = worker;
@@ -17,6 +23,7 @@ function run(message, progress) {
   });
 }
 function createWorker() {
+  if (!workerURL) workerURL = URL.createObjectURL(new Blob([workerSource], {type: 'text/javascript'}));
   const active = new Worker(workerURL);
   active.onmessage = ({data: response}) => {
     const job = jobs.get(response.id);
@@ -45,7 +52,13 @@ function closeWorker(active) {
     jobs.delete(pendingId); job.reject(new Error('已切换文件'));
   }
 }
-window.addEventListener('pagehide', () => { worker?.terminate(); URL.revokeObjectURL(workerURL); });
+window.addEventListener('pagehide', () => {
+  generation++; pageRequest++; previewRequest++;
+  for (const [id, job] of jobs) { jobs.delete(id); job.reject(new Error('页面已离开，返回后重新打开静态副本')); }
+  worker?.terminate(); worker = null;
+  if (workerURL) URL.revokeObjectURL(workerURL); workerURL = null;
+});
+window.addEventListener('pageshow', event => { if (event.persisted && file) loadFiles(false); });
 
 function textNode(tag, text, className) {
   const node = document.createElement(tag);
@@ -81,13 +94,7 @@ function renderOverview() {
     el('metrics').append(node);
   }
   el('scope').textContent = `页归属：${report.ownership_complete ? '遍历已完成' : '未完成，统计为已观察结果'}；Ptrmap：${report.ptrmap_checked ? '已核对或不适用' : '未完成'}；诊断：${report.diagnostics_truncated ? '已截断' : '未截断'}；已枚举未认领页：${summary.unclaimed_pages}。`;
-  el('objects').replaceChildren(textNode('option', '选择对象…'));
-  el('objects').firstChild.value = '';
-  for (const object of summary.objects) {
-    const option = textNode('option', `${object.object_name ?? '未命名'} · 根页 ${object.root_page} · ${object.btree_pages + object.overflow_pages} 页`);
-    option.value = String(object.root_page);
-    el('objects').append(option);
-  }
+  renderObjects(data.schema?.entries ?? summary.objects.map(object => ({name: object.object_name ?? '未命名', root_page: object.root_page, object_type: '对象'})));
   el('kinds').replaceChildren();
   for (const item of summary.page_kinds.filter(item => item.pages)) {
     const row = textNode('div', '', 'kind-row');
@@ -112,16 +119,40 @@ function renderOverview() {
 function renderSchema() {
   const schema = data.schema;
   el('status').dataset.state = schema.status === 'failed' ? 'failed' : 'ready';
-  el('status').textContent = schema.status === 'complete' ? '对象读取完成；尚未运行完整结构检查。' : `对象列表仅为已读取前缀 · ${schema.reason}；提高预算后重新读取对象。`;
+  el('status').textContent = schema.status === 'complete' ? '对象读取完成；尚未运行完整结构检查。' : `对象列表仅为已读取前缀 · ${reasons[schema.reason] ?? '读取未完成'}。可调整预算或重新选择静态副本后重试。`;
   el('metrics').replaceChildren(textNode('p', `逻辑页数 ${data.header.page_count} · 页大小 ${data.header.page_size} 字节 · 已读取对象 ${schema.entries.length}`));
-  el('scope').textContent = `schema：${schema.status}；完整结构检查尚未运行。`;
-  el('objects').replaceChildren(textNode('option', '选择对象…')); el('objects').firstChild.value = '';
-  for (const entry of schema.entries.filter(entry => entry.root_page > 0)) {
-    const option = textNode('option', `${entry.name} · ${entry.object_type} · 根页 ${entry.root_page}`);
-    option.value = String(entry.root_page); el('objects').append(option);
-  }
+  el('scope').textContent = `对象列表：${schema.status === 'complete' ? '完整' : '仅已读取前缀'}；完整结构检查尚未运行。`;
+  if (data.export.budgets.limit !== data.export.budgets.requested_limit) el('scope').textContent += ` 对象上限受最多记录限制为 ${data.export.budgets.limit}。`;
+  renderObjects(schema.entries);
   el('kinds').replaceChildren(); el('issues').replaceChildren(textNode('p', '全库页归属与诊断将在主动检查后显示。'));
+  if (schema.error) el('issues').append(textNode('p', `${reasons[schema.error.kind] ?? '对象读取失败'}：${schema.error.message}`, 'issue'));
   el('overview').hidden = false; el('workspace').hidden = false; el('preview-panel').hidden = false; el('export').disabled = false;
+}
+function renderObjects(entries) {
+  objectChoices = new Map();
+  el('objects').replaceChildren(textNode('option', '选择对象…')); el('objects').firstChild.value = '';
+  entries.forEach((entry, index) => {
+    const type = objectTypes[entry.object_type] ?? entry.object_type;
+    const option = textNode('option', `${entry.name} · ${type} · 根页 ${entry.root_page}`);
+    option.value = entry.root_page > 0 ? String(entry.root_page) : `schema:${index}`;
+    if (entry.root_page === 0) option.textContent = `${entry.name} · ${type} · 无根页`;
+    objectChoices.set(option.value, entry); el('objects').append(option);
+  });
+  el('object-info').textContent = '选择表或索引浏览根页和原始记录。';
+  el('object-definition').hidden = true; el('preview-start').disabled = true;
+}
+function canPreview() {
+  return !openingBudgetChanged && (objectChoices.get(el('objects').value)?.root_page ?? 0) > 0;
+}
+function showObject() {
+  const entry = objectChoices.get(el('objects').value);
+  el('preview-start').disabled = !canPreview();
+  el('object-definition').hidden = !entry?.sql;
+  el('object-sql').textContent = entry?.sql ? entry.sql.slice(0, 4096) + (entry.sql.length > 4096 ? '\n…仅展示前 4096 字符' : '') : '';
+  el('object-info').textContent = !entry ? '选择表或索引浏览根页和原始记录。' : entry.root_page > 0
+    ? `${entry.name} · ${entry.object_type} · 根页 ${entry.root_page}`
+    : `${entry.name} 没有 B-tree 根页，仅展示 schema 信息；view、trigger 和无根页表不能直接预览记录。虚拟表语义不在本工具检查范围。`;
+  if (entry?.root_page > 0) showPage(entry.root_page);
 }
 
 function budget(id) {
@@ -147,7 +178,7 @@ async function loadFiles(check = false) {
     if (ticket !== generation) return;
     if (data.inspection) renderOverview(); else renderSchema();
     el('scope').textContent += ` 数据库实际读取 ${data.io.db.bytes} 字节 / ${data.io.db.reads} 次（最大块 ${data.io.db.maxRead}）；${data.wal ? `WAL ${data.wal.committed_frames} 已提交帧，实际读取 ${data.io.wal.bytes} 字节。` : '未配对 WAL。'}`;
-    if (data.reason) el('status').textContent += ` · ${data.reason === 'cancelled' ? '已取消或达到时间预算，保留部分结果' : data.reason}`;
+    if (data.reason) el('status').textContent += ` · ${reasons[data.reason] ?? '当前范围未完成'}，保留已观察结果`;
     el('page-number').max = String(data.header.page_count);
     await showPage(1);
   } catch (error) { loadError(error, ticket); }
@@ -161,7 +192,8 @@ function beginLoad() {
   data = null; bytes = null;
   el('overview').hidden = true; el('workspace').hidden = true;
   el('preview-panel').hidden = true; el('records').replaceChildren(); el('preview-next').disabled = true;
-  el('objects').disabled = false; el('preview-start').disabled = false;
+  openingBudgetChanged = false;
+  el('objects').disabled = false; el('preview-start').disabled = true;
   el('export').disabled = true; el('preview-export').disabled = true;
   el('status').textContent = '正在检查数据库…'; el('status').dataset.state = 'loading';
   el('cancel').disabled = false; el('start').disabled = true; el('open').disabled = true;
@@ -254,7 +286,7 @@ el('objects').onchange = event => {
   el('preview-next').disabled = true; el('preview-export').disabled = true;
   el('records').replaceChildren(); el('preview-status').textContent = '';
   run({op: 'preview-close'}).catch(() => {});
-  if (event.target.value) showPage(Number(event.target.value));
+  showObject();
 };
 function download(report) {
   if (!report) return;
@@ -264,6 +296,13 @@ function download(report) {
 }
 el('export').onclick = () => download(data?.export);
 el('preview-export').onclick = () => download(previewReport);
+function previewBudgetsChanged(budgets) {
+  try {
+    return budget('preview-limit') !== budgets.requested_limit ||
+      String(BigInt(budget('max-payload')) * 1048576n) !== budgets.max_total_payload_bytes ||
+      budget('timeout') !== budgets.timeout_seconds;
+  } catch { return true; }
+}
 async function showRecords(reset) {
   const ticket = generation, request = ++previewRequest;
   el('preview-start').disabled = true; el('preview-next').disabled = true; el('cancel').disabled = false;
@@ -275,27 +314,47 @@ async function showRecords(reset) {
     if (reset) { previewRoot = root; el('records').replaceChildren(); }
     el('preview-status').textContent = '正在读取原始记录…';
     const result = await run({op: 'preview', reset, root, batch: budget('preview-batch'), limit: budget('preview-limit'),
-      payload: String(BigInt(budget('max-payload')) * 1048576n), timeout: budget('timeout')});
+      payload: String(BigInt(budget('max-payload')) * 1048576n), timeout: budget('timeout'), valueLimit});
     if (ticket !== generation || request !== previewRequest) return;
     // 只保留当前批次的 DOM，避免继续读取时累计全部记录与大值。
-    el('records').replaceChildren();
+    if (result.records.length) el('records').replaceChildren();
     for (const record of result.records) {
       const row = textNode('article', '', 'record');
       row.append(textNode('strong', `rowid ${record.rowid ?? '无'} · 页 ${record.page_number} · cell 偏移 ${record.cell_offset}`));
       const values = textNode('ol', '');
       record.values.slice(0, 128).forEach(value => {
-        const full = String(value.value), shortened = full.length > valueLimit;
-        values.append(textNode('li', `${value.type}: ${full.slice(0, valueLimit)}${shortened ? `…（仅展示前 ${valueLimit} 字符，原值 ${full.length} 字符）` : ''}`));
+        const full = String(value.value), original = value.original_characters ?? full.length, shortened = value.truncated || full.length > valueLimit;
+        const displayed = Math.min(full.length, valueLimit);
+        values.append(textNode('li', `${value.type}: ${full.slice(0, valueLimit)}${shortened ? `…（仅展示前 ${displayed} 字符，原值 ${original} 字符）` : ''}`));
       });
-      if (record.values.length > 128) values.append(textNode('li', `仅展示前 128 个磁盘字段，原记录 ${record.values.length} 个字段。`));
+      const fields = record.total_fields ?? record.values.length;
+      if (fields > record.values.length) values.append(textNode('li', `仅展示前 ${record.values.length} 个磁盘字段，原记录 ${fields} 个字段。`));
       row.append(values); el('records').append(row);
     }
     previewReport = result.export; el('preview-export').disabled = false;
-    el('preview-next').disabled = !result.more;
-    el('preview-status').textContent = `根页 ${previewRoot} · 本批 ${result.records.length} 条 · 累计 ${result.progress.records_read} 条 · ${result.more ? '游标已暂停，可继续读取' : `${result.result.status} / ${result.result.reason}`} ${result.error?.message ?? ''}`;
+    const changed = previewBudgetsChanged(result.export.budgets);
+    el('preview-next').disabled = !result.more || changed || openingBudgetChanged;
+    el('preview-status').textContent = `根页 ${previewRoot} · 本批 ${result.records.length} 条 · 累计 ${result.progress.records_read} 条 · ${result.more ? '游标已暂停，可继续读取' : reasons[result.result.reason] ?? '读取未完成'} ${result.error?.message ?? ''}`;
+    if (result.export.budgets.limit !== result.export.budgets.requested_limit) el('preview-status').textContent += ` · 实际累计上限 ${result.export.budgets.limit}，受打开时的最多记录限制`;
+    if (result.display?.paused_at_display_budget) el('preview-status').textContent += ' · 本批展示字符预算已用尽，继续读取下一批';
+    if (result.display?.paused_at_payload_threshold) el('preview-status').textContent += ' · 大值已达到本批 4 MiB 门槛，继续读取下一批';
+    if (!result.records.length && el('records').childElementCount) el('preview-status').textContent += ' · 没有新增记录，保留上批展示';
+    // 晚到结果仍属于原预算，不覆盖读取期间输入变更带来的重新开始要求。
+    if (openingBudgetChanged) el('preview-status').textContent += ' · 打开预算已修改，请先“重新读取对象”。';
+    else if (changed) el('preview-status').textContent += ' · 累计预算已修改，请重新预览；导出仍对应实际执行预算。';
   } catch (error) { if (ticket === generation && request === previewRequest) el('preview-status').textContent = error.message; }
-  finally { if (ticket === generation && request === previewRequest) { el('preview-start').disabled = false; el('objects').disabled = false; el('cancel').disabled = true; } }
+  finally { if (ticket === generation && request === previewRequest) { el('preview-start').disabled = !canPreview(); el('objects').disabled = false; el('cancel').disabled = true; } }
 }
+for (const id of ['preview-limit', 'max-payload', 'timeout']) el(id).addEventListener('input', () => {
+  if (!previewReport) return;
+  el('preview-next').disabled = true;
+  el('preview-status').textContent = '累计预算已修改，请点击“预览所选对象”重新预览。当前导出仍对应上次实际执行预算。';
+});
+for (const id of ['max-rows', 'max-pages']) el(id).addEventListener('input', () => {
+  if (!data) return;
+  openingBudgetChanged = true; el('preview-start').disabled = true; el('preview-next').disabled = true;
+  el('preview-status').textContent = '打开预算已修改，请先“重新读取对象”，再选择对象预览。';
+});
 el('preview-start').onclick = () => showRecords(true);
 el('preview-next').onclick = () => showRecords(false);
 el('go').onclick = () => showPage(Number(el('page-number').value));
