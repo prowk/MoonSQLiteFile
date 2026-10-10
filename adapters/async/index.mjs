@@ -28,7 +28,7 @@ export function reportEnvelope(result, {scope, budgets = {}}) {
     code: report.diagnostic.code, location: {phase: 'page_layout', page_number: report.diagnostic.page_number, byte_offset: report.diagnostic.byte_offset, cell_index: report.diagnostic.cell_index}});
   if (report.completion === 'record_limit') diagnostics.push(errorInfo(new SqliteError('limit_exceeded', '达到记录数量预算')));
   if (result.reason === 'cancelled' && !diagnostics.some(item => item.category === 'cancelled')) diagnostics.push(errorInfo(new CancelledError()));
-  return {format: 'moonsqlitefile-report', format_version: 1, tool_version: '0.8.0-dev', scope,
+  return {format: 'moonsqlitefile-report', format_version: 1, tool_version: '0.8.1', scope,
     budgets: JSON.parse(JSON.stringify(budgets, (_, value) => typeof value === 'bigint' ? String(value) : value)),
     status: report.status, partial: report.status !== 'complete', diagnostics, result: {...result}};
 }

@@ -3,12 +3,12 @@
 # MoonSQLiteFile
 
 [![CI](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/prowk/MoonSQLiteFile/actions/workflows/ci.yml)
-[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.8.0-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0)
+[![Mooncakes](https://img.shields.io/badge/Mooncakes-v0.8.1-2563eb)](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.1)
 [![License](https://img.shields.io/badge/License-Apache--2.0-2563eb)](LICENSE)
 
 **纯 MoonBit 的 SQLite 文件解析与检查库**
 
-[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) · [API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0) · [使用指南](docs/usage.md) · [下载工具](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0)
+[在线演示](https://prowk.github.io/MoonSQLiteFile/) · [API 文档](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.1) · [使用指南](docs/usage.md) · [下载工具](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.1)
 
 </div>
 
@@ -27,7 +27,7 @@
 在 MoonBit 项目中运行：
 
 ```sh
-moon add prowk/moonsqlitefile@0.8.0
+moon add prowk/moonsqlitefile@0.8.1
 ```
 
 在消费包的 `moon.pkg` 中导入：
@@ -38,7 +38,7 @@ import {
 }
 ```
 
-已发布安装版本为 v0.8.0；仓库主线用于 v0.8.1 开发，尚未发布。工具链和宿主版本见[支持说明](docs/support.md)。
+本源码的正式版本为 v0.8.1，发布状态和附件见[对应 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.1)。工具链和宿主版本见[支持说明](docs/support.md)。
 
 ## 快速上手
 
@@ -58,7 +58,7 @@ fn read_rows(data : Bytes) -> Array[@sqlite.Row] raise @sqlite.SqliteError {
 ## 工具入口
 
 - **Node.js CLI**：克隆仓库后按下方命令检查样本；[完整命令与输出约定](docs/usage.md#命令行工具)
-- **浏览器查看器**：[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 提供当前开发预览及对应 HTML 下载；[本地构建、快速浏览与记录预览](examples/offline-viewer/README.md)。已发布 HTML 仍从 [v0.8.0 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.0) 下载
+- **浏览器查看器**：[在线演示](https://prowk.github.io/MoonSQLiteFile/) 提供对应版本的浏览与 HTML 下载；[本地构建、快速浏览与记录预览](examples/offline-viewer/README.md)。版本 HTML 从 [v0.8.1 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.1) 下载
 - **异步 JS 包**：从同一 Release 下载 tarball；[类型、安装与取消](docs/async-source.md)、[独立消费项目](examples/async-consumer/README.md)。尚未发布 npm registry
 
 在仓库根目录运行：
@@ -79,7 +79,7 @@ node tools/inspect.cjs fixtures/core.sqlite summary
 ## 文档与贡献
 
 - **错误与报告契约**：[错误与报告契约](docs/contracts.md)
-- **常用 API 与 CLI**：[使用指南](docs/usage.md)、[Mooncakes API](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.0)
+- **常用 API 与 CLI**：[使用指南](docs/usage.md)、[Mooncakes API](https://mooncakes.io/docs/prowk/moonsqlitefile@0.8.1)
 - **数据源、异步与 WAL**：[范围读取](docs/range-source.md)、[异步适配](docs/async-source.md)、[WAL 契约](docs/wal.md)
 - **实现与支持范围**：[架构](docs/architecture.md)、[支持矩阵](docs/support.md)
 - **开发与验证**：[贡献指南](CONTRIBUTING.md)、[性能基准](docs/io-benchmark.md)

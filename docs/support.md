@@ -37,7 +37,7 @@ Node 范围源须提供不可变配对 db/WAL 副本；64 位寻址不等于常�
 
 发布 HTML 可通过本机 HTTP 使用，例如从文件所在目录运行 `python -m http.server 8000` 后打开对应文件 URL。已验收 HTTP 载入后断网的 File/Blob/Worker 场景；关闭浏览器后离线重新打开不是同一能力。直接 `file://` 双击仍未验收，不承诺无需服务器；其他浏览器未声明通过。操作和构建见[查看器说明](../examples/offline-viewer/README.md)，历史规模与截图记录见[v0.8.0 验证记录](validation-v0.8.0.md)。
 
-当前开发源码的浏览器流程先读取有界 schema，再由用户选择预览或完整检查；[在线开发演示](https://prowk.github.io/MoonSQLiteFile/) 与 HTML 下载版复用核心及 Worker，由获授权的手动工作流部署。[查看器说明](../examples/offline-viewer/README.md#pages-演示)记录部署与真实站点验收证据。分发仍以本地 tarball/已发布 v0.8.0 附件为准，npm registry 未发布。错误与完成度规则见[错误与报告契约](contracts.md)。
+当前浏览器流程先读取有界 schema，再由用户选择预览或完整检查；[在线演示](https://prowk.github.io/MoonSQLiteFile/) 与 HTML 下载版复用核心及 Worker，由获授权的手动工作流部署。[查看器说明](../examples/offline-viewer/README.md#pages-演示)记录部署与真实站点验收证据。异步包以本地 tarball 和 v0.8.1 Release 附件分发，npm registry 未发布。错误与完成度规则见[错误与报告契约](contracts.md)。
 
 ## 当前规模验收
 

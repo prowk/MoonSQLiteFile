@@ -1,6 +1,6 @@
 name = "prowk/moonsqlitefile"
 
-version = "0.8.0-dev"
+version = "0.8.1"
 
 source = "src"
 

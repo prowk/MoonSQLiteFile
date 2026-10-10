@@ -2,11 +2,11 @@
 
 MoonBit 核心继续只依赖标准库。异步宿主位于独立 JS 包 `adapters/async`，扫描、record/overflow、页归属、freelist、Ptrmap 和 WAL checksum 仍由同一核心状态机完成。同步入口也驱动这些状态机，不在 JavaScript 重写格式解析。
 
-当前源码用于 v0.8.1 开发，尚未发布；已发布的附件仍为 v0.8.0。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
+当前版本为 v0.8.1，发布状态与安装附件见[对应 Release](https://github.com/prowk/MoonSQLiteFile/releases/tag/v0.8.1)。导出/原型持续对照正式 v0.7.0 和 v0.8.0，支持范围见[支持矩阵](support.md)。
 
 ## 本地构建与消费
 
-异步包随 v0.8.0 Release 以 `prowk-moonsqlitefile-async-0.8.0.tgz` 附件提供，下载后执行 `npm install ./prowk-moonsqlitefile-async-0.8.0.tgz`，也可按下文从源码构建。该包尚未上传 npm registry。
+异步包以 v0.8.1 Release 的 `prowk-moonsqlitefile-async-0.8.1.tgz` 附件分发，下载后执行 `npm install ./prowk-moonsqlitefile-async-0.8.1.tgz`，也可按下文从源码构建。该包尚未上传 npm registry。
 
 ```sh
 moon build --target js --deny-warn
@@ -63,7 +63,7 @@ Database、CachedSource、WalSource 和 Node 文件源的重复 `close()` 共享
 
 扫描支持 `limit`、`max_total_payload_bytes`（BigInt 或十进制文本）、`signal`、`onProgress`；全库检查还支持 `max_issues`。默认累计 payload 为 67108864 字节；打开选项 `max_payload_bytes` 默认单条 16777216，`max_rows`/`max_pages`/`max_report_pages` 默认各 100000，`max_depth` 默认 64。达到记录 limit 的报告为 `record_limit`，手动停止为 `visitor_stopped`。全库 payload 统计为已请求量，失败记录可能已计费；不能把它解释为成功记录的字节总和。
 
-页号必须为整数 number，范围为 1 到逻辑页数（最多 2147483647）。Int32 预算必须为 1–2147483647 的整数 number，扫描 `limit` 允许 0 且不能超过 `max_rows`；缓存范围另见上文。小数、NaN、Infinity、字符串、BigInt、null 和越界值不会被截断或转换；扫描/预算类型错误抛 TypeError，`inspectPage` 继续以 incomplete 报告非法页号。累计 payload 必须为 0–18446744073709551615 的 BigInt 或纯十进制文本。参数错误发生在创建游标和额外读取之前；打开失败仍按源接管规则清理。既有错误参数的升级影响见[待发布升级说明](migration.md#unreleased)。
+页号必须为整数 number，范围为 1 到逻辑页数（最多 2147483647）。Int32 预算必须为 1–2147483647 的整数 number，扫描 `limit` 允许 0 且不能超过 `max_rows`；缓存范围另见上文。小数、NaN、Infinity、字符串、BigInt、null 和越界值不会被截断或转换；扫描/预算类型错误抛 TypeError，`inspectPage` 继续以 incomplete 报告非法页号。累计 payload 必须为 0–18446744073709551615 的 BigInt 或纯十进制文本。参数错误发生在创建游标和额外读取之前；打开失败仍按源接管规则清理。既有错误参数的升级影响见[升级说明](migration.md#v081)。
 
 核心调用是同步 CPU 工作：每个供页最多解析一个完整页，每条 record 仍完整解码。适配器定期让出事件循环，并在读取/visitor 等待时响应取消。任意同步 JavaScript visitor 或单次核心调用不能被 AbortSignal 强制抢占。
 
@@ -100,7 +100,7 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 
 本地 tarball 包含 index.d.ts、node.d.ts 及条件导出，支持严格 NodeNext 与 Bundler 消费；Node 子入口不向浏览器暴露。包内 example-node.mjs 与 example-browser.mjs 分别从真实安装包运行静态 db/WAL、源接管、异步迭代和关闭。先 npm pack ./_build/async-adapter，再 npm install 对应本地 tgz；npm registry 尚未发布。
 
-新增 ParameterError 继承 TypeError，kind 为 invalid_argument；errorInfo 提供稳定类别，reportEnvelope 在原始 JSON 外包装范围、实际预算、完成度及诊断。读取报告的宿主失败来源由同次运行捕获，不依赖消息前缀；请在克隆或序列化原报告之前包装。完整规则见[错误与报告契约](contracts.md)，页号越界分类变化见[升级说明](migration.md#unreleased)。
+新增 ParameterError 继承 TypeError，kind 为 invalid_argument；errorInfo 提供稳定类别，reportEnvelope 在原始 JSON 外包装范围、实际预算、完成度及诊断。读取报告的宿主失败来源由同次运行捕获，不依赖消息前缀；请在克隆或序列化原报告之前包装。完整规则见[错误与报告契约](contracts.md)，页号越界分类变化见[升级说明](migration.md#v081)。
 
 
 summary、页面结果、issue 和 WAL 声明提供常用命名字段及可判别联合；WAL 报告偏移仍为 number 或十进制文本。低层 Database/WalSource 构造器仅支持真实核心桥接和其生成句柄，常规接入使用 openDatabase。类型收紧可能暴露原消费代码的错误访问，见迁移说明。
