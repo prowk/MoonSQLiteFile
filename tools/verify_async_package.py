@@ -84,7 +84,7 @@ console.log('Installed Node example passed');
         compiler = Path(os.environ.get('MOONSQLITE_TYPESCRIPT', str(ROOT/'_build/type-tools/node_modules/typescript')))
         pinned = json.loads((ROOT/'tools/toolchain.json').read_text(encoding='utf-8'))['typescript']
         assert json.loads((compiler/'package.json').read_text(encoding='utf-8'))['version'] == pinned
-        source = '''import {openDatabase, BlobSource, errorInfo, reportEnvelope, type Decimal} from '@prowk/moonsqlitefile-async';
+        source = '''import {openDatabase, BlobSource, errorInfo, reportEnvelope, Database, WalSource, type Decimal, type WalOffset} from '@prowk/moonsqlitefile-async';
 import {openFileSource} from '@prowk/moonsqlitefile-async/node';
 const db = await openDatabase(await openFileSource('copy.sqlite'), {wal: await openFileSource('copy.wal'), closeSources: false});
 try {
@@ -94,6 +94,34 @@ try {
   }
   const report = reportEnvelope(await db.inspectDatabase(), {scope: 'database_structure'});
   const status: 'complete' | 'failed' | 'incomplete' = report.status; console.log(status, schema.entries[0]?.object_type);
+  const stored: Decimal = report.result.summary.objects[0].storage_bytes;
+  const count: number = report.result.summary.issue_count;
+  const page = await db.inspectPage(1);
+  if (page.status === 'complete') {
+    const payload: Decimal = page.statistics.payload_bytes;
+    const next: number | null = page.page.right_child;
+    const none: null = page.diagnostic; console.log(payload, next, none);
+  }
+  for (const issue of report.result.inspection.issues) {
+    if (issue.code === 'page_conflict') console.log(issue.first.kind, issue.second.page_number);
+    else if (issue.code === 'scan_error') console.log(issue.error_kind, issue.root_page);
+    else if (issue.code === 'ptrmap_mismatch') console.log(issue.expected_owner.kind, issue.map_page);
+    // @ts-expect-error 没有按 code 判别的诊断不能直接访问冲突字段。
+    console.log(issue.first);
+  }
+  if (db.source instanceof WalSource) {
+    const offset: WalOffset = db.source.inspection.frames[0].byte_offset;
+    const reason: 'end_of_file' | 'truncated_frame' | 'salt_mismatch' | 'checksum_mismatch' | 'invalid_frame' | 'frame_limit' = db.source.inspection.stop_reason;
+    // @ts-expect-error 已发布 WAL 偏移既可能是 number，也可能是字符串。
+    const unsafe: number = db.source.inspection.stop_offset;
+    console.log(offset, reason);
+  }
+  // @ts-expect-error 低层核心必须是可调用桥接，不能传普通对象。
+  new Database({}, {id: 1, header: db.header}, db.source, {});
+  // @ts-expect-error 低层句柄必须含真实 header。
+  new Database(db.core, {id: 1}, db.source, {});
+  // @ts-expect-error summary 没有任意拼写的字段。
+  console.log(report.result.summary.claimed_page);
   await openDatabase(new BlobSource(new Blob()), {signal: new AbortController().signal});
   console.log(errorInfo(new Error()).category);
   // @ts-expect-error 偏移必须为 bigint。
