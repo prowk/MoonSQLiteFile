@@ -19,7 +19,7 @@ export function reportEnvelope(result, {scope, budgets = {}}) {
   const diagnostics = [...(reportFailures.get(result) ?? [])];
   for (const [index, issue] of (report.issues ?? []).entries()) {
     const location = result.locations?.[index] ?? {page_number: issue.page_number ?? null};
-    if (!diagnostics.some(item => item.issue_index === index || (issue.error_kind === 'unsupported' && item.category === 'source' && item.location?.page_number === location?.page_number))) {
+    if (!diagnostics.some(item => item.issue_index === index || (issue.code === 'scan_error' && issue.error_kind === 'unsupported' && location?.phase === 'read_page' && item.category === 'source' && item.location?.page_number === location?.page_number))) {
       diagnostics.push({...errorInfo({kind: issue.error_kind ?? (issue.code === 'unsupported_feature' ? 'unsupported' : 'invalid'), message: issue.message ?? issue.code}), code: issue.code, location});
     }
   }
@@ -57,6 +57,15 @@ function validateSignal(signal) {
 function optionsObject(options) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new ParameterError('options 必须为配置对象');
   validateSignal(options.signal);
+}
+// 回调是宿主边界；即使异常伪造核心 kind，也不能把业务错误当成损坏。
+function callbackError(error) {
+  const failure = new SourceError('host_failure', error?.message ?? String(error));
+  failure.cause = error;
+  return failure;
+}
+function notify(callback, progress) {
+  try { callback?.(progress); } catch (error) { throw callbackError(error); }
 }
 function abortError(signal) {
   return signal.reason instanceof SqliteError && signal.reason.kind === 'limit_exceeded'
@@ -231,7 +240,7 @@ async function openWal(base, wal, options, core) {
       if (++ticks % 64 === 0) await withAbort(new Promise(done => setTimeout(done, 0)), signal);
       const event = bridge(core, {op: 'wal-next', id});
       if (event.kind === 'done') { report = event.report; break; }
-      onProgress?.({phase: 'wal', frames_read: event.frames_read, offset: event.offset});
+      notify(onProgress, {phase: 'wal', frames_read: event.frames_read, offset: event.offset});
       const bytes = await readExact(wal, BigInt(event.offset), event.count, signal);
       bridge(core, {op: 'wal-supply', id, offset: event.offset}, bytes);
     }
@@ -281,7 +290,7 @@ export class Scan {
           checkAbort(this.signal);
           this.database.call({op: 'scan-supply', id: this.id, page: event.page}, bytes, false);
         } else if (event.kind === 'record') {
-          this.progress = event.progress; this.options.onProgress?.({phase: 'scan', ...this.progress});
+          this.progress = event.progress; notify(this.options.onProgress, {phase: 'scan', ...this.progress});
           return {done: false, value: event.record};
         } else {
           this.result = {status: event.summary.completion === 'complete' ? 'complete' : 'incomplete',
@@ -338,7 +347,8 @@ export class Database {
     const scan = this.scan(root, options);
     try {
       for await (const record of scan) {
-        if (await withAbort(Promise.resolve().then(() => visitor(record, scan.signal)), scan.signal) === false) break;
+        const visited = Promise.resolve().then(() => visitor(record, scan.signal)).catch(error => { throw callbackError(error); });
+        if (await withAbort(visited, scan.signal) === false) break;
       }
       return scan.result;
     } catch (error) {
@@ -362,7 +372,7 @@ export class Database {
     const signal = AbortSignal.any([controller.signal, this.controller.signal, ...(options.signal ? [options.signal] : [])]);
     const id = this.call({op: 'inspection-new', max_issues: options.max_issues ?? 100,
       max_total_payload_bytes: payload}).id;
-    let result, ticks = 0;
+    let result, ticks = 0, lastLocation = null;
     const failures = [];
     const job = {return: async () => { controller.abort(); await pending; }};
     let resolve;
@@ -374,6 +384,7 @@ export class Database {
         const event = this.call({op: 'inspection-next', id}, undefined, false);
         if (event.kind === 'done') { result = event.data; break; }
         if (event.kind === 'page') {
+          lastLocation = {phase: 'read_page', page_number: event.page, byte_offset: null, cell_index: null};
           try {
             const bytes = await this.readPage(event.page, signal);
             checkAbort(signal);
@@ -384,7 +395,8 @@ export class Database {
             this.call({op: 'inspection-reject', id, message: `source/${error.kind || 'host_failure'}: ${error.message}`}, undefined, false);
           }
         } else {
-          options.onProgress?.({phase: 'inspection', ...event.progress, location: event.location});
+          lastLocation = event.location;
+          notify(options.onProgress, {phase: 'inspection', ...event.progress, location: event.location});
         }
         // 缓存命中时也定期让出事件循环，使取消不依赖下一次磁盘读取。
         if (++ticks % 64 === 0) await withAbort(new Promise(done => setTimeout(done, 0)), signal);
@@ -394,7 +406,11 @@ export class Database {
     } catch (error) {
       result = this.call({op: 'inspection-close', id, message: `${error.kind || 'host_failure'}: ${error.message}`}, undefined, false);
       result.reason = error.kind || 'host_failure';
-      failures.push({...errorInfo(error), location: result.locations.at(-1) ?? null, issue_index: result.inspection.issues.length - 1});
+      // 截断时 stop 未追加诊断，不能把最后一项旧损坏误当成本次停止原因。
+      const last = result.inspection.issues.length - 1;
+      const appended = !result.inspection.diagnostics_truncated && result.inspection.issues[last]?.error_kind === 'unsupported';
+      failures.push({...errorInfo(error), location: appended ? result.locations[last] : lastLocation,
+        ...(appended ? {issue_index: last} : {})});
       reportFailures.set(result, failures);
       return result;
     } finally {

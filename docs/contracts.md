@@ -38,3 +38,7 @@ WAL 检查报告中的 frames[].byte_offset、stop_offset、trailing_bytes 在�
 ## 兼容与资源
 
 公开函数、类型构造、枚举匹配、字段、JSON 与退出码都属于契约。新增枚举分支或结构字段不自动视作兼容；有变更时提供迁移说明，并保留历史基线。核心只依赖标准库；宿主快照一致性、生命周期、各项独立预算和支持范围见[支持说明](support.md)、[异步指南](async-source.md)及[WAL 契约](wal.md)。
+
+visitor/进度回调异常的来源由调用边界确定，自带 kind 不改变宿主分类；cause 保留原异常。`errorInfo` 单独转换已知错误或可信描述，不足以鉴别任意外部对象的真实来源。数据库及接管源重复关闭共享 Promise，包括同一次失败。
+
+先 reportEnvelope，再 JSON.stringify、structuredClone 或 Worker.postMessage；包装后的 diagnostics 随结果传输，不依赖 WeakMap。诊断截断时仍保留捕获的停止来源，不覆盖此前损坏；多个来源失败可同时存在，partial 与 failed 可同时成立。

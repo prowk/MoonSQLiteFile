@@ -26,6 +26,11 @@ async function walLifecycle(file, wal, metadata) {
   await assert.rejects(openDatabase(base, {wal: source, signal: controller.signal,
     onProgress: progress => { if (progress.frames_read >= (metadata.frames > 2 ? 2 : 0)) controller.abort(); }}), CancelledError);
   assert(base.closed && source.closed); clean();
+  const callback = Object.assign(new Error('WAL 进度回调伪装为损坏'), {kind: 'invalid'});
+  const callbackBase = memory(baseBytes), callbackWal = memory(walBytes);
+  await assert.rejects(openDatabase(callbackBase, {wal: callbackWal, onProgress() { throw callback; }}),
+    error => error instanceof SourceError && error.kind === 'host_failure' && error.cause === callback);
+  assert(callbackBase.closed && callbackWal.closed); clean();
   const limited = memory(baseBytes), limitedWal = memory(walBytes);
   if (metadata.frames > 1 || (metadata.frames === 1 && metadata.stop_reason !== 'end_of_file')) {
     await assert.rejects(openDatabase(limited, {wal: limitedWal, max_frames: 1}), error => error.kind === 'limit_exceeded');
@@ -284,6 +289,76 @@ async function reportContract() {
   } finally { await host.close(); }
   assert(faulty.closed); clean();
 }
+async function callbackOrigins() {
+  const bytes = new Uint8Array(fs.readFileSync('fixtures/core.sqlite'));
+  const db = await openDatabase(memory(bytes));
+  try {
+    for (const kind of [undefined, 'invalid', 'unsupported', 'limit_exceeded', 'cancelled']) {
+      const callback = Object.assign(new Error('业务回调，不能当成文件损坏'), kind ? {kind} : {});
+      for (const visitor of [() => { throw callback; }, async () => { throw callback; }]) {
+        const result = await db.scanBtree(2, visitor);
+        assert.equal(result.status, 'incomplete'); assert.equal(result.reason, 'host_failure');
+        const exported = JSON.parse(JSON.stringify(reportEnvelope(result, {scope: 'records'})));
+        assert(exported.diagnostics.every(item => item.category === 'source'));
+      }
+      const scan = db.scan(2, {onProgress() { throw callback; }});
+      await assert.rejects(scan.next(), error => error instanceof SourceError && error.cause === callback);
+      assert.equal(reportEnvelope(scan.result, {scope: 'records'}).diagnostics[0].category, 'source');
+      const inspected = await db.inspectDatabase({onProgress() { throw callback; }});
+      assert.equal(inspected.reason, 'host_failure');
+      const envelope = reportEnvelope(inspected, {scope: 'database_structure'});
+      assert(envelope.diagnostics.some(item => item.category === 'source'));
+      assert(!envelope.diagnostics.some(item => item.category === 'corruption'));
+      assert.equal(db.scans.size, 0);
+    }
+  } finally { await db.close(); }
+  const damaged = new Uint8Array(fs.readFileSync('fixtures/btree.sqlite')); damaged[107] = 61;
+  const bad = await openDatabase(memory(damaged));
+  try {
+    const report = reportEnvelope(await bad.inspectDatabase(), {scope: 'database_structure'});
+    assert.equal(report.status, 'failed'); assert(report.diagnostics.some(item => item.category === 'corruption'));
+  } finally { await bad.close(); }
+  clean();
+}
+async function transportedReports() {
+  const bytes = new Uint8Array(fs.readFileSync('fixtures/btree.sqlite'));
+  for (const max_issues of [1, 100]) {
+    let failures = 0, active = false;
+    const schemaBlocks = new Set();
+    const source = memory(bytes, offset => {
+      if (!active) schemaBlocks.add(offset);
+      else if (!schemaBlocks.has(offset)) { failures++; throw Object.assign(new Error('invalid: 伪装损坏'), {kind: 'invalid'}); }
+    });
+    const db = await openDatabase(source, {blockSize: 512, cachePages: 1});
+    try {
+      await db.schema(); active = true;
+      const raw = await db.inspectDatabase({max_issues});
+      const envelope = reportEnvelope(raw, {scope: 'database_structure'});
+      const transmitted = JSON.parse(JSON.stringify(structuredClone(envelope)));
+      assert.deepEqual(transmitted, JSON.parse(JSON.stringify(envelope)));
+      assert.equal(transmitted.diagnostics.filter(item => item.category === 'source').length, failures);
+      assert(!transmitted.diagnostics.some(item => item.category === 'corruption'));
+      assert(!transmitted.diagnostics.some(item => item.category === 'unsupported'));
+      assert(transmitted.diagnostics.every(item => item.location?.page_number != null));
+      // 原始历史 JSON 不携带 WeakMap，必须在克隆前包装，不能从文本补猜来源。
+      assert(!reportEnvelope(JSON.parse(JSON.stringify(raw)), {scope: 'database_structure'}).diagnostics.some(item => item.category === 'corruption'));
+      if (max_issues === 100) assert(failures > 1);
+    } finally { await db.close(); }
+  }
+  const damaged = bytes.slice(); damaged[107] = 61;
+  for (const reason of [undefined, new SqliteError('limit_exceeded', '预算截止')]) {
+    const controller = new AbortController(), db = await openDatabase(memory(damaged));
+    try {
+      const raw = await db.inspectDatabase({max_issues: 1, signal: controller.signal, onProgress() { controller.abort(reason); }});
+      const result = JSON.parse(JSON.stringify(reportEnvelope(raw, {scope: 'database_structure'})));
+      assert.equal(result.status, 'failed'); assert(result.partial); assert(raw.inspection.diagnostics_truncated);
+      assert(result.diagnostics.some(item => item.category === 'corruption'));
+      assert(result.diagnostics.some(item => item.category === (reason ? 'budget' : 'cancelled')));
+      assert(!result.diagnostics.some(item => item.category === 'unsupported'));
+    } finally { await db.close(); }
+  }
+  clean();
+}
 if (process.argv[2] === '--snapshot') {
   const metadata = await compare(process.argv[3], process.argv[4], process.argv[5] === 'prefix');
   await walLifecycle(process.argv[3], process.argv[4], metadata);
@@ -297,5 +372,7 @@ if (process.argv[2] === '--snapshot') {
   await lifecycle();
   await parameters();
   await reportContract();
+  await transportedReports();
+  await callbackOrigins();
   console.log(`Verified async/sync equivalence for ${fixtures.length} fixtures, cancellation, backpressure, failures, budgets, cache and release`);
 }
