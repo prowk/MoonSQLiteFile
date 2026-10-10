@@ -43,3 +43,5 @@ __pycache__/
 /fixtures/verification/
 /docs/provenance.md
 /todo.md
+/tools/verify_scale.mjs
+/tools/verify_browser_scale.cjs

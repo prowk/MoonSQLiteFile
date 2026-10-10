@@ -54,5 +54,9 @@ jobs:
             _build/browser-acceptance.json
             _build/browser-acceptance/fixtures.json
             _build/browser-acceptance/viewer-large.png
+            _build/browser-acceptance/viewer-responsive-*.png
+            _build/browser-acceptance/scale-fixtures.json
+            _build/scale-acceptance.json
+            _build/browser-scale-acceptance.json
           if-no-files-found: ignore
           retention-days: 30

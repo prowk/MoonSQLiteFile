@@ -49,6 +49,8 @@ try {
 
 `openDatabase` 默认接管输入源并在失败或 `db.close()` 时关闭。设置 `closeSources: false` 时只释放适配器缓存与核心句柄，原始源由调用者管理。`close()` 会取消当前操作，停止游标并释放核心句柄；调用者始终应使用 `finally`。宿主不响应 signal 的底层操作可能继续完成，但取消后的结果不会再供应给核心。
 
+Database、CachedSource、WalSource 和 Node 文件源的重复 `close()` 共享同一个 Promise，全部调用者等待同一次资源释放。关闭开始后拒绝新数据库操作；关闭失败后重复调用仍拒绝同一个错误，不自动重试。WAL 两个宿主均会尝试关闭，同步抛错不会阻止另一方清理。
+
 无效缓存选项或 WAL 源构造失败也会关闭已接管输入。配对关闭会尝试两个宿主；宿主的 close 自身失败时，`db.close()` 拒绝并报告异常，而不是隐藏它。打开失败时清理所有已接管源，并保留最初的打开错误。
 
 ## 扫描、背压和部分结果
@@ -64,6 +66,8 @@ try {
 页号必须为整数 number，范围为 1 到逻辑页数（最多 2147483647）。Int32 预算必须为 1–2147483647 的整数 number，扫描 `limit` 允许 0 且不能超过 `max_rows`；缓存范围另见上文。小数、NaN、Infinity、字符串、BigInt、null 和越界值不会被截断或转换；扫描/预算类型错误抛 TypeError，`inspectPage` 继续以 incomplete 报告非法页号。累计 payload 必须为 0–18446744073709551615 的 BigInt 或纯十进制文本。参数错误发生在创建游标和额外读取之前；打开失败仍按源接管规则清理。既有错误参数的升级影响见[待发布升级说明](migration.md#unreleased)。
 
 核心调用是同步 CPU 工作：每个供页最多解析一个完整页，每条 record 仍完整解码。适配器定期让出事件循环，并在读取/visitor 等待时响应取消。任意同步 JavaScript visitor 或单次核心调用不能被 AbortSignal 强制抢占。
+
+取消参数只接受真实 AbortSignal 或省略；null、0、普通对象及仿造 signal 均按 ParameterError 拒绝，无效参数不增加 I/O。`inspectPage` 保留 incomplete 返回协议，错误信息中的 kind 为 invalid_argument。visitor 和进度回调异常在宿主边界转换为 SourceError(host_failure)，原异常保存在 cause；即使它自带 invalid、unsupported 或 cancelled 等 kind，也不代表核心损坏、能力边界或实际取消。
 
 ## db/WAL 静态快照
 
@@ -100,7 +104,3 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 
 
 summary、页面结果、issue 和 WAL 声明提供常用命名字段及可判别联合；WAL 报告偏移仍为 number 或十进制文本。低层 Database/WalSource 构造器仅支持真实核心桥接和其生成句柄，常规接入使用 openDatabase。类型收紧可能暴露原消费代码的错误访问，见迁移说明。
-
-Database、CachedSource、WalSource 和 Node 文件源的重复 `close()` 共享同一个 Promise，全部调用者等待同一次资源释放。关闭开始后拒绝新数据库操作；关闭失败后重复调用仍拒绝同一个错误，不自动重试。WAL 两个宿主均会尝试关闭，同步抛错不会阻止另一方清理。
-
-取消参数只接受真实 AbortSignal 或省略；null、0、普通对象及仿造 signal 均按 ParameterError 拒绝，无效参数不增加 I/O。`inspectPage` 保留 incomplete 返回协议，错误信息中的 kind 为 invalid_argument。visitor 和进度回调异常在宿主边界转换为 SourceError(host_failure)，原异常保存在 cause；即使它自带 invalid、unsupported 或 cancelled 等 kind，也不代表核心损坏、能力边界或实际取消。

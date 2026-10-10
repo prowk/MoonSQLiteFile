@@ -203,12 +203,12 @@ CLI 继续保留 17 个命令的输出、退出码和错误通道；本版以 v0
 
 errorInfo 与 reportEnvelope 提供六类错误及独立 format_version=1 包装，不改写历史 JSON。截止预算使用 limit_exceeded，普通取消使用 cancelled；原始存储值和 WAL 字段的 64 位表示、旧 PageSource/RangeSource 兼容边界见[契约说明](contracts.md)。类型声明与 Node/浏览器条件导出已补齐，Node 专用入口不在浏览器中解析。
 
+signal 不再把 null/0 当作省略，也不接受仿造对象；应传入真实 AbortSignal。回调自带核心 kind 的异常现在按宿主失败捕获，cause 保留原异常。重复 close 等待同一次清理，失败后重复调用保持拒绝；依赖第二次调用提前成功的代码须改为等待和处理首次失败。导出/传输前先包装报告，克隆后不能补回丢失的宿主来源。
+
+TypeScript 常用结果和低层构造器参数已收紧，错误字段访问、未缩窄的 issue 分支及把 WAL 偏移只当 number 会被拒绝。常规消费改用 openDatabase，按 status/code 缩窄结果，按 number/十进制文本联合处理 WAL 偏移。核心公开声明、CLI JSON/退出码与合法调用继续对照正式 v0.8.0；这不等于所有原先被接受的非法参数保持兼容。
+
 ### 查看器与贡献流程
 
 选文件后先读取有界 schema，完整检查需主动点击；未完成对象列表明确标记前缀。记录预览复用核心游标，按磁盘存储顺序展示；导出报告包含范围、预算、版本、完成度及诊断。网站和 HTML 下载版共用源码，开发预览不表示正式发布。
 
 提交前与 CI 使用 `python tools/verify.py`，保留原完整检查并增加维护、类型和浏览器场景。环境准备见[贡献指南](../CONTRIBUTING.md)，当前目录与职责见[架构](architecture.md)，支持范围见[支持说明](support.md)。已发布版本文档仍可从对应 tag 查看。
-
-signal 不再把 null/0 当作省略，也不接受仿造对象；应传入真实 AbortSignal。回调自带核心 kind 的异常现在按宿主失败捕获，cause 保留原异常。重复 close 等待同一次清理，失败后重复调用保持拒绝；依赖第二次调用提前成功的代码须改为等待和处理首次失败。导出/传输前先包装报告，克隆后不能补回丢失的宿主来源。
-
-TypeScript 常用结果和低层构造器参数已收紧，错误字段访问、未缩窄的 issue 分支及把 WAL 偏移只当 number 会被拒绝。常规消费改用 openDatabase，按 status/code 缩窄结果，按 number/十进制文本联合处理 WAL 偏移。核心公开声明、CLI JSON/退出码与合法调用继续对照正式 v0.8.0；这不等于所有原先被接受的非法参数保持兼容。
