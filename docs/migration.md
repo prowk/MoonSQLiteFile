@@ -2,6 +2,10 @@
 
 本页保留各版本当时的升级要求；当前使用范围见[支持说明](support.md)，当前用法见[使用指南](usage.md)。
 
+## 开发中：有限字段读取
+
+0.8.2-dev 尚未发布。核心与异步包增加字段元数据、投影扫描及 BLOB 分块，旧完整扫描及 CLI 输出保持兼容。查看器预览改为有限字段读取，导出 scope 从 `records` 改为 `records_projection`，预算为 `max_total_copy_bytes`；`payload_bytes` 在投影中计实际字段/头复制量。新 `records_complete` 与逐条完整性标志说明未读范围，即使遍历完成，报告也可能为 partial。需要完整磁盘值的消费代码应继续调用原扫描接口。详见[字段契约](async-source.md#有限字段与-blob-分块未发布)。
+
 <a id="v040"></a>
 
 ## v0.4.0：页面空间与诊断

@@ -53,7 +53,7 @@ function cli(command) {
   assert(failure.locations.some(location => location?.page_number === 1)); await bad.close();
   await assert.rejects(api.openDatabase(new api.BlobSource(new Blob([Buffer.alloc(32)]))));
   // 执行真实 Worker 消息协议，续读预算改变必须拒绝，不能伪造执行预算。
-  const messages = [], self = {postMessage(message) { messages.push(plain(message)); }};
+  const messages = [], self = {postMessage(message) { messages.push(structuredClone(message)); }};
   const workerContext = vm.createContext({TextDecoder, TextEncoder, console, Blob, Uint8Array,
     AbortController, AbortSignal, setTimeout, clearTimeout, performance, self});
   new vm.Script(source+'\n'+worker).runInContext(workerContext, {timeout: 10000});
@@ -73,13 +73,23 @@ function cli(command) {
   }
   const continued = (await send({...request, reset: false, batch: 10})).result;
   assert.equal(continued.progress.records_read, 3); assert.equal(continued.result.reason, 'record_limit');
-  assert.equal(continued.export.budgets.limit, 3); assert.equal(continued.export.budgets.max_total_payload_bytes, '67108864');
-  assert.equal(continued.export.budgets.timeout_seconds, 120); assert.equal(continued.export.budgets.max_payload_bytes, 16777216);
+  assert.equal(continued.export.budgets.limit, 3); assert.equal(continued.export.budgets.max_total_copy_bytes, '67108864');
+  assert.equal(continued.export.budgets.timeout_seconds, 120); assert.equal(continued.export.budgets.max_field_bytes, 1024);
+  assert.equal(continued.export.budgets.max_payload_bytes, undefined);
   assert.deepEqual(JSON.parse(JSON.stringify(continued.export)), continued.export);
   const bounded = (await send({...request, root: 143, valueLimit: 16})).result;
   assert.equal(bounded.records[0].values[0].value.length, 16);
   assert(bounded.records[0].values[0].truncated); assert(bounded.records[0].values[0].original_characters > 16);
   assert.equal(bounded.export.budgets.display_value_characters, 16);
+  assert.equal(bounded.export.budgets.max_field_bytes, 64);
+  assert.equal(bounded.export.scope, 'records_projection');
+  assert.equal(bounded.records[0].record_complete, false);
+  assert(bounded.records[0].copied_bytes < bounded.records[0].values[0].original_bytes);
+  const blobRecord = (await send({...request, root: 2, fields: [4]})).result.records[0];
+  const chunkResponse = await send({op: 'blob-chunk', record: blobRecord, field: 4, offset: 0, timeout: 120, payload: '67108864'});
+  assert(!chunkResponse.error, JSON.stringify(chunkResponse));
+  const chunk = chunkResponse.result;
+  assert.equal(chunk.bytes.length, Math.min(65536, chunk.field.byte_length));
   const original = await api.openDatabase(new api.BlobSource(new Blob([demo])));
   const originalScan = original.scan(143);
   assert((await originalScan.next()).value.values[0].value.length > 16, '库的原始记录不得被展示截断改变');

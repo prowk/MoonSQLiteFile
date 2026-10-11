@@ -8,10 +8,13 @@ function displayRecord(record, valueLimit, budget) {
     const text = String(value.value), remaining = DISPLAY_CHARACTERS - budget.used;
     const canTruncate = value.type === 'text' || value.type === 'blob';
     if (remaining <= 0 || !canTruncate && remaining < text.length) { budget.exhausted = true; break; }
-    const count = canTruncate ? Math.min(text.length, valueLimit, remaining) : text.length;
+    let count = canTruncate ? Math.min(text.length, valueLimit, remaining) : text.length;
+    // JS 显示单位为 UTF-16 单元，截断时不留下半个代理对。
+    if (value.type === 'text' && count < text.length && count &&
+      text.charCodeAt(count-1) >= 0xd800 && text.charCodeAt(count-1) <= 0xdbff) count--;
     // split/join 复制前缀，避免短子串继续持有完整大值的底层字符串。
     values.push({...value, value: count < text.length ? text.slice(0, count).split('').join('') : value.value,
-      original_characters: text.length, truncated: count < text.length});
+      original_characters: text.length, truncated: value.truncated || count < text.length});
     budget.used += count;
   }
   if (budget.used === DISPLAY_CHARACTERS) budget.exhausted = true;
@@ -74,7 +77,8 @@ self.onmessage = async ({data: message}) => {
       if (!Number.isInteger(message.batch) || message.batch < 1 || message.batch > 100 ||
         !Number.isInteger(valueLimit) || valueLimit < 16 || valueLimit > 4096) throw new ParameterError('预览批次或显示字符预算无效');
       if (!message.reset && preview && (message.limit !== previewBudgets.requested_limit ||
-        message.root !== previewBudgets.root || String(message.payload) !== previewBudgets.max_total_payload_bytes || message.timeout !== previewBudgets.timeout_seconds)) {
+        message.root !== previewBudgets.root || String(message.payload) !== previewBudgets.max_total_copy_bytes || message.timeout !== previewBudgets.timeout_seconds ||
+        valueLimit * 4 !== previewBudgets.max_field_bytes || JSON.stringify(message.fields ?? null) !== JSON.stringify(previewBudgets.fields ?? null))) {
         throw new ParameterError('预览预算已更改，请重新预览；继续读取只使用创建游标时的预算');
       }
       const controller = message.reset || !preview ? new AbortController() : previewController;
@@ -86,9 +90,11 @@ self.onmessage = async ({data: message}) => {
           previewController = controller;
           previewBudgets = {...databaseBudgets, root: message.root, requested_limit: message.limit,
             limit: Math.min(message.limit, database.options.max_rows ?? 100000),
-            max_total_payload_bytes: String(message.payload), timeout_seconds: message.timeout};
-          preview = database.scan(message.root, {limit: previewBudgets.limit,
-            max_total_payload_bytes: previewBudgets.max_total_payload_bytes, signal: controller.signal});
+            max_payload_bytes: undefined, max_total_payload_bytes: undefined,
+            fields: message.fields, max_field_bytes: valueLimit * 4, max_header_bytes: 65536,
+            max_fields: 2048, max_selected_fields: 128, max_total_copy_bytes: String(message.payload), timeout_seconds: message.timeout};
+          preview = database.scanProjected(message.root, {limit: previewBudgets.limit, fields: message.fields,
+            max_field_bytes: previewBudgets.max_field_bytes, max_total_copy_bytes: previewBudgets.max_total_copy_bytes, signal: controller.signal});
         }
         // 每批只拉取请求条数；保留原始记录和游标，不为继续读取重新扫描前缀。
         const records = [], display = {used: 0, exhausted: false};
@@ -100,8 +106,16 @@ self.onmessage = async ({data: message}) => {
             checkAbort(controller.signal);
             const event = await preview.next();
             if (event.done) break;
-            records.push(displayRecord(event.value, valueLimit, display));
-            // 大值每批至多跨过一次 4 MiB 门槛；一条记录仍按打开时的单条预算完整解码。
+            const projected = event.value;
+            const record = {rowid: projected.rowid, page_number: projected.page_number, cell_offset: projected.cell_offset,
+              record_complete: projected.record_complete, overflow_chain_complete: projected.overflow_chain_complete,
+              total_fields: projected.header.fields.length, copied_bytes: projected.copied_bytes,
+              values: projected.values.map(value => ({...value.value, field_index: value.field.index,
+                original_bytes: value.field.byte_length, returned_bytes: value.returned_bytes, truncated: value.truncated}))};
+            const shown = displayRecord(record, valueLimit, display);
+            shown.total_fields = projected.header.fields.length;
+            records.push(shown);
+            // 每批限制字段复制量；大字段只读取前缀，不再组装整条 payload。
             payloadPaused = BigInt(preview.progress.payload_bytes)-initialPayload >= BATCH_PAYLOAD;
             if (display.exhausted || payloadPaused) break;
           }
@@ -112,11 +126,22 @@ self.onmessage = async ({data: message}) => {
           display: {characters: display.used, max_characters: DISPLAY_CHARACTERS, max_fields: DISPLAY_FIELDS,
             value_characters: valueLimit, paused_at_display_budget: display.exhausted,
             batch_payload_threshold: String(BATCH_PAYLOAD), paused_at_payload_threshold: payloadPaused}};
-        result.export = reportEnvelope(preview.result ?? {...preview.progress, status: 'incomplete', reason: 'preview_paused'},
-          {scope: 'records', budgets: {...previewBudgets, batch_records: message.batch,
+        result.export = reportEnvelope(preview.result ?? {...preview.progress, status: 'incomplete', reason: 'preview_paused', projection: true, records_complete: preview.recordsComplete},
+          {scope: 'records_projection', budgets: {...previewBudgets, batch_records: message.batch,
             display_value_characters: valueLimit, display_max_fields: DISPLAY_FIELDS, display_max_characters: DISPLAY_CHARACTERS,
             display_batch_payload_threshold: String(BATCH_PAYLOAD)}});
+        result.io = statistics(dbSource, walSource);
         self.postMessage({id: message.id, result});
+      } finally { clearTimeout(timer); if (operation === controller) operation = null; }
+    } else if (message.op === 'blob-chunk') {
+      if (!database) throw new ParameterError('尚未打开数据库');
+      const controller = new AbortController(); operation = controller;
+      const timer = setTimeout(() => controller.abort(new SqliteError('limit_exceeded', '达到 BLOB 读取时间预算')), message.timeout * 1000);
+      try {
+        const chunk = await database.readBlobChunk(message.record, message.field, {
+          offset: message.offset, length: 65536, signal: controller.signal,
+          max_total_copy_bytes: String(message.payload)});
+        self.postMessage({id: message.id, result: {...chunk, io: statistics(dbSource, walSource)}}, [chunk.bytes.buffer]);
       } finally { clearTimeout(timer); if (operation === controller) operation = null; }
     } else if (message.op === 'page') {
       if (!database) throw new Error('尚未打开数据库');

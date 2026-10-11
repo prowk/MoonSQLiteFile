@@ -87,9 +87,31 @@ export class Database {
   readPage(page: number, signal?: AbortSignal): Promise<Uint8Array>;
   inspectPage(page: number, options?: ReadOptions): Promise<PageResult>;
   scan(root: number, options?: ScanOptions): Scan;
+  scanProjected(root: number, options?: ProjectedScanOptions): ProjectedScan;
+  previewRecord(record: RecordLocator, options?: ProjectionOptions): Promise<ProjectedRecord>;
+  readBlobChunk(record: RecordLocator, field: number, options?: BlobChunkOptions): Promise<FieldChunk>;
   scanBtree(root: number, visitor: (record: RawRecord, signal: AbortSignal) => boolean | void | Promise<boolean | void>, options?: ScanOptions): Promise<ScanResult>;
   schema(options?: ScanOptions): Promise<SchemaResult>;
   inspectDatabase(options?: InspectionOptions): Promise<InspectionResult>;
   close(): Promise<void>;
 }
 export function openDatabase(source: AsyncSource, options?: OpenOptions): Promise<Database>;
+
+/** 位置只对创建它的同一个静态数据库有效，不提供跨数据库或写入后的定位保证。 */
+export interface RecordLocator {page_number: number; cell_offset: number}
+export interface RecordField {index: number; serial_type: Decimal; payload_offset: number; byte_length: number}
+export interface RecordHeader {header_bytes: number; payload_bytes: number; fields: RecordField[]}
+export interface FieldPreview {field: RecordField; value: DiskValue; returned_bytes: number; truncated: boolean}
+export interface ProjectedRecord extends RecordLocator {rowid: Decimal | null; header: RecordHeader; values: FieldPreview[]; record_complete: boolean; overflow_chain_complete: boolean; copied_bytes: Decimal}
+export interface FieldChunk {field: RecordField; offset: number; bytes: Uint8Array; more: boolean; overflow_chain_complete: boolean; copied_bytes: Decimal}
+export interface ProjectionOptions extends ReadOptions {fields?: number[]; max_field_bytes?: number; max_header_bytes?: number; max_fields?: number; max_selected_fields?: number; max_total_copy_bytes?: bigint | Decimal}
+export interface ProjectedScanOptions extends ProjectionOptions {limit?: number; onProgress?: (progress: Progress) => void}
+export interface BlobChunkOptions extends ReadOptions {offset?: number; length?: number; max_header_bytes?: number; max_fields?: number; max_total_copy_bytes?: bigint | Decimal}
+/** 投影扫描完成仅表示树遍历结束，逐条 record_complete 才说明该记录的完整内容已验证。 */
+export interface ProjectedScanResult extends ScanResult {projection: true; records_complete: boolean}
+export class ProjectedScan extends Scan<ProjectedRecord> {
+  constructor(database: Database, root: number, options?: ProjectedScanOptions);
+  result: ProjectedScanResult | null;
+  next(): Promise<IteratorResult<ProjectedRecord, ProjectedScanResult>>;
+  return(): Promise<IteratorResult<ProjectedRecord, ProjectedScanResult>>;
+}

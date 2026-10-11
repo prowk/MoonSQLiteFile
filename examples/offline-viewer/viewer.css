@@ -14,3 +14,5 @@ details summary{cursor:pointer;font-weight:600}#object-info{overflow-wrap:anywhe
 .preview-actions{display:flex;flex-wrap:wrap;gap:10px}#preview-start:not(:disabled){background:#167a79;color:white;border-color:#167a79}
 .record li{font-size:13px}pre{font-size:13px}.budgets{gap:14px 20px}.budgets label{font-size:14px}
 @media(max-width:600px){header{flex-wrap:wrap;gap:12px}.local{display:block;font-size:12px}main{padding:24px 16px}.panel{padding:18px}.actions{max-width:none;width:100%}.actions>button{flex:1 1 135px}.actions>.primary{width:100%}.actions input[type=file]{max-width:100%;width:180px}.budgets label{width:100%;justify-content:space-between}.budgets input[type=number]{width:110px}.preview-actions>button{flex:1 1 130px}.page-heading{align-items:flex-start}.raw-heading select{width:125px}.raw-heading button{padding:7px 8px}.metrics{gap:10px}.metric{padding:14px}.metric strong{font-size:22px}}
+/* 分块只展示有限十六进制文本，窄屏保持换行并提供整段下载。 */
+.blob-chunk pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:16rem;overflow:auto}.blob-chunk button{margin:4px}.budgets input[type=text]{min-width:0;max-width:100%}

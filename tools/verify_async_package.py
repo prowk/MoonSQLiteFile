@@ -89,6 +89,17 @@ import {openFileSource} from '@prowk/moonsqlitefile-async/node';
 const db = await openDatabase(await openFileSource('copy.sqlite'), {wal: await openFileSource('copy.wal'), closeSources: false});
 try {
   const schema = await db.schema();
+  for await (const projected of db.scanProjected(1, {fields: [0], max_field_bytes: 16, max_total_copy_bytes: 100n})) {
+    const original: number = projected.values[0].field.byte_length;
+    const part: boolean = projected.values[0].truncated;
+    const bytes: Uint8Array = (await db.readBlobChunk(projected, 0, {length: 128})).bytes;
+    const reread = await db.previewRecord(projected, {fields: [0]});
+    console.log(original, part, bytes, reread.record_complete); break;
+  }
+  // @ts-expect-error 投影字段必须是物理列序号数组。
+  db.scanProjected(1, {fields: ['name']});
+  // @ts-expect-error 分块 offset 必须为 number。
+  await db.readBlobChunk({page_number: 2, cell_offset: 40}, 0, {offset: 0n});
   for await (const row of db.scan(1, {limit: 2, max_total_payload_bytes: 100n})) {
     const id: Decimal | null = row.rowid; console.log(id, row.values[0]?.type); break;
   }

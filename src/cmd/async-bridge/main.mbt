@@ -59,12 +59,26 @@ priv struct BridgeInspection {
 }
 
 ///|
+priv struct BridgeProjected {
+  cursor : @sqlite.ProjectedCursor
+  owner : Int
+}
+
+///|
+priv struct BridgeField {
+  cursor : @sqlite.FieldReadCursor
+  owner : Int
+}
+
+///|
 priv struct BridgeState {
   contexts : Map[Int, BridgeContext]
   scans : Map[Int, BridgeScan]
   inspections : Map[Int, BridgeInspection]
   wals : Map[Int, @sqlite.WalCursor]
   indexes : Map[Int, BridgeIndex]
+  projected : Map[Int, BridgeProjected]
+  fields : Map[Int, BridgeField]
   mut serial : Int
 }
 
@@ -76,7 +90,7 @@ fn BridgeState::id(self : BridgeState) -> Int raise @sqlite.SqliteError {
     self.inspections.length() +
     self.wals.length() +
     self.indexes.length() >=
-    1024 {
+    1024 - self.projected.length() - self.fields.length() {
     raise @sqlite.LimitExceeded("异步桥接句柄上限已耗尽")
   }
   self.serial = self.serial + 1
@@ -231,12 +245,26 @@ fn dispatch(
           state.inspections.remove(inspection_id)
         }
       }
+      for handle in state.projected.keys().to_array() {
+        if state.projected[handle].owner == id {
+          ignore(state.projected[handle].cursor.stop())
+          state.projected.remove(handle)
+        }
+      }
+      for handle in state.fields.keys().to_array() {
+        if state.fields[handle].owner == id {
+          state.fields[handle].cursor.stop()
+          state.fields.remove(handle)
+        }
+      }
       Json::null()
     }
     "stats" =>
       Json::object({
         "contexts": state.contexts.length().to_json(),
-        "scans": state.scans.length().to_json(),
+        "scans": (state.scans.length() +
+        state.projected.length() +
+        state.fields.length()).to_json(),
         "inspections": state.inspections.length().to_json(),
         "wals": state.wals.length().to_json(),
         "indexes": state.indexes.length().to_json(),
@@ -308,6 +336,130 @@ fn dispatch(
                   details,
                 ),
               })
+          }
+      }
+    }
+    "projected-new" => {
+      let context = state.contexts
+        .get(id)
+        .unwrap_or_else(() => raise @sqlite.Invalid("数据库句柄不存在"))
+      let cursor = context.db.projected_cursor(
+        request_int(request, "root", 1),
+        fields=request_fields(request),
+        limit=request_int(request, "limit", context.db.limits.max_rows),
+        max_field_bytes=request_int(request, "max_field_bytes", 256),
+        max_header_bytes=request_int(request, "max_header_bytes", 65536),
+        max_fields=request_int(request, "max_fields", 2048),
+        max_selected_fields=request_int(request, "max_selected_fields", 128),
+        max_total_copy_bytes=request_uint(
+          request, "max_total_copy_bytes", "67108864", 18446744073709551615UL,
+        ),
+      )
+      let handle = state.id()
+      state.projected[handle] = { cursor, owner: id, }
+      Json::object({ "id": handle.to_json() })
+    }
+    "projected-next"
+    | "projected-supply"
+    | "projected-progress"
+    | "projected-close" => {
+      let scan = state.projected
+        .get(id)
+        .unwrap_or_else(() => raise @sqlite.Invalid("投影句柄不存在"))
+      match command {
+        "projected-supply" => {
+          scan.cursor.provide_page(request_int(request, "page", 0), bytes)
+          Json::null()
+        }
+        "projected-progress" =>
+          Json::object({
+            "progress": scan_progress(scan.cursor.progress()),
+            "location": Json::null(),
+          })
+        "projected-close" => {
+          let summary = scan.cursor.stop()
+          state.projected.remove(id)
+          scan_summary(summary)
+        }
+        _ =>
+          match scan.cursor.next() {
+            @sqlite.NeedProjectedPage(page) =>
+              Json::object({ "kind": "page", "page": page.to_json() })
+            @sqlite.ProjectedRecordReady(record) =>
+              Json::object({
+                "kind": "record",
+                "record": projected_json(record),
+                "progress": scan_progress(scan.cursor.progress()),
+              })
+            @sqlite.ProjectedScanFinished(summary) =>
+              Json::object({ "kind": "done", "summary": scan_summary(summary) })
+          }
+      }
+    }
+    "field-new" => {
+      let context = state.contexts
+        .get(id)
+        .unwrap_or_else(() => raise @sqlite.Invalid("数据库句柄不存在"))
+      let page = request_int(request, "page", 0)
+      let offset = request_int(request, "cell_offset", 0)
+      let header_bytes = request_int(request, "max_header_bytes", 65536)
+      let max_fields = request_int(request, "max_fields", 2048)
+      let budget = request_uint(
+        request, "max_total_copy_bytes", "67108864", 18446744073709551615UL,
+      )
+      let cursor = if request_text(request, "mode", "preview") == "blob" {
+        context.db.blob_chunk_cursor(
+          page,
+          offset,
+          request_int(request, "field", 0),
+          offset=request_int(request, "offset", 0),
+          length=request_int(request, "length", 65536),
+          max_header_bytes=header_bytes,
+          max_fields~,
+          max_total_copy_bytes=budget,
+        )
+      } else {
+        context.db.field_cursor(
+          page,
+          offset,
+          fields=request_fields(request),
+          max_field_bytes=request_int(request, "max_field_bytes", 256),
+          max_header_bytes=header_bytes,
+          max_fields~,
+          max_selected_fields=request_int(request, "max_selected_fields", 128),
+          max_total_copy_bytes=budget,
+        )
+      }
+      let handle = state.id()
+      state.fields[handle] = { cursor, owner: id, }
+      Json::object({ "id": handle.to_json() })
+    }
+    "field-next" | "field-supply" | "field-close" => {
+      let field = state.fields
+        .get(id)
+        .unwrap_or_else(() => raise @sqlite.Invalid("字段句柄不存在"))
+      match command {
+        "field-supply" => {
+          field.cursor.provide_page(request_int(request, "page", 0), bytes)
+          Json::null()
+        }
+        "field-close" => {
+          field.cursor.stop()
+          state.fields.remove(id)
+          Json::null()
+        }
+        _ =>
+          match field.cursor.next() {
+            @sqlite.NeedFieldPage(page) =>
+              Json::object({ "kind": "page", "page": page.to_json() })
+            @sqlite.FieldRecordReady(record) =>
+              Json::object({
+                "kind": "record",
+                "record": projected_json(record),
+              })
+            @sqlite.FieldChunkReady(chunk) =>
+              Json::object({ "kind": "chunk", "chunk": field_chunk_json(chunk) })
+            @sqlite.FieldReadFinished => Json::object({ "kind": "done" })
           }
       }
     }
@@ -561,6 +713,8 @@ fn main {
     inspections: Map([]),
     wals: Map([]),
     indexes: Map([]),
+    projected: Map([]),
+    fields: Map([]),
     serial: 0,
   }
   register((text, bytes) => {

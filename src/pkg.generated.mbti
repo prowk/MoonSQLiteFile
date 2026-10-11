@@ -30,6 +30,8 @@ pub fn open_wal_source(WalSource, limits? : Limits) -> Database raise SqliteErro
 
 pub fn parse_header(Bytes) -> Header raise SqliteError
 
+pub fn parse_record_header(Bytes, Int, max_fields? : Int) -> RecordHeader raise SqliteError
+
 pub fn parse_wal_header(Bytes) -> WalHeader raise SqliteError
 
 // Errors
@@ -114,6 +116,8 @@ pub struct Database {
   limits : Limits
   // private fields
 }
+pub fn Database::blob_chunk_cursor(Self, Int, Int, Int, offset? : Int, length? : Int, max_header_bytes? : Int, max_fields? : Int, max_total_copy_bytes? : UInt64) -> FieldReadCursor raise SqliteError
+pub fn Database::field_cursor(Self, Int, Int, fields? : Array[Int]?, max_field_bytes? : Int, max_header_bytes? : Int, max_fields? : Int, max_selected_fields? : Int, max_total_copy_bytes? : UInt64) -> FieldReadCursor raise SqliteError
 pub fn Database::freelist(Self) -> Array[Int] raise SqliteError
 pub fn Database::header(Self) -> Header
 pub fn Database::index_records(Self, String, limit? : Int) -> Array[BTreeRecord] raise SqliteError
@@ -125,6 +129,8 @@ pub fn Database::inspect_page(Self, Int) -> PageInspection
 pub fn Database::inspection_cursor(Self, max_total_payload_bytes? : UInt64, max_issues? : Int) -> InspectionCursor
 pub fn Database::page(Self, Int) -> Page raise SqliteError
 pub fn Database::page_count(Self) -> Int
+pub fn Database::preview_record(Self, Int, Int, fields? : Array[Int]?, max_field_bytes? : Int) -> ProjectedRecord raise SqliteError
+pub fn Database::projected_cursor(Self, Int, fields? : Array[Int]?, limit? : Int, max_field_bytes? : Int, max_header_bytes? : Int, max_fields? : Int, max_selected_fields? : Int, max_total_copy_bytes? : UInt64) -> ProjectedCursor raise SqliteError
 pub fn Database::ptrmap_entries(Self) -> Array[PtrmapEntry] raise SqliteError
 pub fn Database::read_btree(Self, Int, limit? : Int, max_total_payload_bytes? : UInt64) -> Array[BTreeRecord] raise SqliteError
 pub fn Database::read_index(Self, Int, limit? : Int) -> Array[BTreeRecord] raise SqliteError
@@ -192,6 +198,40 @@ pub(all) enum DiagnosticPhase {
 pub fn DiagnosticPhase::equal(Self, Self) -> Bool
 pub fn DiagnosticPhase::not_equal(Self, Self) -> Bool
 pub fn DiagnosticPhase::to_repr(Self) -> @debug.Repr
+
+pub(all) struct FieldChunk {
+  field : RecordField
+  offset : Int
+  bytes : Bytes
+  more : Bool
+  overflow_chain_complete : Bool
+  copied_bytes : UInt64
+} derive(@debug.Debug)
+pub fn FieldChunk::to_repr(Self) -> @debug.Repr
+
+pub(all) struct FieldPreview {
+  field : RecordField
+  value : Value
+  returned_bytes : Int
+  truncated : Bool
+} derive(@debug.Debug)
+pub fn FieldPreview::to_repr(Self) -> @debug.Repr
+
+pub struct FieldReadCursor {
+  // private fields
+}
+pub fn FieldReadCursor::next(Self) -> FieldReadEvent raise SqliteError
+pub fn FieldReadCursor::progress(Self) -> ScanProgress
+pub fn FieldReadCursor::provide_page(Self, Int, Bytes) -> Unit raise SqliteError
+pub fn FieldReadCursor::stop(Self) -> Unit
+
+pub(all) enum FieldReadEvent {
+  NeedFieldPage(Int)
+  FieldRecordReady(ProjectedRecord)
+  FieldChunkReady(FieldChunk)
+  FieldReadFinished
+} derive(@debug.Debug)
+pub fn FieldReadEvent::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Header {
   page_size : Int
@@ -389,6 +429,33 @@ pub fn PageType::equal(Self, Self) -> Bool
 pub fn PageType::not_equal(Self, Self) -> Bool
 pub fn PageType::to_repr(Self) -> @debug.Repr
 
+pub struct ProjectedCursor {
+  // private fields
+}
+pub fn ProjectedCursor::next(Self) -> ProjectedScanEvent raise SqliteError
+pub fn ProjectedCursor::progress(Self) -> ScanProgress
+pub fn ProjectedCursor::provide_page(Self, Int, Bytes) -> Unit raise SqliteError
+pub fn ProjectedCursor::stop(Self) -> ScanSummary
+
+pub(all) struct ProjectedRecord {
+  rowid : Int64?
+  page_number : Int
+  cell_offset : Int
+  header : RecordHeader
+  values : Array[FieldPreview]
+  record_complete : Bool
+  overflow_chain_complete : Bool
+  copied_bytes : UInt64
+} derive(@debug.Debug)
+pub fn ProjectedRecord::to_repr(Self) -> @debug.Repr
+
+pub(all) enum ProjectedScanEvent {
+  NeedProjectedPage(Int)
+  ProjectedRecordReady(ProjectedRecord)
+  ProjectedScanFinished(ScanSummary)
+} derive(@debug.Debug)
+pub fn ProjectedScanEvent::to_repr(Self) -> @debug.Repr
+
 pub(all) struct PtrmapEntry {
   page_number : Int
   map_page : Int
@@ -453,6 +520,23 @@ pub fn RangeWalSource::page_count(Self) -> Int
 pub fn RangeWalSource::page_range(Self, Int) -> SnapshotPageRange raise SqliteError
 pub fn RangeWalSource::read_range64(Self, Int64, Int) -> Bytes raise SourceError
 pub impl RangeSource for RangeWalSource
+
+pub(all) struct RecordField {
+  index : Int
+  serial_type : UInt64
+  payload_offset : Int
+  byte_length : Int
+} derive(Eq, @debug.Debug)
+pub fn RecordField::equal(Self, Self) -> Bool
+pub fn RecordField::not_equal(Self, Self) -> Bool
+pub fn RecordField::to_repr(Self) -> @debug.Repr
+
+pub(all) struct RecordHeader {
+  header_bytes : Int
+  payload_bytes : Int
+  fields : Array[RecordField]
+} derive(@debug.Debug)
+pub fn RecordHeader::to_repr(Self) -> @debug.Repr
 
 pub(all) struct Row {
   rowid : Int64

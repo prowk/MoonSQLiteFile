@@ -16,6 +16,80 @@ pub extend Value with @debug.Debug::{to_repr}
 pub extend Value with Eq::{equal, not_equal}
 
 ///|
+/// 物理列的 serial type、payload 内字节偏移和原始长度；没有 SQL 列名或亲和性转换。
+pub(all) struct RecordField {
+  index : Int
+  serial_type : UInt64
+  payload_offset : Int
+  byte_length : Int
+} derive(Debug, Eq)
+
+///|
+pub extend RecordField with @debug.Debug::{to_repr}
+
+///|
+pub extend RecordField with Eq::{equal, not_equal}
+
+///|
+/// 已校验的记录头和字段边界；不表示字段内容或完整 overflow 链已验证。
+pub(all) struct RecordHeader {
+  header_bytes : Int
+  payload_bytes : Int
+  fields : Array[RecordField]
+} derive(Debug)
+
+///|
+pub extend RecordHeader with @debug.Debug::{to_repr}
+
+///|
+/// 只解析完整记录头，payload_size 为 cell 声明长度；先核对字段边界，不分配字段值。
+pub fn parse_record_header(
+  header : Bytes,
+  payload_size : Int,
+  max_fields? : Int = 65536,
+) -> RecordHeader raise SqliteError {
+  if max_fields < 1 {
+    raise Invalid("记录字段上限必须为正数")
+  }
+  let (size, prefix) = decode_varint(header, 0)
+  if payload_size < 0 ||
+    size < prefix.to_uint64() ||
+    size > payload_size.to_uint64() {
+    raise Invalid("记录头长度超出 payload 边界")
+  }
+  let header_end = size.to_int()
+  require_range(header, 0, header_end)
+  let fields : Array[RecordField] = []
+  let mut position = prefix
+  let mut body = header_end
+  while position < header_end {
+    if fields.length() >= max_fields {
+      raise LimitExceeded("记录字段数量超过限制")
+    }
+    let (serial, length) = decode_varint(header, position)
+    if length > header_end - position {
+      raise Invalid("serial type varint 跨越记录头边界")
+    }
+    let count = record_serial_length(serial)
+    if count > payload_size - body {
+      raise Invalid("记录字段长度超出 payload 边界")
+    }
+    fields.push({
+      index: fields.length(),
+      serial_type: serial,
+      payload_offset: body,
+      byte_length: count,
+    })
+    body = body + count
+    position = position + length
+  }
+  if body != payload_size {
+    raise Invalid("记录体含有未被 serial type 描述的剩余字节")
+  }
+  { header_bytes: header_end, payload_bytes: payload_size, fields, }
+}
+
+///|
 fn record_serial_length(serial : UInt64) -> Int raise SqliteError {
   match serial {
     0UL | 8UL | 9UL => 0
@@ -74,26 +148,16 @@ pub fn decode_record(
   if encoding < 1 || encoding > 3 {
     raise Invalid("无效文本编码：\{encoding}")
   }
-  let (header_size, header_varint_size) = decode_varint(payload, 0)
-  if header_size < header_varint_size.to_uint64() ||
-    header_size > payload.length().to_uint64() {
-    raise Invalid("记录头长度超出 payload 边界")
-  }
-  let header_end = header_size.to_int()
-  let serials : Array[UInt64] = []
-  let mut header_cursor = header_varint_size
-  while header_cursor < header_end {
-    let (serial, size) = decode_varint(payload, header_cursor)
-    if size > header_end - header_cursor {
-      raise Invalid("serial type varint 跨越记录头边界")
-    }
-    serials.push(serial)
-    header_cursor = header_cursor + size
-  }
+  let header = parse_record_header(
+    payload,
+    payload.length(),
+    max_fields=payload.length(),
+  )
   let values : Array[Value] = []
-  let mut body_cursor = header_end
-  for serial in serials {
-    let count = record_serial_length(serial)
+  for field in header.fields {
+    let serial = field.serial_type
+    let count = field.byte_length
+    let body_cursor = field.payload_offset
     require_range(payload, body_cursor, count)
     let value = match serial {
       0UL => Null
@@ -116,10 +180,6 @@ pub fn decode_record(
       }
     }
     values.push(value)
-    body_cursor = body_cursor + count
-  }
-  if body_cursor != payload.length() {
-    raise Invalid("记录体含有未被 serial type 描述的剩余字节")
   }
   values
 }

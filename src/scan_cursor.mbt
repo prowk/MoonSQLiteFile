@@ -65,6 +65,8 @@ pub struct BTreeCursor {
   priv mut leaf_depth : Int?
   priv mut finished : ScanSummary?
   priv mut failed : Bool
+  priv mut locations_only : Bool
+  priv mut location_bytes : Bytes?
 }
 
 ///|
@@ -124,6 +126,8 @@ fn Database::scan_cursor_observed(
     leaf_depth: None,
     finished: None,
     failed: false,
+    locations_only: false,
+    location_bytes: None,
   }
 }
 
@@ -197,6 +201,7 @@ fn BTreeCursor::finish(
   self.pending_page = None
   self.supplied = None
   self.payload = None
+  self.location_bytes = None
   self.finished = Some(summary)
   summary
 }
@@ -414,10 +419,13 @@ fn BTreeCursor::advance(self : BTreeCursor) -> ScanEvent raise SqliteError {
     )
     let (size_bits, size_bytes) = page_varint(bytes, payload_offset, usable)
     let size = bounded_int(size_bits, "payload size")
-    if size.to_uint64() > self.max_payload - self.payload_bytes {
+    if !self.locations_only &&
+      size.to_uint64() > self.max_payload - self.payload_bytes {
       raise LimitExceeded("扫描累计 payload 超过字节预算")
     }
-    (self.observer.charge_payload)(size.to_uint64())
+    if !self.locations_only {
+      (self.observer.charge_payload)(size.to_uint64())
+    }
     let (rowid, rowid_bytes) = if table {
       self.observer.trace.at(
         TreeTraversal,
@@ -451,6 +459,19 @@ fn BTreeCursor::advance(self : BTreeCursor) -> ScanEvent raise SqliteError {
       byte_offset=Some(offset),
       cell_index=Some(frame.cursor),
     )
+    if self.locations_only {
+      // 只交付已校验 cell 的定位，不组装 payload；字段游标随后按选择读取。
+      self.location_bytes = Some(bytes)
+      self.records_read = self.records_read + 1
+      frame.cursor = frame.cursor + 1
+      frame.emit_pending = false
+      return RecordReady({
+        rowid,
+        values: [],
+        page_number: page.number,
+        cell_offset: offset,
+      })
+    }
     let reader = self.db.payload_reader(
       bytes,
       payload_offset + size_bytes + rowid_bytes,

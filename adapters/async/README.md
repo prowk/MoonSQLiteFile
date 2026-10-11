@@ -19,7 +19,7 @@ try {
 }
 ```
 
-`db.scan(root)` 支持 for await 背压与 break；`db.scanBtree` 等待异步 visitor；`schema`、`inspectPage`、`inspectDatabase` 返回进度/完整状态与部分结果。支持 AbortSignal 取消。所有成功记录/页面仍完整解码，有界缓存不代表整个检查为常量内存。
+`db.scan(root)` 支持 for await 背压与 break，保留完整值；`db.scanBtree` 等待异步 visitor；`schema`、`inspectPage`、`inspectDatabase` 返回进度/完整状态与部分结果。支持 AbortSignal 取消，有界缓存不代表整个检查为常量内存。开发源码新增 `scanProjected`/`previewRecord` 的有限字段与 `readBlobChunk` 的 BLOB 分块；原长度、截断与未读范围明确标记，完整度仅针对实际读取内容。字段预算、字节单位和生命周期见[字段契约](https://github.com/prowk/MoonSQLiteFile/blob/main/docs/async-source.md#有限字段与-blob-分块未发布)。
 
 可选打开参数包括 wal、tailPolicy（strict/valid_prefix）、max_frames、max_overlay_pages，以及页数、记录数、单条/累计 payload、路径深度及报告预算。db/WAL 必须为同一时刻不可变副本，未实现在线锁或 SQL 执行。完整契约和本地验收见仓库 `docs/async-source.md`。
 

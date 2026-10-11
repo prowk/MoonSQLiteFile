@@ -31,9 +31,9 @@ visitor/进度回调异常的来源由调用边界确定，自带 kind 不改变
 
 先 reportEnvelope，再 JSON.stringify、structuredClone 或 Worker.postMessage；包装后的 diagnostics 随结果传输，不依赖 WeakMap。诊断截断时仍保留捕获的停止来源，不覆盖此前损坏；多个来源失败可同时存在，partial 与 failed 可同时成立。
 
-预览游标暂停时为 incomplete / preview_paused，继续读取复用同一游标；消费者 break 为 visitor_stopped，数量预算为 record_limit。展示截断只影响界面文字，单条记录仍完整解码并受 payload 预算限制。原始值按磁盘存储顺序排列，不能当成 WITHOUT ROWID 或索引的 SQL 列顺序。
+预览游标暂停时为 incomplete / preview_paused，继续读取复用同一游标；消费者 break 为 visitor_stopped，数量预算为 record_limit。原完整扫描仍完整解码并受 payload 预算限制。新增字段投影先读取头及所选前缀，`record_complete` 与 `overflow_chain_complete` 分别说明内容/链完整度；未读部分没有因此验证。投影遍历 complete 但 `records_complete: false` 时，包装仍为 partial。原始值按磁盘存储顺序排列，不能当成 WITHOUT ROWID 或索引的 SQL 列顺序。
 
-查看器在创建游标时冻结实际数量、累计 payload 和时间预算；续读预算变化必须重新预览。schema/预览数量不超过打开时 max_rows，报告同时保留请求上限与实际上限。展示字段/字符和大值批次限制在 Worker 传输前执行，库返回值保持完整；具体界限见[查看器说明](../examples/offline-viewer/README.md#记录预览与导出)。
+查看器在创建投影游标时冻结实际数量、字段选择、累计复制和时间预算，导出 scope 为 `records_projection`；续读预算变化必须重新预览。schema/预览数量不超过打开时 max_rows，报告同时保留请求上限与实际上限。核心限制字段复制，Worker 进一步限制展示字符；旧完整扫描返回值保持完整。具体界限见[查看器说明](../examples/offline-viewer/README.md#记录预览与导出)和[字段读取契约](async-source.md#有限字段与-blob-分块未发布)。
 
 ## 64 位值
 

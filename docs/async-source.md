@@ -96,6 +96,22 @@ const db = await openDatabase(await openFileSource('copy.sqlite'), {
 
 完整复现使用[统一验证入口](../CONTRIBUTING.md#完整验证)。单项脚本仍可独立运行；参数、取消、背压、WAL、失败路径和释放纳入持续验收。
 
+## 有限字段与 BLOB 分块（未发布）
+
+`Database.scanProjected(root, options)` 返回 `ProjectedRecord`，`previewRecord({page_number, cell_offset}, options)` 独立读取同一静态快照中的定位。`header.fields` 保留物理序号、serial type、payload 内字节偏移和原长度；`values` 仅含所选字段，按物理序号排序。`fields` 缺省取前 `max_selected_fields` 列（128），空数组只读头。它们不提供 SQL 列名、亲和性或行查询。
+
+例如 `db.scanProjected(2, {fields: [0, 2], max_field_bytes: 256, max_total_copy_bytes: 1048576n})`；取得记录后使用 `await db.readBlobChunk(record, 2, {offset: 0, length: 65536})`。分块 `bytes` 是独立 `Uint8Array`，`more` 指示字段后部仍有字节；偏移、长度和原长度都以原始字节计数。分块不限定页面边界。定位在扫描前进、暂停、结束后仍有效，前提是数据库保持打开且源不变。数据库关闭后不能再次读取；已经返回的值和字节仍可使用。每次调用拥有独立供页游标，可取消，关闭数据库会取消并等待正在读取的操作，然后释放句柄和源。
+
+文本/BLOB 前缀默认 256、可设 0–65536 原始字节；整数、浮点和空值完整解码，最多 8 字节，不按字符数截断。UTF-8 退回完整码点，UTF-16 退回完整 2 字节单元且不留下半个代理对；已读不合法编码会失败，未读尾部不解码。`returned_bytes` 表示交付原始字节数，`truncated` 表示交付长度小于原长度。BLOB chunk 的 `length` 同为 0–65536，越过字段末尾返回剩余字节，起点等于末尾返回空，越界拒绝。
+
+默认头预算 65536 字节（范围 9–65536）、总字段 2048（1–65536）、选取字段 128（0–max_fields，选择数组不得超限或重复；总字段上限设得更小时须同时降低选择上限）。先检查头长、字段数和选择数量，再分配相应数组/值。默认累计复制预算 64 MiB，`max_total_copy_bytes` 含初始探测（最多 9 字节）、记录头以及所选前缀/分块，边界裁掉的少数字节也计费；单次读取重新计费，扫描跨条累计。投影的 `progress.payload_bytes` 指该计费量。区间在分配前计费，读取失败或取消不退还，因此停止进度可能包含尚未供完的区间，不等同于成功交付字节数。`max_payload_bytes` 与 `max_total_payload_bytes` 继续约束旧完整读取；不能用它们推断新投影的复制限制。
+
+`record_complete` 仅在全部字段完整解码且链完整时为真；`overflow_chain_complete` 表示实际观察到的链完整，不能代替字段内容校验。投影扫描 `status: complete` 表示树遍历结束，`records_complete: false` 的报告仍为 `partial: true`。短预览、未选字段或未读链尾都没有因此验证；需要全内容与全库检查时仍用原 API。有限读取可预览超过完整读取单条上限的字段，但仍受现有 payload 整数寻址、页/深度预算、头预算和复制预算约束。
+
+核心对应 `parse_record_header`、`Database.field_cursor`、`blob_chunk_cursor`、`projected_cursor`；宿主用 `next/provide_page/stop` 驱动，不包含 I/O。停止或失败后不再索取页，成功值独立于游标。完整 `decode_record`、BTreeCursor 和扫描签名保持兼容。
+
+分块访问后部会从前面的 overflow 指针逐页前进，重复分块可能重复读链；不是 O(1) 随机 I/O。页缓冲、记录头、所访问页的归属/循环集合、遍历路径、宿主缓存和 WAL 索引仍占内存。复制预算计字段读取量，不是全部宿主/桥接分配总量；桥接还将有限 BLOB 转成十六进制，分块适配再生成字节数组。未选字段避免整值复制/解码，但选后部字段仍可能读取前部所有页。
+
 ## 类型与结构化报告
 
 本地 tarball 包含 index.d.ts、node.d.ts 及条件导出，支持严格 NodeNext 与 Bundler 消费；Node 子入口不向浏览器暴露。包内 example-node.mjs 与 example-browser.mjs 分别从真实安装包运行静态 db/WAL、源接管、异步迭代和关闭。先 npm pack ./_build/async-adapter，再 npm install 对应本地 tgz；npm registry 尚未发布。

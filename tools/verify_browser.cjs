@@ -108,11 +108,11 @@ async function main() {
     await page.locator('#objects').selectOption('143'); await page.locator('#value-limit').fill('16');
     await page.locator('#preview-start').click();
     await page.waitForFunction(() => document.querySelector('#preview-status').textContent.includes('累计 2 条'));
-    assert((await page.locator('#records').textContent()).includes('仅展示前 16 字符'));
+    assert((await page.locator('#records').textContent()).includes('仅前缀'));
     const previewDownload = page.waitForEvent('download'); await page.locator('#preview-export').click();
     const previewPath = path.join(fixtures, 'preview-export.json'); await (await previewDownload).saveAs(previewPath);
     const paused = JSON.parse(fs.readFileSync(previewPath, 'utf8'));
-    assert.equal(paused.scope, 'records'); assert(paused.partial); assert.equal(paused.result.reason, 'preview_paused');
+    assert.equal(paused.scope, 'records_projection'); assert(paused.partial); assert.equal(paused.result.reason, 'preview_paused');
     await page.screenshot({path: path.join(fixtures, 'viewer-preview.png'), fullPage: true});
     evidence.push({case: 'quick_schema_and_cursor_preview', bytes: opened.io.db.bytes, batch: 2, limit: 5, export_partial: envelope.partial});
     await page.locator('#start').click(); await done('complete');

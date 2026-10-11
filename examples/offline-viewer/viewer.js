@@ -299,9 +299,53 @@ el('preview-export').onclick = () => download(previewReport);
 function previewBudgetsChanged(budgets) {
   try {
     return budget('preview-limit') !== budgets.requested_limit ||
-      String(BigInt(budget('max-payload')) * 1048576n) !== budgets.max_total_payload_bytes ||
-      budget('timeout') !== budgets.timeout_seconds;
+      String(BigInt(budget('max-payload')) * 1048576n) !== budgets.max_total_copy_bytes ||
+      budget('timeout') !== budgets.timeout_seconds || budget('value-limit') * 4 !== budgets.max_field_bytes ||
+      JSON.stringify(selectedFields() ?? null) !== JSON.stringify(budgets.fields ?? null);
   } catch { return true; }
+}
+function selectedFields() {
+  const text = el('preview-fields').value.trim();
+  if (!text) return undefined;
+  if (!/^\d+(\s*,\s*\d+)*$/.test(text)) throw new Error('物理字段序号使用从 0 开始的整数，以逗号分隔');
+  const fields = text.split(',').map(value => Number(value.trim()));
+  if (fields.length > 128 || fields.some(value => value > 2047) || new Set(fields).size !== fields.length) throw new Error('最多选择 128 个不重复的字段，序号范围为 0–2047');
+  return fields;
+}
+function blobChunkButton(record, value) {
+  const button = textNode('button', '读取 BLOB 分块'), panel = textNode('div', '', 'blob-chunk');
+  let offset = 0;
+  button.onclick = async () => {
+    const ticket = generation, request = previewRequest, nextWasDisabled = el('preview-next').disabled;
+    button.disabled = true; el('preview-start').disabled = true; el('preview-next').disabled = true;
+    el('objects').disabled = true; el('cancel').disabled = false;
+    panel.textContent = `正在读取字段 ${value.field_index}，偏移 ${offset}…`;
+    try {
+      const result = await run({op: 'blob-chunk', record: {page_number: record.page_number, cell_offset: record.cell_offset},
+        field: value.field_index, offset, timeout: budget('timeout'), payload: String(BigInt(budget('max-payload')) * 1048576n)});
+      if (ticket !== generation || request !== previewRequest) return;
+      panel.replaceChildren(textNode('p', `字段 ${value.field_index} · 原长度 ${result.field.byte_length} 字节 · 偏移 ${result.offset} · 本段 ${result.bytes.length} 字节。未读取内容仍未验证。`));
+      const hex = [...result.bytes.subarray(0, 2048)].map(byte => byte.toString(16).padStart(2, '0')).join(' ');
+      panel.append(textNode('pre', hex + (result.bytes.length > 2048 ? '\n…仅显示本段前 2048 字节；下载可取得本段全部字节。' : '')));
+      const save = textNode('button', '下载本段字节');
+      save.onclick = () => {
+        const url = URL.createObjectURL(new Blob([result.bytes]));
+        const link = textNode('a', ''); link.href = url; link.download = `blob-field-${value.field_index}-offset-${result.offset}.bin`;
+        link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      panel.append(save);
+      offset += result.bytes.length;
+      button.textContent = result.more ? '读取下一段 BLOB' : 'BLOB 区间已读完';
+      button.disabled = !result.more;
+    } catch (error) { if (ticket === generation && request === previewRequest) { panel.textContent = error.message; button.disabled = false; } }
+    finally {
+      if (ticket === generation && request === previewRequest) {
+        el('preview-start').disabled = !canPreview(); el('objects').disabled = false; el('cancel').disabled = true;
+        el('preview-next').disabled = nextWasDisabled || !previewReport || previewBudgetsChanged(previewReport.budgets) || openingBudgetChanged;
+      }
+    }
+  };
+  return [button, panel];
 }
 async function showRecords(reset) {
   const ticket = generation, request = ++previewRequest;
@@ -314,7 +358,7 @@ async function showRecords(reset) {
     if (reset) { previewRoot = root; el('records').replaceChildren(); }
     el('preview-status').textContent = '正在读取原始记录…';
     const result = await run({op: 'preview', reset, root, batch: budget('preview-batch'), limit: budget('preview-limit'),
-      payload: String(BigInt(budget('max-payload')) * 1048576n), timeout: budget('timeout'), valueLimit});
+      payload: String(BigInt(budget('max-payload')) * 1048576n), timeout: budget('timeout'), valueLimit, fields: selectedFields()});
     if (ticket !== generation || request !== previewRequest) return;
     // 只保留当前批次的 DOM，避免继续读取时累计全部记录与大值。
     if (result.records.length) el('records').replaceChildren();
@@ -323,12 +367,14 @@ async function showRecords(reset) {
       row.append(textNode('strong', `rowid ${record.rowid ?? '无'} · 页 ${record.page_number} · cell 偏移 ${record.cell_offset}`));
       const values = textNode('ol', '');
       record.values.slice(0, 128).forEach(value => {
-        const full = String(value.value), original = value.original_characters ?? full.length, shortened = value.truncated || full.length > valueLimit;
-        const displayed = Math.min(full.length, valueLimit);
-        values.append(textNode('li', `${value.type}: ${full.slice(0, valueLimit)}${shortened ? `…（仅展示前 ${displayed} 字符，原值 ${original} 字符）` : ''}`));
+        const full = String(value.value), shortened = value.truncated || full.length > valueLimit;
+        const item = textNode('li', `字段 ${value.field_index} · ${value.type}: ${full.slice(0, valueLimit)}${shortened ? '…' : ''}（原长 ${value.original_bytes} 字节，读取 ${value.returned_bytes} 字节${value.truncated ? '，仅前缀' : ''}）`);
+        if (value.type === 'blob' && value.original_bytes > 0) item.append(...blobChunkButton(record, value));
+        values.append(item);
       });
       const fields = record.total_fields ?? record.values.length;
-      if (fields > record.values.length) values.append(textNode('li', `仅展示前 ${record.values.length} 个磁盘字段，原记录 ${fields} 个字段。`));
+      if (fields > record.values.length) values.append(textNode('li', `读取并展示所选 ${record.values.length} 个物理字段，原记录 ${fields} 个字段；未选字段未解码。`));
+      if (!record.record_complete) row.append(textNode('p', '这是字段投影或有限前缀，未读取内容和链尾没有完整验证。', 'scope'));
       row.append(values); el('records').append(row);
     }
     previewReport = result.export; el('preview-export').disabled = false;
@@ -345,7 +391,7 @@ async function showRecords(reset) {
   } catch (error) { if (ticket === generation && request === previewRequest) el('preview-status').textContent = error.message; }
   finally { if (ticket === generation && request === previewRequest) { el('preview-start').disabled = !canPreview(); el('objects').disabled = false; el('cancel').disabled = true; } }
 }
-for (const id of ['preview-limit', 'max-payload', 'timeout']) el(id).addEventListener('input', () => {
+for (const id of ['preview-limit', 'max-payload', 'timeout', 'value-limit', 'preview-fields']) el(id).addEventListener('input', () => {
   if (!previewReport) return;
   el('preview-next').disabled = true;
   el('preview-status').textContent = '累计预算已修改，请点击“预览所选对象”重新预览。当前导出仍对应上次实际执行预算。';

@@ -30,7 +30,7 @@ export function reportEnvelope(result, {scope, budgets = {}}) {
   if (result.reason === 'cancelled' && !diagnostics.some(item => item.category === 'cancelled')) diagnostics.push(errorInfo(new CancelledError()));
   return {format: 'moonsqlitefile-report', format_version: 1, tool_version: '0.8.2-dev', scope,
     budgets: JSON.parse(JSON.stringify(budgets, (_, value) => typeof value === 'bigint' ? String(value) : value)),
-    status: report.status, partial: report.status !== 'complete', diagnostics, result: {...result}};
+    status: report.status, partial: report.status !== 'complete' || result.projection === true && !result.records_complete, diagnostics, result: {...result}};
 }
 
 // 所有异步 I/O 与生命周期留在适配层，格式校验由 MoonBit 核心完成。
@@ -274,6 +274,27 @@ async function openWal(base, wal, options, core) {
     throw error;
   } finally { if (id) bridge(core, {op: 'wal-close', id}); }
 }
+const PROJECTED = Symbol('record projection');
+function projectionOptions(options) {
+  integer(options.max_field_bytes ?? 256, 'max_field_bytes', 0, 65536);
+  integer(options.max_header_bytes ?? 65536, 'max_header_bytes', 9, 65536);
+  const maximum = integer(options.max_fields ?? 2048, 'max_fields', 1, 65536);
+  const selected = integer(options.max_selected_fields ?? 128, 'max_selected_fields', 0, maximum);
+  if (options.fields !== undefined) {
+    if (!Array.isArray(options.fields) || options.fields.length > selected) throw new ParameterError('fields 必须为所选预算内的物理列序号数组');
+    const seen = new Set();
+    for (const field of options.fields) {
+      integer(field, 'field', 0, maximum - 1);
+      if (seen.has(field)) throw new ParameterError('fields 不可重复');
+      seen.add(field);
+    }
+  }
+  payloadBudget(options.max_total_copy_bytes);
+}
+function projectionRequest(options) {
+  return Object.fromEntries(['fields', 'max_field_bytes', 'max_header_bytes', 'max_fields', 'max_selected_fields']
+    .filter(key => options[key] !== undefined).map(key => [key, options[key]]));
+}
 /** 逐条异步迭代器；消费者等待时不预读，不允许并发 next，return/break 释放游标并保存部分结果。 */
 export class Scan {
   constructor(database, root, options = {}) {
@@ -283,12 +304,15 @@ export class Scan {
     if (root > database.header.page_count) throw new ParameterError('根页号越界');
     const limit = integer(options.limit === undefined ? database.options.max_rows ?? 100000 : options.limit, 'limit', 0);
     if (limit > (database.options.max_rows ?? 100000)) throw new ParameterError('limit 不得超过打开时的 max_rows');
-    const payload = payloadBudget(options.max_total_payload_bytes);
+    this.projected = options[PROJECTED] === true; this.recordsComplete = true;
+    if (this.projected) projectionOptions(options);
+    const payload = payloadBudget(this.projected ? options.max_total_copy_bytes : options.max_total_payload_bytes);
     this.database = database; this.options = options; this.controller = new AbortController();
     this.signal = AbortSignal.any([this.controller.signal, database.controller.signal, ...(options.signal ? [options.signal] : [])]);
     checkAbort(this.signal);
-    this.id = database.call({op: 'scan-new', root, limit,
-      schema: options.schema ? 'true' : 'false', max_total_payload_bytes: payload}).id;
+    this.id = database.call(this.projected
+      ? {op: 'projected-new', root, limit, ...projectionRequest(options), max_total_copy_bytes: payload}
+      : {op: 'scan-new', root, limit, schema: options.schema ? 'true' : 'false', max_total_payload_bytes: payload}).id;
     this.progress = {records_read: 0, pages_read: 0, payload_bytes: '0'}; this.result = null; this.pending = null; this.ticks = 0;
     database.scans.add(this);
   }
@@ -305,29 +329,32 @@ export class Scan {
       while (true) {
         checkAbort(this.signal);
         if (++this.ticks % 64 === 0) await withAbort(new Promise(done => setTimeout(done, 0)), this.signal);
-        const event = this.database.call({op: 'scan-next', id: this.id}, undefined, false);
+        const event = this.database.call({op: this.projected ? 'projected-next' : 'scan-next', id: this.id}, undefined, false);
         if (event.kind === 'page') {
           const bytes = await this.database.readPage(event.page, this.signal);
           checkAbort(this.signal);
-          this.database.call({op: 'scan-supply', id: this.id, page: event.page}, bytes, false);
+          this.database.call({op: this.projected ? 'projected-supply' : 'scan-supply', id: this.id, page: event.page}, bytes, false);
         } else if (event.kind === 'record') {
+          if (this.projected) this.recordsComplete &&= event.record.record_complete;
           this.progress = event.progress; notify(this.options.onProgress, {phase: 'scan', ...this.progress});
           return {done: false, value: event.record};
         } else {
           this.result = {status: event.summary.completion === 'complete' ? 'complete' : 'incomplete',
-            reason: event.summary.completion, ...event.summary};
+            reason: event.summary.completion, ...event.summary,
+            ...(this.projected ? {projection: true, records_complete: this.recordsComplete} : {})};
           this.release(); return {done: true, value: this.result};
         }
       }
     } catch (error) {
       let location;
-      try { const state = this.database.call({op: 'scan-progress', id: this.id}, undefined, false); this.progress = state.progress; location = state.location; } catch {}
-      this.result = {...failure(error), ...this.progress, location}; this.release(); throw error;
+      try { const state = this.database.call({op: this.projected ? 'projected-progress' : 'scan-progress', id: this.id}, undefined, false); this.progress = state.progress; location = state.location; } catch {}
+      this.result = {...failure(error), ...this.progress, location,
+        ...(this.projected ? {projection: true, records_complete: false} : {})}; this.release(); throw error;
     }
   }
   release() {
     if (!this.id) return;
-    try { this.database.call({op: 'scan-close', id: this.id}, undefined, false); } finally {
+    try { this.database.call({op: this.projected ? 'projected-close' : 'scan-close', id: this.id}, undefined, false); } finally {
       this.id = null; this.database.scans.delete(this);
     }
   }
@@ -335,11 +362,19 @@ export class Scan {
     this.controller.abort();
     if (this.pending) await this.pending.catch(() => {});
     if (!this.result) {
-      const summary = this.database.call({op: 'scan-close', id: this.id}, undefined, false);
+      const summary = this.database.call({op: this.projected ? 'projected-close' : 'scan-close', id: this.id}, undefined, false);
       this.id = null; this.database.scans.delete(this);
-      this.result = {status: 'incomplete', reason: 'visitor_stopped', ...summary};
+      this.result = {status: 'incomplete', reason: 'visitor_stopped', ...summary,
+        ...(this.projected ? {projection: true, records_complete: this.recordsComplete} : {})};
     } else this.release();
     return {done: true, value: this.result};
+  }
+}
+/** 有界物理字段投影；完整记录接口 Scan 保持原始值。定位可在游标推进后用于同一未关闭静态数据库。 */
+export class ProjectedScan extends Scan {
+  constructor(database, root, options = {}) {
+    optionsObject(options);
+    super(database, root, {...options, [PROJECTED]: true});
   }
 }
 /** 已打开静态视图；扫描和检查返回完整度/部分证据，调用者须在 finally 中 await close 释放接管源。 */
@@ -369,6 +404,57 @@ export class Database {
         error_kind: error instanceof SqliteError ? error.kind : 'unsupported', message: error.message}}; }
   }
   scan(root, options) { return new Scan(this, root, options); }
+  scanProjected(root, options) { return new ProjectedScan(this, root, options); }
+  async previewRecord(record, options = {}) { return this.fieldRead(record, options, false); }
+  async readBlobChunk(record, field, options = {}) { optionsObject(options); return this.fieldRead(record, {...options, field}, true); }
+  async fieldRead(record, options, chunk) {
+    this.assertOpen(); optionsObject(options); projectionOptions(options);
+    if (!record || typeof record !== 'object') throw new ParameterError('需要同一静态数据库中的记录位置');
+    integer(record.page_number, 'page_number', 1, this.header.page_count);
+    integer(record.cell_offset, 'cell_offset', 0, this.header.page_size - 1);
+    if (chunk) {
+      integer(options.field, 'field', 0, (options.max_fields ?? 2048) - 1);
+      integer(options.offset ?? 0, 'offset', 0);
+      integer(options.length ?? 65536, 'length', 0, 65536);
+      const metadata = record.header?.fields?.[options.field];
+      if (metadata) {
+        const serial = BigInt(metadata.serial_type);
+        if (serial < 12n || serial % 2n) throw new ParameterError('分块读取只支持 BLOB 字段');
+        if ((options.offset ?? 0) > metadata.byte_length) throw new ParameterError('BLOB 偏移越界');
+      }
+    }
+    const controller = new AbortController();
+    const signal = AbortSignal.any([controller.signal, this.controller.signal, ...(options.signal ? [options.signal] : [])]);
+    checkAbort(signal);
+    const id = this.call({op: 'field-new', page: record.page_number, cell_offset: record.cell_offset,
+      mode: chunk ? 'blob' : 'preview', ...projectionRequest(options),
+      ...(chunk ? {field: options.field, offset: options.offset ?? 0, length: options.length ?? 65536} : {}),
+      max_total_copy_bytes: payloadBudget(options.max_total_copy_bytes)}).id;
+    let resolve;
+    const pending = new Promise(done => { resolve = done; });
+    const job = {return: async () => { controller.abort(); await pending; }};
+    this.scans.add(job);
+    try {
+      for (let ticks = 0; ; ticks++) {
+        checkAbort(signal);
+        if (ticks && ticks % 64 === 0) await withAbort(new Promise(done => setTimeout(done, 0)), signal);
+        const event = this.call({op: 'field-next', id}, undefined, false);
+        if (event.kind === 'page') {
+          const bytes = await this.readPage(event.page, signal); checkAbort(signal);
+          this.call({op: 'field-supply', id, page: event.page}, bytes, false);
+        } else if (event.kind === 'record') return event.record;
+        else if (event.kind === 'chunk') {
+          const {hex, ...result} = event.chunk;
+          const bytes = new Uint8Array(hex.length / 2);
+          for (let index = 0; index < bytes.length; index++) bytes[index] = parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+          return {...result, bytes};
+        } else throw new SourceError('host_failure', '字段游标未返回结果');
+      }
+    } finally {
+      try { this.call({op: 'field-close', id}, undefined, false); }
+      finally { this.scans.delete(job); resolve(); }
+    }
+  }
   async scanBtree(root, visitor, options = {}) {
     const scan = this.scan(root, options);
     try {

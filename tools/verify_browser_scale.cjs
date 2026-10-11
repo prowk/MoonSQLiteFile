@@ -28,7 +28,14 @@ function processMemory(ids) {
   });
 }
 async function scenario(file, cancel = false) {
-  const html = fs.readFileSync(path.join(root, baseline ? '_build/viewer-stress/baseline.html' : '_build/pages/index.html'));
+  let html = fs.readFileSync(path.join(root, baseline ? '_build/viewer-stress/baseline.html' : '_build/pages/index.html'), 'utf8');
+  if (typeof cancel === 'string') {
+    // 有限前缀已很快完成；在真实 Blob 源读页前加可复现延迟，确保取消/切换发生在待供页阶段。
+    // 正常吞吐与内存场景保持原产物；不改变核心、消息协议或实际字节。
+    html = html.replace(/(<script id="worker-source" type="application\/json">)(.*?)(<\/script>)/s,
+      (_, start, source, end) => start + JSON.stringify(JSON.parse(source) +
+        '\nconst scaleRead = BlobSource.prototype.read; BlobSource.prototype.read = async function(...args) { if (preview) await new Promise(done => setTimeout(done, 20)); return scaleRead.apply(this, args); };').replaceAll('<', '\\u003c') + end);
+  }
   const server = http.createServer((request, response) => { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end(html); });
   await new Promise(done => server.listen(0, '127.0.0.1', done));
   const browser = await playwright.chromium.launch({headless: true, ...(process.env.MOONSQLITE_BROWSER ? {executablePath: process.env.MOONSQLITE_BROWSER} : {})});
@@ -124,12 +131,16 @@ async function scenario(file, cancel = false) {
       assert(result.message_bytes < 2*1024*1024);
       if (file.startsWith('wide')) { assert(result.display.paused_at_display_budget); assert.equal(result.records, 1); }
       else {
-        assert.equal(result.records, 1); assert(result.display.paused_at_payload_threshold);
+        assert.equal(result.records, 8); assert(!result.display.paused_at_payload_threshold);
+        assert(BigInt(result.progress.payload_bytes) < 16384n, '大 BLOB 预览必须由核心限制复制量');
+        assert(result.io.db.bytes < 65536, '大 BLOB 前缀必须实际减少源读取');
         await page.locator('#preview-next').click();
-        await page.waitForFunction(() => window.scaleMessages.filter(item => item.records > 0).length === 2);
-        const second = await page.evaluate(() => window.scaleMessages.filter(item => item.records > 0)[1]);
-        assert.equal(second.records, 1); assert(second.characters <= 262144);
-        assert.notDeepEqual(second.rowids, result.rowids);
+        await page.waitForFunction(() => window.scaleMessages.filter(item => item.records !== undefined).length === 2);
+        const second = await page.evaluate(() => window.scaleMessages.filter(item => item.records !== undefined)[1]);
+        assert.equal(second.records, 0); assert.equal(second.reason, 'complete');
+        await page.getByRole('button', {name: '读取 BLOB 分块', exact: true}).first().click();
+        await page.waitForFunction(() => document.querySelector('.blob-chunk').textContent.includes('本段 65536 字节'));
+        assert(await page.getByRole('button', {name: '下载本段字节', exact: true}).first().isVisible());
       }
       assert.equal(await page.locator('#records article').count(), result.records);
     }

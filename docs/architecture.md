@@ -22,6 +22,8 @@
 
 当前保持单一核心包。底层 `binary/header/record/page` 依赖公开的 `SqliteError/Header/Value/Page`；扫描与 payload 共用页占用状态、诊断 trace 和 observer；schema、ownership、freelist、Ptrmap 与全库游标共享计费和归属状态。跨文件调用不是现成的单向包依赖：先拆这些文件会要求移动公开类型、增加可见接口或建立反向 facade，单纯减少根目录文件数不足以证明这些代价合理。
 
+有限字段路径由 `record.mbt` 解析头与物理偏移，`field_cursor.mbt` 按字节区间供页、前缀解码或交付分块；`projected_cursor.mbt` 复用原 B-tree 遍历，仅取得 cell 定位，再驱动字段游标。完整扫描继续使用原 PayloadReader。页占用和循环检查共享，未读字段及链尾不获得完整性结论。异步桥接维护两类新句柄，数据库关闭统一停止它们；具体预算和生命周期见[字段契约](async-source.md#有限字段与-blob-分块未发布)。
+
 CLI、异步桥接和示例原本就是独立下游包，仍只导入核心。后续真正拆内部包须先明确共享类型归属及无环依赖，并通过名义类型、构造/穷举和实际外部消费验证；本版不以内部拆包为由扩张公开 API。
 
 ## 嵌入数据评估

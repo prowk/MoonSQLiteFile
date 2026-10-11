@@ -241,6 +241,21 @@ impl @sqlite.RangeSource for ConsumerFailure with read_range64(_, _, count) {
     match snapshot_range.page_range(1) { @sqlite.WalPage(56L) => (); _ => abort("异步覆盖页来源消费失败") }
     wal_cursor.close()
     println(''')
+        if not args.registry:
+            main_source = main_source.replace('    println(', '''    let header = @sqlite.parse_record_header(b"\\x02\\x12", 5)
+    if header.fields[0].byte_length != 3 || header.fields[0].payload_offset != 2 {
+      abort("独立消费的物理字段元数据失败")
+    }
+    let projected = db.projected_cursor(1, fields=Some([]))
+    match projected.next() { @sqlite.NeedProjectedPage(1) => (); _ => abort("投影供页协议错误") }
+    projected.provide_page(1, data)
+    match projected.next() { @sqlite.ProjectedScanFinished(summary) if summary.completion == @sqlite.Complete => (); _ => abort("投影游标消费失败") }
+    let field = db.field_cursor(1, 100)
+    field.stop()
+    match field.next() { @sqlite.FieldReadFinished => (); _ => abort("字段游标停止失败") }
+    let blob = db.blob_chunk_cursor(1, 100, 0, length=16)
+    blob.stop()
+    println(''')
         (consumer / "main.mbt").write_text(main_source, encoding="utf-8")
         if args.registry:
             run(["moon", "update"], consumer)

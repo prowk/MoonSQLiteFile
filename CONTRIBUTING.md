@@ -85,6 +85,8 @@ node tools/fuzz.cjs --replay _build/fuzz-failures/SHA256.sqlite
 
 ## 记录与发布材料
 
+字段投影修改后先运行 `python tools/build_async.py`、`python tools/generate_browser_fixtures.py`、`python tools/verify_field_reads.py`；现有样本已生成时可复用。回归覆盖跨页头、UTF-8/UTF-16 前缀、未读损坏、超过完整读取上限的大字段、预算、分块寿命及取消/关闭。`node tools/benchmark_field_reads.mjs` 用独立进程对照实际读取量与 RSS；测量方法和局限见[基准记录](docs/io-benchmark.md#开发中字段投影对照2026-10-11)。这两项纳入统一入口，日常按影响选择，无须每次提交重复全量规模样本。
+
 当前说明按用途集中在使用、架构、支持和专题契约中；历史行为放在[升级说明](docs/migration.md)与 CHANGELOG，具体统计与长期证据放在对应版本记录（例如 [v0.8.0](docs/validation-v0.8.0.md)）。CI 产物可辅助排查，但长期证据不能只依赖会过期的日志。
 
 公开发布需要单独授权。版本、tag、附件、校验值和精简 Release 正文规则集中在[发布材料规范](docs/releases.md)；本地 `moon package` / `npm pack` 属于消费验证，不表示已发布。比赛记录只作[项目背景](docs/competition.md)，许可见 [LICENSE](LICENSE)。

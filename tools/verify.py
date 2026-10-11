@@ -49,6 +49,8 @@ CHECKS = (
     ('python', 'tools/verify_async_package.py'),
     ('python', 'tools/verify_async_wal.py'),
     ('python', 'tools/generate_browser_fixtures.py'),
+    ('python', 'tools/verify_field_reads.py'),
+    ('node', 'tools/benchmark_field_reads.mjs'),
     ('node', 'tools/verify_scale.mjs'),
     ('node', 'tools/verify_browser.cjs'),
     ('node', 'tools/verify_browser_scale.cjs'),
