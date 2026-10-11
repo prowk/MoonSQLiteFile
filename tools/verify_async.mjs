@@ -135,6 +135,26 @@ async function lifecycle() {
   await sleep(20); assert.equal(source.reads.length, reads, '等待消费者时不得预读');
   await scan.return(); assert.equal(scan.result.reason, 'visitor_stopped');
   assert.equal(scan.result.records_read, 1);
+  // 同页记录同步交付时，进度回调重入必须拒绝，不能吞掉下一条记录。
+  let reentrant, guarded;
+  guarded = db.scan(3, {limit: 3, onProgress(progress) {
+    if (progress.records_read === 2) {
+      reentrant = guarded.next(); reentrant.catch(() => {});
+    }
+  }});
+  const original = db.scan(3, {limit: 3}), expected = [];
+  for await (const record of original) expected.push(record);
+  const actual = [(await guarded.next()).value, (await guarded.next()).value];
+  await assert.rejects(reentrant, error => error.kind === 'invalid_argument');
+  assert.equal(guarded.progress.records_read, 2);
+  actual.push((await guarded.next()).value);
+  assert.deepEqual(actual, expected);
+  assert((await guarded.next()).done);
+  // 异常后也释放 pending；后续 next 返回已保存的终止报告。
+  const failedGuard = db.scan(3, {onProgress() { throw new Error('进度失败'); }});
+  await assert.rejects(failedGuard.next(), error => error.kind === 'host_failure');
+  assert((await failedGuard.next()).done);
+  assert.equal(failedGuard.pending, null);
   const visitorController = new AbortController();
   const blocked = db.scanBtree(3, () => new Promise(() => {}), {signal: visitorController.signal});
   await sleep(10); visitorController.abort();
