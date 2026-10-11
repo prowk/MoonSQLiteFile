@@ -39,6 +39,8 @@ Node 范围源须提供不可变配对 db/WAL 副本；64 位寻址不等于常�
 
 当前浏览器流程先读取有界 schema，再由用户选择预览或完整检查；[在线演示](https://prowk.github.io/MoonSQLiteFile/) 与 HTML 下载版复用核心及 Worker，由获授权的手动工作流部署。[查看器说明](../examples/offline-viewer/README.md#pages-演示)记录部署与真实站点验收证据。异步包以本地 tarball 和 v0.8.1 Release 附件分发，npm registry 未发布。错误与完成度规则见[错误与报告契约](contracts.md)。
 
+<a id="当前规模验收"></a>
+
 ## 已发布 v0.8.1 规模验收
 
 2026-10-10 Windows x64 / Node 22.14.0 的独立进程实测如下；默认仍受各项独立预算限制。进程峰值使用操作系统 maxRSS，含运行时和报告开销，不能推广为常量内存或其他环境的性能保证。
