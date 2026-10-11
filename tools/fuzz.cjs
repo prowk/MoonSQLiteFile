@@ -16,11 +16,12 @@ if (!isMainThread) {
 }
 async function main() {
   const args = process.argv.slice(2);
-  let seed = 20261003, iterations = 512, replay = null;
+  let seed = 20261003, iterations = 512, replay = null, output = path.join(root, '_build/fuzz-failures');
   for (let i = 0; i < args.length; i += 2) {
     if (args[i] === '--seed') seed = numeric(args[i + 1], 0xffffffff);
     else if (args[i] === '--iterations') iterations = numeric(args[i + 1], 1000000);
     else if (args[i] === '--replay' && args[i + 1]) replay = path.resolve(args[i + 1]);
+    else if (args[i] === '--output' && args[i + 1]) output = path.resolve(args[i + 1]);
     else throw new Error('用法：node tools/fuzz.cjs [--seed UINT32] [--iterations 1..1000000] [--replay FILE]');
   }
   let state = seed || 0x9e3779b9;
@@ -37,7 +38,7 @@ async function main() {
     message.error ? pending.reject(new Error(message.error)) : pending.resolve(message.result);
   });
   const counts = {};
-  async function execute(bytes, page, metadata, base = null) {
+  async function execute(bytes, page, metadata, base = null, original = null) {
     try {
       const result = await new Promise((resolve, reject) => {
         if (fatal) return reject(fatal);
@@ -50,13 +51,14 @@ async function main() {
       const label = base == null ? result : `wal_${result}`;
       counts[label] = (counts[label] || 0) + 1;
     } catch (error) {
-      const directory = path.join(root, '_build/fuzz-failures'); fs.mkdirSync(directory, {recursive: true});
+      const directory = output; fs.mkdirSync(directory, {recursive: true});
       const hash = crypto.createHash('sha256').update(bytes).update(base ?? Buffer.alloc(0)).digest('hex');
       fs.writeFileSync(path.join(directory, `${hash}.sqlite`), bytes);
       if (base != null) fs.writeFileSync(path.join(directory, `${hash}.base.sqlite`), base);
+      if (original != null) fs.writeFileSync(path.join(directory, `${hash}.original.sqlite`), original);
       fs.writeFileSync(path.join(directory, `${hash}.json`), JSON.stringify({...metadata, seed, page,
         probes: ['legacy','range','adapter','range_cache','adapter_cache','fault_reports'], sha256: hash, bytes: bytes.length, error: error.stack || String(error)}, null, 2), 'utf8');
-      throw new Error(`模糊测试失败，样本：_build/fuzz-failures/${hash}.sqlite\n${error.stack || error}`);
+      throw new Error(`模糊测试失败，样本：${path.join(directory, `${hash}.sqlite`)}\n${error.stack || error}`);
     }
   }
   try {
@@ -102,7 +104,7 @@ async function main() {
         }
         // 部分 WAL 变更重算 checksum，让损坏页内容继续进入覆盖源与数据库检查器。
         if (isWal && iteration % 8 === 0) refreshWalChecksums(bytes);
-        await execute(bytes, page, {kind: isWal ? 'wal' : 'db', corpus: names[index], iteration, mutation: mode}, isWal ? corpus[index] : null);
+        await execute(bytes, page, {kind: isWal ? 'wal' : 'db', corpus: names[index], iteration, mutation: mode}, isWal ? corpus[index] : null, original);
       }
     }
     console.log(`Fuzz passed: seed=${seed}, mutations=${replay ? 'replay' : iterations}, entrypoints=legacy/range/adapter+cache/fault_reports, corpus=${corpus.length}, wal_corpus=${walCorpus.length}, results=${JSON.stringify(counts)}`);

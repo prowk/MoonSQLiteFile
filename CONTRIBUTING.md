@@ -73,6 +73,16 @@ node tools/fuzz.cjs --replay _build/fuzz-failures/SHA256.sqlite
 
 这是有界、基于字节变更的 JavaScript 后端持续模糊测试，没有覆盖率引导，不证明所有恶意输入都正确处理。核心回归仍在 Wasm、WasmGC、JavaScript 和 native 执行，SQLite oracle 另行核实合法输入的记录、页面空间与归属。
 
+## 合法 SQL 序列与失败缩减
+
+`python tools/sql_sequences.py --seed 20261011 --cases 4 --seconds 300` 复用现有 SQLite 物理记录 oracle，生成建表、增删改、提交/回滚、SAVEPOINT、VACUUM、页释放/复用及 WAL/checkpoint 序列。支持 rowid 表、WITHOUT ROWID、索引和溢出字段；只在无写事务的已提交边界复制 db/WAL。RESTART 留存的旧 WAL 尾部使用既有有效前缀读取契约，不能把旧尾部误报成记录解析缺陷。SQL 主键别名与 WITHOUT ROWID/索引的字段顺序由 SQLite 元数据归一化，不引入库中的 DDL 解析。
+
+失败时，`_build/fuzz-failures/sql/` 保存 seed、SQLite 版本、完整 SQL 序列、匹配的静态 db/WAL、期望记录和错误见证。输出的 `--replay .../sequence.json` 命令独立重放；`python tools/sql_sequences.py --reduce .../sequence.json` 在有限时间内删除无关 SQL，并再次确认原类别、对象、快照与记录差异。语法失败、普通格式拒绝及不同记录差异均不能替代原失败。预算内的缩减不保证全局最小；确认真实缺陷后，将最小必要样本及预期行为纳入固定回归。
+
+字节变异失败同时保留 `.original.sqlite`。`python tools/reduce_fuzz.py _build/fuzz-failures/SHA256.sqlite` 删除无关变异，保留原 Worker 故障签名及配对主文件；正常的格式拒绝不视为重现。历史失败缺少原始 corpus 时停止缩减，不猜测原始 WAL。定时和手动 `Scheduled fuzzing` 在既有变异检查后执行合法序列；数量与时间均有限，使用同一个 seed，失败材料由现有 artifact 保存。
+
+覆盖反馈已在实际生成代码上评估：V8 `NODE_V8_COVERAGE` 能采集 Worker 中的生成 JS 函数范围，source map 保留 MoonBit 源文件；MoonBit 测试也提供 `--enable-coverage`。生成 JS 范围含标准库、运行时与编译器变换，不能直接声称 MoonBit 源分支覆盖率。当前将表/索引叶页与内部页、overflow、freelist、WITHOUT ROWID 和 WAL 等实际结构特征用于组合反馈；不把入口调用次数当覆盖率，不增加每个 commit 的覆盖门槛。需要进一步研究时可设置 `NODE_V8_COVERAGE=_build/fuzz-coverage` 运行既有 fuzz，再执行 `python tools/evaluate_fuzz_coverage.py _build/fuzz-coverage`；仅用于按需评估。
+
 ## 记录与发布材料
 
 当前说明按用途集中在使用、架构、支持和专题契约中；历史行为放在[升级说明](docs/migration.md)与 CHANGELOG，具体统计与长期证据放在对应版本记录（例如 [v0.8.0](docs/validation-v0.8.0.md)）。CI 产物可辅助排查，但长期证据不能只依赖会过期的日志。

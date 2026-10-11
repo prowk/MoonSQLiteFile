@@ -27,6 +27,8 @@ CHECKS = (
     ('python', 'tools/verify_oracle.py'),
     ('python', 'tools/generate_btree_fixtures.py', '--check'),
     ('python', 'tools/verify_btree_oracle.py'),
+    ('python', 'tools/verify_sql_sequences.py'),
+    ('python', 'tools/sql_sequences.py', '--seed', '20261011', '--cases', '2', '--rows', '32', '--seconds', '120'),
     ('python', 'tools/verify_inspection.py'),
     ('python', 'tools/verify_wal_oracle.py'),
     ('python', 'tools/verify_review.py'),

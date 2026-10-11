@@ -13,6 +13,14 @@ on:
         description: '随机变更次数，1 到 1000000'
         required: true
         default: '5000'
+      sql_cases:
+        description: '合法 SQL 操作序列数量，1 到 1000'
+        required: true
+        default: '12'
+      sql_seconds:
+        description: '合法序列时间预算，1 到 1800 秒'
+        required: true
+        default: '600'
 
 permissions:
   contents: read
@@ -36,11 +44,14 @@ jobs:
         env:
           FUZZ_SEED: ${{ inputs.seed }}
           FUZZ_ITERATIONS: ${{ inputs.iterations || '5000' }}
+          SQL_CASES: ${{ inputs.sql_cases || '12' }}
+          SQL_SECONDS: ${{ inputs.sql_seconds || '600' }}
         run: |
           if [ -z "$FUZZ_SEED" ]; then
             FUZZ_SEED=$(node -e 'process.stdout.write(String(Number(process.env.GITHUB_RUN_ID) % 4294967295 || 1))')
           fi
           node tools/fuzz.cjs --seed "$FUZZ_SEED" --iterations "$FUZZ_ITERATIONS"
+          python tools/sql_sequences.py --seed "$FUZZ_SEED" --cases "$SQL_CASES" --seconds "$SQL_SECONDS"
       - name: Preserve failing inputs and replay metadata
         if: failure()
         uses: actions/upload-artifact@v7.0.1
